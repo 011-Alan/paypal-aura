@@ -21,7 +21,20 @@ app.use(
 
 app.use(
   cors({
-    origin: env.NODE_ENV === 'production' ? [env.CLIENT_ORIGIN] : true,
+    origin: (requestOrigin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or Postman)
+      if (!requestOrigin) return callback(null, true);
+      // Allow localhost and any onrender.com origin
+      if (
+        requestOrigin.includes('localhost') ||
+        requestOrigin.includes('127.0.0.1') ||
+        requestOrigin.endsWith('.onrender.com') ||
+        (env.CLIENT_ORIGIN && requestOrigin === env.CLIENT_ORIGIN)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Permissive for hackathon sandbox demonstrations
+    },
     credentials: true,
   })
 );

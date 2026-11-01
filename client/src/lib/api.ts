@@ -1,4 +1,6 @@
-const API_BASE = '/api';
+/// <reference types="vite/client" />
+
+const API_BASE = (import.meta.env?.VITE_API_URL ? `https://${import.meta.env.VITE_API_URL}`.replace('https://https://', 'https://') : '') + '/api';
 
 export function getStoredToken(): string | null {
   return localStorage.getItem('aura_auth_token');

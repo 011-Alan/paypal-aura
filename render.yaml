@@ -64,6 +64,12 @@ services:
     rootDir: client
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: aura-backend-api
+          property: host
     routes:
       - type: rewrite
         source: /api/*
