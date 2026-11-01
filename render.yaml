@@ -51,23 +51,23 @@ services:
       - key: ASTROPODS_API_URL
         value: https://astropods.com/api/v1
       - key: ASTROPODS_ACCOUNT
-        sync: false
+        value: alan-011
       - key: ASTROPODS_ACCESS_TOKEN
         sync: false
       - key: ASTROPODS_API_KEY
         sync: false
       - key: ASTROPODS_DEPLOYMENT_FINANCIAL_PLANNER
-        sync: false
+        value: tg9-jnv-jnj
       - key: ASTROPODS_DEPLOYMENT_TRANSACTION_INTELLIGENCE
-        sync: false
+        value: 29a-xyw-ocj
       - key: ASTROPODS_DEPLOYMENT_MANDATE_INTELLIGENCE
-        sync: false
+        value: zw0-0sb-4hb
       - key: ASTROPODS_DEPLOYMENT_FINANCIAL_RECOVERY
-        sync: false
+        value: 50r-wkz-95o
       - key: ASTROPODS_DEPLOYMENT_PURCHASE_INTELLIGENCE
-        sync: false
+        value: zil-ovw-1pe
       - key: ASTROPODS_DEPLOYMENT_FINANCIAL_GUARDIAN
-        sync: false
+        value: zau-aeq-l17
       - key: KERNEL_API_KEY
         sync: false
       - key: ZAPIER_API_KEY
