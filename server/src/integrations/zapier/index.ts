@@ -207,6 +207,7 @@ export class ZapierAutomationIntegrationService {
       destination: rule.targetDestination,
       title: params.title,
       message: params.message,
+      details: params.message, // Alias for Zapier templates expecting 'details'
       timestamp: new Date().toISOString(),
     };
 
