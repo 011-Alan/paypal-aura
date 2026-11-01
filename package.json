@@ -1,0 +1,35 @@
+{
+  "name": "project-aura",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PROJECT AURA — Autonomous Understanding & Resource Allocation (PayPal AI Hackathon)",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "npm --prefix server run start",
+    "test": "npm --prefix server run test",
+    "seed": "npm --prefix server run seed"
+  },
+  "keywords": [
+    "aura",
+    "fintech",
+    "paypal",
+    "ai",
+    "gemini",
+    "ag-grid",
+    "apimatic",
+    "astropods",
+    "bryntum",
+    "channel3",
+    "elastic",
+    "kernel",
+    "postman",
+    "render",
+    "zapier"
+  ],
+  "author": "AURA Engineering Team",
+  "license": "MIT"
+}

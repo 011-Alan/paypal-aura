@@ -1,0 +1,946 @@
+{
+  "info": {
+    "_postman_id": "a9b8c7d6-e5f4-4321-8765-1029384756ab",
+    "name": "PROJECT AURA — Complete 20-Domain API Quality & Integration Suite",
+    "description": "Official Postman Collection for PROJECT AURA (Autonomous Understanding & Resource Allocation) covering all 20 functional and sponsor integration domains with automated assertions, error validation, and controlled PayPal Sandbox workflows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "1.1 Demo Login (Alex Sharma)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Returns JWT token and sanitized user profile', function () {",
+                  "  pm.expect(json.success).to.eql(true);",
+                  "  pm.expect(json.token).to.be.a('string');",
+                  "  pm.expect(json.user.passwordHash).to.be.undefined;",
+                  "  pm.expect(json.user.pinHash).to.be.undefined;",
+                  "});",
+                  "if (json.token) { pm.environment.set('authToken', json.token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/demo-login"
+          }
+        },
+        {
+          "name": "1.2 Verify Authenticated Session (/auth/me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns authenticated user', function () { pm.expect(pm.response.json().user.email).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        },
+        {
+          "name": "1.3 Unauthorized Access Rejection Test",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rejects missing Bearer token with 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. User profiles",
+      "item": [
+        {
+          "name": "2.1 Get User Profile & Financial Policy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Includes financialPolicy limits', function () {",
+                  "  var p = pm.response.json().profile;",
+                  "  pm.expect(p.financialPolicy.requireExplicitApproval).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/profile"
+          }
+        },
+        {
+          "name": "2.2 Update Financial Permission Policy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"singleTransactionLimit\":75000,\"dailySpendingLimit\":100000,\"discretionaryMonthlyCap\":18000}"
+            },
+            "url": "{{baseUrl}}/profile/policy"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Accounts",
+      "item": [
+        {
+          "name": "3.1 List Financial Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Returns accounts array and totalBalance', function () {",
+                  "  pm.expect(json.accounts).to.be.an('array');",
+                  "  pm.expect(json.totalBalance).to.be.a('number');",
+                  "});",
+                  "if (json.accounts && json.accounts[0]) { pm.environment.set('accountId', json.accounts[0]._id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/accounts"
+          }
+        },
+        {
+          "name": "3.2 Create Financial Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Kotak Reserve Account\",\"institution\":\"Kotak Mahindra Bank\",\"type\":\"savings\",\"balance\":35000}"
+            },
+            "url": "{{baseUrl}}/accounts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Transactions",
+      "item": [
+        {
+          "name": "4.1 Get Transactions & AG Grid Analytics Payload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Includes AG Grid rows, summaryRow and Python analytics', function () {",
+                  "  pm.expect(json.agGrid.rows).to.be.an('array');",
+                  "  pm.expect(json.agGrid.summaryRow.totalExpense).to.be.a('number');",
+                  "  pm.expect(json.pythonAnalytics.engine).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/transactions"
+          }
+        },
+        {
+          "name": "4.2 Natural-Language Query to AG Grid Filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Filters dining expenditure over last three months', function () {",
+                  "  pm.expect(pm.response.json().agGrid.appliedFilterModel.categoryFilter).to.include('Dining');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"Show my dining expenditure over the last three months.\"}"
+            },
+            "url": "{{baseUrl}}/transactions/ag-grid-query"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. CSV imports",
+      "item": [
+        {
+          "name": "5.1 Import CSV Bank Statement & Run Post-Import Pipeline",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Imports records and runs background worker pipeline', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.importedCount).to.be.above(0);",
+                  "  pm.expect(json.backgroundWorkerPipeline.status).to.eql('completed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"csvContent\":\"date,merchant,description,category,type,amount,paymentMethod,isRecurring\\n2026-11-01,Metro Supermarket,Monthly Groceries,Groceries,expense,2100,upi,false\"}"
+            },
+            "url": "{{baseUrl}}/transactions/import-csv"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Mandates",
+      "item": [
+        {
+          "name": "6.1 List Confirmed & Inferred Mandates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "if (json.mandates && json.mandates[0]) { pm.environment.set('mandateId', json.mandates[0]._id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/mandates"
+          }
+        },
+        {
+          "name": "6.2 Confirm Recurring Mandate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"confirmed\"}"
+            },
+            "url": "{{baseUrl}}/mandates/{{mandateId}}/confirm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Financial plans",
+      "item": [
+        {
+          "name": "7.1 Get Active Monthly Financial Plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "if (json.activePlan) { pm.environment.set('planId', json.activePlan._id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/plans"
+          }
+        },
+        {
+          "name": "7.2 Generate / Recalculate Plan via Python Engine",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Plan has allocations array', function () { pm.expect(pm.response.json().plan.allocations).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{baseUrl}}/plans/generate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Goals",
+      "item": [
+        {
+          "name": "8.1 List Financial Goals & Milestones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "if (json.goals && json.goals[0]) { pm.environment.set('goalId', json.goals[0]._id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/goals"
+          }
+        },
+        {
+          "name": "8.2 Contribute to Savings Goal & Check Milestone",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"amount\":2500}" },
+            "url": "{{baseUrl}}/goals/{{goalId}}/contribute"
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Family finance",
+      "item": [
+        {
+          "name": "9.1 Get Family Finance Overview (Privacy Boundaries Enforced)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Enforces strict privacy boundaries for other family members', function () {",
+                  "  pm.expect(json.privacyBoundaryPolicy.enforced).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/family"
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Financial calendar",
+      "item": [
+        {
+          "name": "10.1 Get Bryntum Financial Life Calendar Dataset",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Includes resources, events, and supportedViews', function () {",
+                  "  pm.expect(json.supportedViews).to.include('month');",
+                  "  pm.expect(json.events).to.be.an('array');",
+                  "});",
+                  "if (json.events && json.events[0]) { pm.environment.set('calendarEventId', json.events[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/calendar"
+          }
+        },
+        {
+          "name": "10.2 Reschedule Calendar Event & Sync Mandate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"newStartDate\":\"2026-11-06\"}" },
+            "url": "{{baseUrl}}/calendar/events/{{calendarEventId}}/reschedule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. AI assistant",
+      "item": [
+        {
+          "name": "11.1 Ask AURA Multi-Agent Workflow (Can I afford a laptop?)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Routes via Astropods and returns grounded explanation', function () {",
+                  "  pm.expect(json.astropodsOrchestration.primaryAgent).to.eql('purchase-intelligence');",
+                  "  pm.expect(json.explanation).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"prompt\":\"Can I afford a laptop for ₹55,000?\"}"
+            },
+            "url": "{{baseUrl}}/ai/ask"
+          }
+        },
+        {
+          "name": "11.2 List Astropods Registered Financial Agents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns all 6 specialised agents', function () {",
+                  "  pm.expect(pm.response.json().agents.length).to.eql(6);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/ai/agents"
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Purchase intelligence",
+      "item": [
+        {
+          "name": "12.1 Channel3 Product Search & 7-Factor Affordability Evaluation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Evaluates products with guidanceCategory', function () {",
+                  "  pm.expect(json.evaluatedProducts).to.be.an('array');",
+                  "  pm.expect(json.evaluatedProducts[0].evaluation.guidanceCategory).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"laptop\",\"maxPriceInr\":60000,\"includeKernelResearch\":true}"
+            },
+            "url": "{{baseUrl}}/purchase/evaluate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Elastic search",
+      "item": [
+        {
+          "name": "13.1 Natural-Language Financial Memory Search (Last Holiday Travel)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Validates Elastic hits against MongoDB and enforces privacy scope', function () {",
+                  "  pm.expect(json.validatedAgainstMongoDB).to.eql(true);",
+                  "  pm.expect(json.summary.verifiedTotalExpense).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"How much did I spend on travel during my last holiday?\"}"
+            },
+            "url": "{{baseUrl}}/elastic/search"
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Notifications",
+      "item": [
+        {
+          "name": "14.1 List In-App & Zapier Notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns notifications list', function () { pm.expect(pm.response.json().notifications).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/notifications"
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Payment preparation",
+      "item": [
+        {
+          "name": "15.1 Prepare Controlled Payment Request (Financial Guardian Check)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Evaluates Financial Guardian rules and does not auto-execute', function () {",
+                  "  pm.expect(json.paymentRequest.status).to.eql('guardian_approved');",
+                  "  pm.expect(json.paymentRequest.guardianEvaluation.passed).to.eql(true);",
+                  "});",
+                  "pm.environment.set('paymentRequestId', json.paymentRequest._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"recipientName\":\"Greenwood Residency Landlords\",\"merchantCategory\":\"Rent\",\"description\":\"Prepare a payment of ₹5,000\",\"amountInr\":5000}"
+            },
+            "url": "{{baseUrl}}/payments/prepare"
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. PIN verification",
+      "item": [
+        {
+          "name": "16.1 Reject Invalid PIN Attempt (401 Security Test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rejects wrong PIN with 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"pin\":\"0000\"}" },
+            "url": "{{baseUrl}}/payments/{{paymentRequestId}}/verify-pin"
+          }
+        },
+        {
+          "name": "16.2 Verify Valid PIN & Issue Short-Lived Approval Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Issues short-lived approvalToken', function () { pm.expect(json.approvalToken).to.be.a('string'); });",
+                  "pm.environment.set('paymentApprovalToken', json.approvalToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"pin\":\"{{demoPinPlaceholder}}\"}" },
+            "url": "{{baseUrl}}/payments/{{paymentRequestId}}/verify-pin"
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. PayPal orders",
+      "item": [
+        {
+          "name": "17.1 Create PayPal Order v2 (Validated by APIMatic Contract)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Passes APIMatic contract validation and returns orderId', function () {",
+                  "  pm.expect(json.paypalOrder.apimaticValidation.valid).to.eql(true);",
+                  "  pm.expect(json.paypalOrder.orderId).to.be.a('string');",
+                  "});",
+                  "pm.environment.set('paypalOrderId', json.paypalOrder.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"approvalToken\":\"{{paymentApprovalToken}}\"}"
+            },
+            "url": "{{baseUrl}}/payments/{{paymentRequestId}}/paypal-order"
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. PayPal capture",
+      "item": [
+        {
+          "name": "18.1 Capture Approved PayPal Order & Sync Ecosystem",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('Captures order and creates MongoDB transaction', function () {",
+                  "  pm.expect(json.paymentRequest.status).to.eql('captured');",
+                  "  pm.expect(json.transaction).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"paypalOrderId\":\"{{paypalOrderId}}\"}"
+            },
+            "url": "{{baseUrl}}/payments/{{paymentRequestId}}/paypal-capture"
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. PayPal webhooks",
+      "item": [
+        {
+          "name": "19.1 Verify PayPal Webhook Signature (PAYMENT.CAPTURE.COMPLETED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Webhook verified', function () { pm.expect(pm.response.json().verified).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\":\"WH-EVT-2026-001\",\"event_type\":\"PAYMENT.CAPTURE.COMPLETED\",\"paymentRequestId\":\"{{paymentRequestId}}\",\"paypalOrderId\":\"{{paypalOrderId}}\",\"resource\":{\"id\":\"CAP-001\",\"status\":\"COMPLETED\"}}"
+            },
+            "url": "{{baseUrl}}/webhooks/paypal"
+          }
+        }
+      ]
+    },
+    {
+      "name": "20. External integrations",
+      "item": [
+        {
+          "name": "20.1 Get All 10 Sponsor Integrations Health Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "var ints = pm.response.json().integrations;",
+                  "pm.test('Reports all sponsor integrations', function () {",
+                  "  pm.expect(ints.agGrid).to.be.an('object');",
+                  "  pm.expect(ints.apimatic).to.be.an('object');",
+                  "  pm.expect(ints.astropods).to.be.an('object');",
+                  "  pm.expect(ints.bryntum).to.be.an('object');",
+                  "  pm.expect(ints.channel3).to.be.an('object');",
+                  "  pm.expect(ints.elastic).to.be.an('object');",
+                  "  pm.expect(ints.kernel).to.be.an('object');",
+                  "  pm.expect(ints.paypal).to.be.an('object');",
+                  "  pm.expect(ints.render).to.be.an('object');",
+                  "  pm.expect(ints.zapier).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/integrations/status"
+          }
+        },
+        {
+          "name": "20.2 Run KERNEL Assisted Research",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"topic\":\"laptop warranty comparison\"}" },
+            "url": "{{baseUrl}}/kernel/research"
+          }
+        },
+        {
+          "name": "20.3 List & Trigger Zapier Automation Rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.expect(pm.response.json().rules.length).to.be.at.least(5);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": "{{baseUrl}}/automations"
+          }
+        }
+      ]
+    }
+  ]
+}

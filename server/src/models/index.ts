@@ -1,0 +1,745 @@
+import mongoose, { Schema, Document } from 'mongoose';
+
+// ============================================================================
+// 1. User Model (Argon2id Password + Argon2id PIN + Financial Permission Policy)
+// ============================================================================
+export interface IFinancialPolicy {
+  requirePinAboveAmount: number;       // e.g. ₹2,000
+  singleTransactionLimit: number;      // e.g. ₹75,000
+  dailySpendingLimit: number;          // e.g. ₹1,00,000
+  requireExplicitApproval: boolean;    // Always true by default
+  discretionaryMonthlyCap: number;     // e.g. ₹18,000
+  allowFamilySharedView: boolean;
+  blockedCategories: string[];
+}
+
+export interface IUser extends Document {
+  name: string;
+  email: string;
+  passwordHash: string;
+  pinHash: string;
+  role: 'user' | 'family_admin' | 'family_member';
+  currency: string;
+  monthlyIncome: number;
+  familyGroupId?: string;
+  spendingPreferences: {
+    riskTolerance: 'conservative' | 'balanced' | 'growth';
+    priorityCategories: string[];
+    savingsTargetPercent: number;
+  };
+  financialPolicy: IFinancialPolicy;
+  onboardingCompleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const UserSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
+    passwordHash: { type: String, required: true },
+    pinHash: { type: String, required: true },
+    role: { type: String, enum: ['user', 'family_admin', 'family_member'], default: 'family_admin' },
+    currency: { type: String, default: 'INR' },
+    monthlyIncome: { type: Number, default: 95000 },
+    familyGroupId: { type: String, index: true },
+    spendingPreferences: {
+      riskTolerance: { type: String, enum: ['conservative', 'balanced', 'growth'], default: 'balanced' },
+      priorityCategories: { type: [String], default: ['Housing', 'Savings', 'Groceries', 'Education'] },
+      savingsTargetPercent: { type: Number, default: 20 },
+    },
+    financialPolicy: {
+      requirePinAboveAmount: { type: Number, default: 1000 },
+      singleTransactionLimit: { type: Number, default: 75000 },
+      dailySpendingLimit: { type: Number, default: 100000 },
+      requireExplicitApproval: { type: Boolean, default: true },
+      discretionaryMonthlyCap: { type: Number, default: 18000 },
+      allowFamilySharedView: { type: Boolean, default: true },
+      blockedCategories: { type: [String], default: [] },
+    },
+    onboardingCompleted: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export const UserModel = mongoose.model<IUser>('User', UserSchema);
+
+// ============================================================================
+// 2. Financial Account Model
+// ============================================================================
+export interface IAccount extends Document {
+  userId: mongoose.Types.ObjectId;
+  name: string;
+  institution: string;
+  type: 'checking' | 'savings' | 'credit' | 'wallet' | 'investment';
+  accountNumberMasked: string;
+  balance: number;
+  currency: string;
+  isSharedWithFamily: boolean;
+  familyGroupId?: string;
+  status: 'active' | 'archived';
+  lastSyncedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AccountSchema = new Schema<IAccount>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    institution: { type: String, required: true, trim: true },
+    type: { type: String, enum: ['checking', 'savings', 'credit', 'wallet', 'investment'], default: 'checking' },
+    accountNumberMasked: { type: String, required: true },
+    balance: { type: Number, required: true, default: 0 },
+    currency: { type: String, default: 'INR' },
+    isSharedWithFamily: { type: Boolean, default: false },
+    familyGroupId: { type: String, index: true },
+    status: { type: String, enum: ['active', 'archived'], default: 'active' },
+    lastSyncedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+export const AccountModel = mongoose.model<IAccount>('Account', AccountSchema);
+
+// ============================================================================
+// 3. Transaction Model (Synchronised to Elasticsearch)
+// ============================================================================
+export interface ITransaction extends Document {
+  userId: mongoose.Types.ObjectId;
+  accountId: mongoose.Types.ObjectId;
+  accountName: string;
+  date: Date;
+  merchant: string;
+  description: string;
+  category: string;
+  subcategory?: string;
+  type: 'income' | 'expense' | 'transfer';
+  amount: number;
+  currency: string;
+  status: 'completed' | 'pending' | 'flagged' | 'failed';
+  paymentMethod: 'bank_transfer' | 'upi' | 'card' | 'paypal' | 'direct_debit' | 'cash';
+  isRecurring: boolean;
+  mandateId?: mongoose.Types.ObjectId;
+  isUnusual: boolean;
+  unusualReason?: string;
+  anomalyScore?: number;
+  isSharedFamilyTransaction: boolean;
+  familyGroupId?: string;
+  tags: string[];
+  paypalOrderId?: string;
+  elasticSynced: boolean;
+  elasticSyncedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const TransactionSchema = new Schema<ITransaction>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account', required: true, index: true },
+    accountName: { type: String, required: true },
+    date: { type: Date, required: true, index: true },
+    merchant: { type: String, required: true, trim: true, index: true },
+    description: { type: String, required: true, trim: true },
+    category: { type: String, required: true, index: true },
+    subcategory: { type: String },
+    type: { type: String, enum: ['income', 'expense', 'transfer'], required: true, index: true },
+    amount: { type: Number, required: true },
+    currency: { type: String, default: 'INR' },
+    status: { type: String, enum: ['completed', 'pending', 'flagged', 'failed'], default: 'completed', index: true },
+    paymentMethod: {
+      type: String,
+      enum: ['bank_transfer', 'upi', 'card', 'paypal', 'direct_debit', 'cash'],
+      default: 'upi',
+    },
+    isRecurring: { type: Boolean, default: false },
+    mandateId: { type: Schema.Types.ObjectId, ref: 'Mandate' },
+    isUnusual: { type: Boolean, default: false, index: true },
+    unusualReason: { type: String },
+    anomalyScore: { type: Number, default: 0 },
+    isSharedFamilyTransaction: { type: Boolean, default: false },
+    familyGroupId: { type: String, index: true },
+    tags: { type: [String], default: [] },
+    paypalOrderId: { type: String },
+    elasticSynced: { type: Boolean, default: false },
+    elasticSyncedAt: { type: Date },
+  },
+  { timestamps: true }
+);
+
+TransactionSchema.index({ description: 'text', merchant: 'text', category: 'text' });
+
+export const TransactionModel = mongoose.model<ITransaction>('Transaction', TransactionSchema);
+
+// ============================================================================
+// 4. Recurring Mandate / Upcoming Commitment Model (Synced with Bryntum Calendar)
+// ============================================================================
+export interface IMandate extends Document {
+  userId: mongoose.Types.ObjectId;
+  accountId?: mongoose.Types.ObjectId;
+  title: string;
+  merchant: string;
+  category:
+    | 'Rent'
+    | 'Loan EMI'
+    | 'Insurance'
+    | 'Subscription'
+    | 'Electricity'
+    | 'Internet'
+    | 'Education'
+    | 'Salary'
+    | 'Savings'
+    | 'Other';
+  amount: number;
+  currency: string;
+  frequency: 'monthly' | 'quarterly' | 'yearly' | 'weekly';
+  dueDayOfMonth: number;
+  nextDueDate: Date;
+  status: 'confirmed' | 'inferred' | 'paused' | 'cancelled';
+  confidenceScore: number;
+  autoPayEnabled: boolean;
+  isSharedWithFamily: boolean;
+  familyGroupId?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const MandateSchema = new Schema<IMandate>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account' },
+    title: { type: String, required: true, trim: true },
+    merchant: { type: String, required: true, trim: true },
+    category: {
+      type: String,
+      enum: [
+        'Rent',
+        'Loan EMI',
+        'Insurance',
+        'Subscription',
+        'Electricity',
+        'Internet',
+        'Education',
+        'Salary',
+        'Savings',
+        'Other',
+      ],
+      default: 'Other',
+    },
+    amount: { type: Number, required: true },
+    currency: { type: String, default: 'INR' },
+    frequency: { type: String, enum: ['monthly', 'quarterly', 'yearly', 'weekly'], default: 'monthly' },
+    dueDayOfMonth: { type: Number, required: true, min: 1, max: 31 },
+    nextDueDate: { type: Date, required: true, index: true },
+    status: { type: String, enum: ['confirmed', 'inferred', 'paused', 'cancelled'], default: 'confirmed' },
+    confidenceScore: { type: Number, default: 0.95 },
+    autoPayEnabled: { type: Boolean, default: false },
+    isSharedWithFamily: { type: Boolean, default: false },
+    familyGroupId: { type: String, index: true },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+export const MandateModel = mongoose.model<IMandate>('Mandate', MandateSchema);
+
+// ============================================================================
+// 5. Financial Plan & Recovery Model (Synchronised to Elasticsearch)
+// ============================================================================
+export interface IBudgetAllocation {
+  category: string;
+  type: 'essential' | 'discretionary' | 'savings' | 'commitment';
+  plannedAmount: number;
+  spentAmount: number;
+  remainingAmount: number;
+  utilizationPercent: number;
+  status: 'on_track' | 'warning' | 'overrun';
+  recommendation?: string;
+}
+
+export interface IFinancialPlan extends Document {
+  userId: mongoose.Types.ObjectId;
+  month: string; // e.g. '2026-11'
+  title: string;
+  totalIncome: number;
+  totalCommitments: number;
+  totalEssentialBudget: number;
+  totalDiscretionaryBudget: number;
+  totalSavingsTarget: number;
+  unallocatedBuffer: number;
+  allocations: IBudgetAllocation[];
+  aiSummary: string;
+  recoveryRecommendations: {
+    id: string;
+    category: string;
+    overrunAmount: number;
+    action: string;
+    projectedSavings: number;
+    status: 'proposed' | 'accepted' | 'rejected';
+  }[];
+  status: 'draft' | 'active' | 'archived';
+  elasticSynced: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const FinancialPlanSchema = new Schema<IFinancialPlan>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    month: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    totalIncome: { type: Number, required: true },
+    totalCommitments: { type: Number, required: true },
+    totalEssentialBudget: { type: Number, required: true },
+    totalDiscretionaryBudget: { type: Number, required: true },
+    totalSavingsTarget: { type: Number, required: true },
+    unallocatedBuffer: { type: Number, default: 0 },
+    allocations: [
+      {
+        category: { type: String, required: true },
+        type: { type: String, enum: ['essential', 'discretionary', 'savings', 'commitment'], default: 'essential' },
+        plannedAmount: { type: Number, required: true },
+        spentAmount: { type: Number, default: 0 },
+        remainingAmount: { type: Number, default: 0 },
+        utilizationPercent: { type: Number, default: 0 },
+        status: { type: String, enum: ['on_track', 'warning', 'overrun'], default: 'on_track' },
+        recommendation: { type: String },
+      },
+    ],
+    aiSummary: { type: String, required: true },
+    recoveryRecommendations: [
+      {
+        id: { type: String, required: true },
+        category: { type: String, required: true },
+        overrunAmount: { type: Number, required: true },
+        action: { type: String, required: true },
+        projectedSavings: { type: Number, required: true },
+        status: { type: String, enum: ['proposed', 'accepted', 'rejected'], default: 'proposed' },
+      },
+    ],
+    status: { type: String, enum: ['draft', 'active', 'archived'], default: 'active' },
+    elasticSynced: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+export const FinancialPlanModel = mongoose.model<IFinancialPlan>('FinancialPlan', FinancialPlanSchema);
+
+// ============================================================================
+// 6. Financial Goal Model
+// ============================================================================
+export interface IGoal extends Document {
+  userId: mongoose.Types.ObjectId;
+  title: string;
+  category: 'Emergency Fund' | 'Technology' | 'Travel' | 'Education' | 'Home' | 'Investment' | 'Family' | 'Other';
+  targetAmount: number;
+  currentAmount: number;
+  monthlyContribution: number;
+  deadline: Date;
+  priority: 'high' | 'medium' | 'low';
+  isSharedWithFamily: boolean;
+  familyGroupId?: string;
+  milestones: {
+    percentage: number;
+    reached: boolean;
+    reachedAt?: Date;
+    confirmedByUser: boolean;
+  }[];
+  status: 'active' | 'completed' | 'paused';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const GoalSchema = new Schema<IGoal>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    category: {
+      type: String,
+      enum: ['Emergency Fund', 'Technology', 'Travel', 'Education', 'Home', 'Investment', 'Family', 'Other'],
+      default: 'Other',
+    },
+    targetAmount: { type: Number, required: true },
+    currentAmount: { type: Number, default: 0 },
+    monthlyContribution: { type: Number, default: 5000 },
+    deadline: { type: Date, required: true },
+    priority: { type: String, enum: ['high', 'medium', 'low'], default: 'medium' },
+    isSharedWithFamily: { type: Boolean, default: false },
+    familyGroupId: { type: String, index: true },
+    milestones: [
+      {
+        percentage: { type: Number, required: true },
+        reached: { type: Boolean, default: false },
+        reachedAt: { type: Date },
+        confirmedByUser: { type: Boolean, default: false },
+      },
+    ],
+    status: { type: String, enum: ['active', 'completed', 'paused'], default: 'active' },
+  },
+  { timestamps: true }
+);
+
+export const GoalModel = mongoose.model<IGoal>('Goal', GoalSchema);
+
+// ============================================================================
+// 7. Family Group Model (Privacy-Preserving Shared Finance)
+// ============================================================================
+export interface IFamilyGroup extends Document {
+  familyGroupId: string;
+  name: string;
+  createdBy: mongoose.Types.ObjectId;
+  members: {
+    userId: mongoose.Types.ObjectId;
+    name: string;
+    email: string;
+    relationship: string;
+    role: 'admin' | 'member';
+    privacyLevel: 'strict_private' | 'shared_summary_only' | 'shared_budgets';
+    monthlySharedContribution: number;
+  }[];
+  sharedMonthlyBudget: number;
+  sharedSpentThisMonth: number;
+  sharedCategories: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const FamilyGroupSchema = new Schema<IFamilyGroup>(
+  {
+    familyGroupId: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    members: [
+      {
+        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        name: { type: String, required: true },
+        email: { type: String, required: true },
+        relationship: { type: String, required: true },
+        role: { type: String, enum: ['admin', 'member'], default: 'member' },
+        privacyLevel: {
+          type: String,
+          enum: ['strict_private', 'shared_summary_only', 'shared_budgets'],
+          default: 'shared_summary_only',
+        },
+        monthlySharedContribution: { type: Number, default: 15000 },
+      },
+    ],
+    sharedMonthlyBudget: { type: Number, default: 40000 },
+    sharedSpentThisMonth: { type: Number, default: 0 },
+    sharedCategories: { type: [String], default: ['Housing', 'Groceries', 'Utilities', 'Family Education'] },
+  },
+  { timestamps: true }
+);
+
+export const FamilyGroupModel = mongoose.model<IFamilyGroup>('FamilyGroup', FamilyGroupSchema);
+
+// ============================================================================
+// 8. Bryntum Financial Calendar Event Model
+// ============================================================================
+export interface ICalendarEvent extends Document {
+  userId: mongoose.Types.ObjectId;
+  title: string;
+  eventType:
+    | 'salary'
+    | 'rent'
+    | 'emi'
+    | 'insurance'
+    | 'subscription'
+    | 'electricity'
+    | 'education'
+    | 'commitment'
+    | 'milestone'
+    | 'goal_deadline'
+    | 'reminder';
+  startDate: Date;
+  endDate: Date;
+  allDay: boolean;
+  amount?: number;
+  currency: string;
+  linkedMandateId?: mongoose.Types.ObjectId;
+  linkedGoalId?: mongoose.Types.ObjectId;
+  status: 'upcoming' | 'completed' | 'overdue' | 'rescheduled';
+  reminderSent: boolean;
+  color: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const CalendarEventSchema = new Schema<ICalendarEvent>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    title: { type: String, required: true },
+    eventType: {
+      type: String,
+      enum: [
+        'salary',
+        'rent',
+        'emi',
+        'insurance',
+        'subscription',
+        'electricity',
+        'education',
+        'commitment',
+        'milestone',
+        'goal_deadline',
+        'reminder',
+      ],
+      default: 'commitment',
+    },
+    startDate: { type: Date, required: true, index: true },
+    endDate: { type: Date, required: true },
+    allDay: { type: Boolean, default: true },
+    amount: { type: Number },
+    currency: { type: String, default: 'INR' },
+    linkedMandateId: { type: Schema.Types.ObjectId, ref: 'Mandate' },
+    linkedGoalId: { type: Schema.Types.ObjectId, ref: 'Goal' },
+    status: { type: String, enum: ['upcoming', 'completed', 'overdue', 'rescheduled'], default: 'upcoming' },
+    reminderSent: { type: Boolean, default: false },
+    color: { type: String, default: '#2563eb' },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+export const CalendarEventModel = mongoose.model<ICalendarEvent>('CalendarEvent', CalendarEventSchema);
+
+// ============================================================================
+// 9. Controlled Payment Request & PayPal Sandbox Order Model
+// ============================================================================
+export interface IPaymentRequest extends Document {
+  userId: mongoose.Types.ObjectId;
+  accountId?: mongoose.Types.ObjectId;
+  idempotencyKey: string;
+  recipientName: string;
+  recipientEmail?: string;
+  merchantCategory: string;
+  description: string;
+  amountInr: number;
+  amountUsd: number;
+  currency: string;
+  status:
+    | 'prepared'
+    | 'guardian_approved'
+    | 'guardian_blocked'
+    | 'user_approved'
+    | 'pin_verified'
+    | 'paypal_order_created'
+    | 'captured'
+    | 'webhook_verified'
+    | 'cancelled'
+    | 'failed';
+  guardianEvaluation: {
+    passed: boolean;
+    requiresPin: boolean;
+    policyChecks: {
+      rule: string;
+      passed: boolean;
+      detail: string;
+    }[];
+    evaluatedAt: Date;
+  };
+  pinVerifiedAt?: Date;
+  approvalTokenHash?: string;
+  approvalTokenExpiresAt?: Date;
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  paypalStatus?: string;
+  paypalApprovalUrl?: string;
+  webhookVerified: boolean;
+  webhookEventId?: string;
+  linkedTransactionId?: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const PaymentRequestSchema = new Schema<IPaymentRequest>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account' },
+    idempotencyKey: { type: String, required: true, unique: true, index: true },
+    recipientName: { type: String, required: true, trim: true },
+    recipientEmail: { type: String, trim: true },
+    merchantCategory: { type: String, default: 'General' },
+    description: { type: String, required: true },
+    amountInr: { type: Number, required: true },
+    amountUsd: { type: Number, required: true },
+    currency: { type: String, default: 'INR' },
+    status: {
+      type: String,
+      enum: [
+        'prepared',
+        'guardian_approved',
+        'guardian_blocked',
+        'user_approved',
+        'pin_verified',
+        'paypal_order_created',
+        'captured',
+        'webhook_verified',
+        'cancelled',
+        'failed',
+      ],
+      default: 'prepared',
+    },
+    guardianEvaluation: {
+      passed: { type: Boolean, default: true },
+      requiresPin: { type: Boolean, default: true },
+      policyChecks: [
+        {
+          rule: { type: String },
+          passed: { type: Boolean },
+          detail: { type: String },
+        },
+      ],
+      evaluatedAt: { type: Date, default: Date.now },
+    },
+    pinVerifiedAt: { type: Date },
+    approvalTokenHash: { type: String },
+    approvalTokenExpiresAt: { type: Date },
+    paypalOrderId: { type: String, index: true },
+    paypalCaptureId: { type: String },
+    paypalStatus: { type: String },
+    paypalApprovalUrl: { type: String },
+    webhookVerified: { type: Boolean, default: false },
+    webhookEventId: { type: String },
+    linkedTransactionId: { type: Schema.Types.ObjectId, ref: 'Transaction' },
+  },
+  { timestamps: true }
+);
+
+export const PaymentRequestModel = mongoose.model<IPaymentRequest>('PaymentRequest', PaymentRequestSchema);
+
+// ============================================================================
+// 10. Notification & Zapier Automation Rule Models
+// ============================================================================
+export interface INotification extends Document {
+  userId: mongoose.Types.ObjectId;
+  type: 'commitment_reminder' | 'milestone' | 'monthly_summary' | 'payment_status' | 'calendar_reminder' | 'spending_warning' | 'recovery';
+  title: string;
+  message: string;
+  severity: 'info' | 'success' | 'warning' | 'urgent';
+  isRead: boolean;
+  zapierDispatched: boolean;
+  deduplicationKey?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const NotificationSchema = new Schema<INotification>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    type: {
+      type: String,
+      enum: [
+        'commitment_reminder',
+        'milestone',
+        'monthly_summary',
+        'payment_status',
+        'calendar_reminder',
+        'spending_warning',
+        'recovery',
+      ],
+      default: 'commitment_reminder',
+    },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    severity: { type: String, enum: ['info', 'success', 'warning', 'urgent'], default: 'info' },
+    isRead: { type: Boolean, default: false },
+    zapierDispatched: { type: Boolean, default: false },
+    deduplicationKey: { type: String, index: true },
+    metadata: { type: Schema.Types.Mixed },
+  },
+  { timestamps: true }
+);
+
+export const NotificationModel = mongoose.model<INotification>('Notification', NotificationSchema);
+
+export interface IAutomationRule extends Document {
+  userId: mongoose.Types.ObjectId;
+  automationType:
+    | 'upcoming_commitment_reminder'
+    | 'financial_milestone'
+    | 'monthly_financial_summary'
+    | 'payment_status_notification'
+    | 'financial_calendar_reminder';
+  name: string;
+  description: string;
+  triggerDescription: string;
+  actionDescription: string;
+  channel: 'email' | 'slack' | 'whatsapp_webhook' | 'google_calendar' | 'zapier_mcp';
+  targetDestination: string;
+  enabled: boolean;
+  lastTriggeredAt?: Date;
+  executionCount: number;
+  lastStatus?: 'delivered' | 'queued_local' | 'failed';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AutomationRuleSchema = new Schema<IAutomationRule>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    automationType: {
+      type: String,
+      enum: [
+        'upcoming_commitment_reminder',
+        'financial_milestone',
+        'monthly_financial_summary',
+        'payment_status_notification',
+        'financial_calendar_reminder',
+      ],
+      required: true,
+    },
+    name: { type: String, required: true },
+    description: { type: String, required: true },
+    triggerDescription: { type: String, required: true },
+    actionDescription: { type: String, required: true },
+    channel: {
+      type: String,
+      enum: ['email', 'slack', 'whatsapp_webhook', 'google_calendar', 'zapier_mcp'],
+      default: 'zapier_mcp',
+    },
+    targetDestination: { type: String, default: 'alex@aura-demo.finance' },
+    enabled: { type: Boolean, default: true },
+    lastTriggeredAt: { type: Date },
+    executionCount: { type: Number, default: 0 },
+    lastStatus: { type: String, enum: ['delivered', 'queued_local', 'failed'] },
+  },
+  { timestamps: true }
+);
+
+export const AutomationRuleModel = mongoose.model<IAutomationRule>('AutomationRule', AutomationRuleSchema);
+
+// ============================================================================
+// 11. Security & Financial Audit Log Model (Synced with Elastic Search)
+// ============================================================================
+export interface IAuditLog extends Document {
+  userId?: mongoose.Types.ObjectId;
+  actor: string; // 'user' | 'financial_guardian' | 'astropods_agent' | 'paypal_webhook' | 'system_worker'
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  status: 'success' | 'blocked' | 'failure';
+  ipAddress?: string;
+  details: Record<string, unknown>;
+  createdAt: Date;
+}
+
+const AuditLogSchema = new Schema<IAuditLog>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    actor: { type: String, required: true },
+    action: { type: String, required: true, index: true },
+    resourceType: { type: String, required: true },
+    resourceId: { type: String },
+    status: { type: String, enum: ['success', 'blocked', 'failure'], default: 'success' },
+    ipAddress: { type: String },
+    details: { type: Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+
+export const AuditLogModel = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);

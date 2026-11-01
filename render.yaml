@@ -1,0 +1,96 @@
+# ============================================================================
+# PROJECT AURA — Render Blueprint Specification (render.yaml)
+# Deploys:
+# 1. aura-frontend (React + TypeScript + Vite Static Site)
+# 2. aura-backend-api (Node.js + Express + Python Analytics Web Service)
+# 3. aura-background-worker (Scheduled Background Worker for Mandates, Elastic Sync & Reminders)
+# ============================================================================
+
+services:
+  # 1. Backend Web Service (Node.js + TypeScript + Express + Python Analytics)
+  - type: web
+    name: aura-backend-api
+    runtime: node
+    rootDir: server
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: ENABLE_BACKGROUND_WORKERS
+        value: "true"
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APPROVAL_TOKEN_SECRET
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PAYPAL_ENVIRONMENT
+        value: sandbox
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ELASTICSEARCH_URL
+        sync: false
+      - key: ELASTICSEARCH_API_KEY
+        sync: false
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: ASTROPODS_API_KEY
+        sync: false
+      - key: KERNEL_API_KEY
+        sync: false
+      - key: ZAPIER_API_KEY
+        sync: false
+      - key: ZAPIER_WEBHOOK_URL
+        sync: false
+
+  # 2. Frontend Static Site (React + TypeScript + Vite)
+  - type: web
+    name: aura-frontend
+    runtime: static
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://aura-backend-api.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # 3. Render Background Worker / Scheduled Workflow Runner
+  - type: cron
+    name: aura-daily-financial-worker
+    runtime: node
+    rootDir: server
+    schedule: "0 3 * * *"
+    buildCommand: npm install && npm run build
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: ELASTICSEARCH_URL
+        sync: false
+      - key: ELASTICSEARCH_API_KEY
+        sync: false
+      - key: ZAPIER_API_KEY
+        sync: false
+      - key: ZAPIER_WEBHOOK_URL
+        sync: false
