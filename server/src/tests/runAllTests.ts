@@ -2,6 +2,7 @@ import assert from 'assert';
 import { app } from '../index';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import { ensureDemoUserAlexSeeded, DEMO_ALEX_CREDENTIALS } from '../seed/seedService';
+import { astropodsIntegration } from '../integrations/astropods';
 
 interface TestResult {
   name: string;
@@ -357,6 +358,283 @@ async function runSuite() {
     const ints = statusRes.body.integrations;
     assert.ok(ints.agGrid && ints.apimatic && ints.astropods && ints.bryntum && ints.channel3);
     assert.ok(ints.elastic && ints.kernel && ints.paypal && ints.render && ints.zapier);
+  });
+
+  // 16. Astropods 6-Agent Architecture, Remote Execution & Edge Cases (Tests 23-32)
+  await runTest('23. Astropods 6-Agent Blueprint Registry & Live Pod Availability (/api/ai/agents/availability)', async () => {
+    const agentsRes = await api('/ai/agents');
+    assert.strictEqual(agentsRes.status, 200);
+    assert.strictEqual(agentsRes.body.agents.length, 6);
+    for (const a of agentsRes.body.agents) {
+      assert.strictEqual(a.canExecutePayments, false, `Agent ${a.id} must never have payment execution authority`);
+      assert.ok(a.blueprintName.startsWith('aura-'));
+    }
+
+    const availRes = await api('/ai/agents/availability');
+    assert.strictEqual(availRes.status, 200);
+    assert.strictEqual(availRes.body.agentHealthChecks['financial-planner'].reachable, true);
+    assert.strictEqual(availRes.body.agentHealthChecks['transaction-intelligence'].reachable, true);
+    assert.strictEqual(availRes.body.agentHealthChecks['mandate-intelligence'].reachable, true);
+    assert.strictEqual(availRes.body.agentHealthChecks['financial-recovery'].reachable, true);
+    assert.strictEqual(availRes.body.agentHealthChecks['purchase-intelligence'].reachable, true);
+    assert.strictEqual(availRes.body.agentHealthChecks['financial-guardian'].reachable, true);
+  });
+
+  await runTest('24. Astropods Workflow A: Remote Execution of Agent 1 (aura-financial-planner)', async () => {
+    const { status, body } = await api('/ai/agents/financial-planner/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Generate realistic monthly financial plan for Alex Sharma',
+        input: {
+          monthlyIncome: 85000,
+          totalCommitments: 31398,
+          upcomingCommitments: [{ title: 'Rent', amount: 8000 }, { title: 'Insurance & Bills', amount: 23398 }],
+          financialGoals: [{ title: 'Emergency Fund', monthlyContribution: 15000 }],
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-financial-planner');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.ok(body.invocation.output.financialPlan);
+    assert.ok(Array.isArray(body.invocation.output.recommendedAllocations));
+    assert.ok(Array.isArray(body.invocation.output.suggestedNextActions));
+  });
+
+  await runTest('25. Astropods Workflow B: Remote Execution of Agent 2 (aura-transaction-intelligence)', async () => {
+    const { status, body } = await api('/ai/agents/transaction-intelligence/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Analyse transactions and detect anomalies',
+        input: {
+          monthlyIncome: 85000,
+          transactions: [
+            { merchant: 'Greenwood Residency', category: 'Rent', amount: 8000, type: 'expense' },
+            { merchant: 'Luxury Electronics MegaStore', category: 'Shopping', amount: 18500, type: 'expense', isUnusual: true },
+          ],
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-transaction-intelligence');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.ok(Array.isArray(body.invocation.output.transactionClassifications));
+    assert.ok(Array.isArray(body.invocation.output.anomalyObservations));
+    assert.ok(body.invocation.output.anomalyObservations.length >= 1);
+  });
+
+  await runTest('26. Astropods Workflow C: Remote Execution of Agent 3 (aura-mandate-intelligence)', async () => {
+    const { status, body } = await api('/ai/agents/mandate-intelligence/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Evaluate recurring commitments and subscriptions',
+        input: {
+          mandates: [
+            { title: 'Greenwood Rent', merchant: 'Greenwood', category: 'Rent', amount: 8000, dueDayOfMonth: 1, status: 'confirmed' },
+            { title: 'ACT Fibernet', merchant: 'ACT', category: 'Internet', amount: 1199, dueDayOfMonth: 10, status: 'confirmed' },
+          ],
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-mandate-intelligence');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.ok(Array.isArray(body.invocation.output.recurringCommitments));
+    assert.strictEqual(body.invocation.output.recurringCommitments.length, 2);
+  });
+
+  await runTest('27. Astropods Workflow D: Remote Execution of Agent 4 (aura-financial-recovery)', async () => {
+    const { status, body } = await api('/ai/agents/financial-recovery/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Suggest empathetic recovery plan after dining overrun',
+        input: {
+          monthlyIncome: 85000,
+          totalCommitments: 31398,
+          allocations: [{ category: 'Dining', allocatedAmount: 6000, spentAmount: 9500 }],
+          goals: [{ title: 'Emergency Fund', targetAmount: 100000, currentAmount: 60000, monthlyContribution: 10000 }],
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-financial-recovery');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.ok(body.invocation.output.recoveryPlan);
+    assert.ok(Array.isArray(body.invocation.output.suggestedAdjustments));
+  });
+
+  await runTest('28. Astropods Workflow E: Remote Execution of Agent 5 (aura-purchase-intelligence)', async () => {
+    const { status, body } = await api('/ai/agents/purchase-intelligence/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Evaluate affordability of ₹54,990 laptop',
+        input: {
+          query: 'ASUS VivoBook 16 laptop',
+          monthlyIncomeInr: 85000,
+          availableDiscretionaryBudgetInr: 18000,
+          upcomingCommitmentsInr: 31398,
+          products: [{ id: 'ch3-1', name: 'ASUS VivoBook 16', priceInr: 54990 }],
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-purchase-intelligence');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.strictEqual(body.invocation.output.affordabilityAssessment.canInitiatePurchase, false);
+    assert.ok(Array.isArray(body.invocation.output.productComparisons));
+  });
+
+  await runTest('29. Astropods Workflow F: Remote Execution of Agent 6 (aura-financial-guardian)', async () => {
+    const { status, body } = await api('/ai/agents/financial-guardian/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Review proposed payment of ₹35,000 exceeding ₹25,000 single transaction limit',
+        input: {
+          actionType: 'payment_preparation',
+          amountInr: 35000,
+          recipientName: 'High Value Merchant',
+          merchantCategory: 'Shopping',
+          accountBalanceInr: 85000,
+          spentTodayInr: 0,
+          policy: {
+            singleTransactionLimit: 25000,
+            dailySpendingLimit: 50000,
+            blockedCategories: ['Gambling'],
+          },
+        },
+      }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.invocation.blueprintName, 'aura-financial-guardian');
+    assert.strictEqual(body.invocation.remoteExecuted, true);
+    assert.strictEqual(body.invocation.transport, 'astropods_web_adapter');
+    assert.strictEqual(body.invocation.validationPassed, true);
+    assert.strictEqual(body.invocation.output.riskAssessment.riskLevel, 'critical');
+    assert.ok(body.invocation.output.reasonsForRejection.length >= 1);
+  });
+
+  await runTest('30. Edge Cases 1-4: Invalid Input, Missing Financial Info, Untrusted Output & Over-Budget Rejection', async () => {
+    // Missing monthlyIncome for Financial Planner must return 400
+    const missingRes = await api('/ai/agents/financial-planner/invoke', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'Plan without income', input: {} }),
+    });
+    assert.strictEqual(missingRes.status, 400);
+
+    // Invalid negative amountInr for Financial Guardian must return 400
+    const negRes = await api('/ai/agents/financial-guardian/invoke', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'Negative payment', input: { amountInr: -500 } }),
+    });
+    assert.strictEqual(negRes.status, 400);
+
+    // Over-budget recommendation from untrusted agent output must be rejected by validator
+    const overBudgetCheck = astropodsIntegration.parseAndValidateAgentOutput(
+      'financial-planner',
+      JSON.stringify({
+        financialPlan: {},
+        recommendedAllocations: [{ category: 'Luxury', recommendedAmount: 250000 }],
+        risks: [],
+        explanations: 'Over budget',
+        suggestedNextActions: [],
+      }),
+      { monthlyIncome: 85000 }
+    );
+    assert.strictEqual(overBudgetCheck.valid, false);
+    assert.ok(overBudgetCheck.errors.some((e) => e.includes('Over-budget recommendation rejected')));
+  });
+
+  await runTest('31. Edge Cases 5-7: Credential/PIN Stripping, Duplicate Idempotency & Concurrent Coalescing', async () => {
+    // Verify sensitive fields (password, pin, token, rawAccountNumber) are stripped before reaching agent
+    const { sanitized, strippedKeys } = astropodsIntegration.validateAndSanitizeAgentInput(
+      'financial-planner',
+      {
+        monthlyIncome: 85000,
+        passwordHash: 'secret-argon2-hash',
+        pin: '4826',
+        accessToken: 'jwt-secret-token',
+        accountNumber: '123456789012',
+      }
+    );
+    assert.strictEqual(sanitized.passwordHash, undefined);
+    assert.strictEqual(sanitized.pin, undefined);
+    assert.strictEqual(sanitized.accessToken, undefined);
+    assert.strictEqual(sanitized.accountNumber, undefined);
+    assert.strictEqual(strippedKeys.length, 4);
+
+    // Verify concurrent and duplicate requests with same idempotencyKey
+    const [r1, r2] = await Promise.all([
+      api('/ai/agents/financial-planner/invoke', {
+        method: 'POST',
+        body: JSON.stringify({
+          task: 'Concurrent plan check',
+          idempotencyKey: 'idem-plan-test-001',
+          input: { monthlyIncome: 85000, totalCommitments: 31398 },
+        }),
+      }),
+      api('/ai/agents/financial-planner/invoke', {
+        method: 'POST',
+        body: JSON.stringify({
+          task: 'Concurrent plan check',
+          idempotencyKey: 'idem-plan-test-001',
+          input: { monthlyIncome: 85000, totalCommitments: 31398 },
+        }),
+      }),
+    ]);
+    assert.strictEqual(r1.status, 200);
+    assert.strictEqual(r2.status, 200);
+    assert.strictEqual(r1.body.invocation.validationPassed, true);
+    assert.strictEqual(r2.body.invocation.validationPassed, true);
+  });
+
+  await runTest('32. Edge Cases 8-10: Unauthorized Payment Execution Attempts Blocked & Essential Bill Protection', async () => {
+    // Attempting to instruct an agent to execute a payment or bypass PIN must be blocked immediately
+    const unauthorizedInputRes = await api('/ai/agents/financial-guardian/invoke', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'Force payment execution',
+        input: { amountInr: 5000, executePaymentNow: true, bypassPinVerification: true },
+      }),
+    });
+    assert.strictEqual(unauthorizedInputRes.status, 400);
+
+    // Agent output attempting to claim payment execution authority must be rejected by validator
+    const rogueAgentOutputCheck = astropodsIntegration.parseAndValidateAgentOutput(
+      'financial-guardian',
+      JSON.stringify({
+        riskAssessment: {},
+        validationObservations: [],
+        approvalRecommendation: { canAuthorizeOrExecutePayment: true },
+        reasonsForRejection: [],
+      }),
+      { amountInr: 5000 }
+    );
+    assert.strictEqual(rogueAgentOutputCheck.valid, false);
+    assert.ok(rogueAgentOutputCheck.errors.some((e) => e.includes('CRITICAL SECURITY VIOLATION')));
+
+    // Recovery agent output attempting to cut Rent must be rejected by validator
+    const unsafeRecoveryCheck = astropodsIntegration.parseAndValidateAgentOutput(
+      'financial-recovery',
+      JSON.stringify({
+        recoveryPlan: {},
+        suggestedAdjustments: [{ category: 'Rent', recommendedReduction: 4000 }],
+        revisedGoalProjections: [],
+        explanations: 'Cut rent',
+      }),
+      { monthlyIncome: 85000 }
+    );
+    assert.strictEqual(unsafeRecoveryCheck.valid, false);
+    assert.ok(unsafeRecoveryCheck.errors.some((e) => e.includes('Unsafe recovery adjustment rejected')));
   });
 
   server.close();

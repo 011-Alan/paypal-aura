@@ -16,6 +16,7 @@ import {
   recordAuditLog,
 } from '../../middleware/security';
 import { paypalIntegration } from '../../integrations/paypal';
+import { astropodsIntegration } from '../../integrations/astropods';
 import { elasticIntegration } from '../../integrations/elastic';
 import { bryntumIntegration } from '../../integrations/bryntum';
 import { zapierIntegration } from '../../integrations/zapier';
@@ -110,6 +111,37 @@ export class PaymentGuardianService {
     const passedAllHardRules =
       checkSingleLimit && checkDailyLimit && checkCategoryAllowed && checkSufficientBalance;
     const requiresPin = true; // Always require PIN verification or above threshold
+
+    // Invoke Astropods Agent 6 (Financial Guardian) for advisory risk assessment.
+    // CRITICAL SECURITY INVARIANT: Agent 6 never overrides deterministic backend hard rules.
+    const guardianAgentResp = await astropodsIntegration.invokeAgent({
+      agentId: 'financial-guardian',
+      task: `Review proposed payment of INR ${amountInr} to ${params.recipientName}`,
+      input: {
+        actionType: 'payment_preparation',
+        amountInr,
+        recipientName: params.recipientName.trim(),
+        merchantCategory: category,
+        accountBalanceInr: account?.balance || 0,
+        spentTodayInr: spentToday,
+        policy: {
+          singleTransactionLimit: policy.singleTransactionLimit,
+          dailySpendingLimit: policy.dailySpendingLimit,
+          discretionaryMonthlyCap: policy.discretionaryMonthlyCap,
+          blockedCategories: policy.blockedCategories,
+        },
+      },
+      idempotencyKey: `guardian-eval-${idempotencyKey}`,
+    });
+
+    const riskLevel = guardianAgentResp.output?.riskAssessment?.riskLevel || (passedAllHardRules ? 'low' : 'critical');
+    policyChecks.push({
+      rule: 'Astropods Financial Guardian Advisory Review',
+      passed: passedAllHardRules,
+      detail: `Agent ${guardianAgentResp.blueprintName} (${guardianAgentResp.transport}) risk assessment: ${String(
+        riskLevel
+      ).toUpperCase()}. Explicit user confirmation and Argon2id PIN required.`,
+    });
 
     const amountUsd = Math.max(1.0, Math.round(amountInr * env.INR_TO_USD_RATE * 100) / 100);
 

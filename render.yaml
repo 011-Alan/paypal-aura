@@ -48,7 +48,25 @@ services:
         sync: false
       - key: CHANNEL3_API_KEY
         sync: false
+      - key: ASTROPODS_API_URL
+        value: https://astropods.com/api/v1
+      - key: ASTROPODS_ACCOUNT
+        sync: false
+      - key: ASTROPODS_ACCESS_TOKEN
+        sync: false
       - key: ASTROPODS_API_KEY
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_FINANCIAL_PLANNER
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_TRANSACTION_INTELLIGENCE
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_MANDATE_INTELLIGENCE
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_FINANCIAL_RECOVERY
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_PURCHASE_INTELLIGENCE
+        sync: false
+      - key: ASTROPODS_DEPLOYMENT_FINANCIAL_GUARDIAN
         sync: false
       - key: KERNEL_API_KEY
         sync: false

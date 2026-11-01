@@ -139,16 +139,21 @@ export const AskAuraPage: React.FC = () => {
           <div className="space-y-2">
             <div className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-blue-600" />
-              Astropods Multi-Agent Execution Trace ({turn.astropodsOrchestration?.workflowId})
+              Astropods Multi-Agent Execution Trace ({turn.astropodsOrchestration?.workflowId} · {turn.astropodsOrchestration?.executionMode})
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {(turn.astropodsOrchestration?.steps || []).map((step: any, sIdx: number) => (
                 <div key={sIdx} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                   <div className="font-bold text-navy-900 flex items-center justify-between">
-                    <span>{step.agentName}</span>
-                    <span className="text-[10px] font-mono text-slate-500">{step.durationMs}ms</span>
+                    <span>{step.agentName} ({step.blueprintName || step.agentId})</span>
+                    <span className="text-[10px] font-mono text-slate-500">{step.durationMs}ms · {step.transport || 'remote'}</span>
                   </div>
                   <div className="text-slate-600 mt-1">{step.summary}</div>
+                  {step.correlationId && (
+                    <div className="text-[10px] font-mono text-slate-400 mt-1">
+                      Trace ID: {step.correlationId} {step.conversationId ? `· Conv: ${step.conversationId}` : ''}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -179,7 +184,9 @@ export const AskAuraPage: React.FC = () => {
                   <CheckCircle2 className="w-3 h-3" /> {ag.status}
                 </span>
               </div>
-              <div className="text-[11px] font-medium text-blue-700">{ag.role}</div>
+              <div className="text-[11px] font-medium text-blue-700">
+                {ag.role} {ag.blueprintName ? `· ${ag.blueprintName}` : ''}
+              </div>
               <ul className="text-[11px] text-slate-600 space-y-1 list-disc list-inside">
                 {(ag.responsibilities || []).slice(0, 3).map((r: string, i: number) => (
                   <li key={i}>{r}</li>

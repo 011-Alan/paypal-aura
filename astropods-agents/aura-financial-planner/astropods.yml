@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://astropods.com/schema/package.json
+spec: blueprint/v1
+name: aura-financial-planner
+
+agent:
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+models:
+  default:
+    provider: gateway
+    models: [claude-sonnet-4-6]
+
+dev:
+  interfaces:
+    messaging:
+      adapters: [web]

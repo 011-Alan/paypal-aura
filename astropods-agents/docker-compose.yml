@@ -1,0 +1,176 @@
+# ============================================================================
+# PROJECT AURA — 6 Independent Astropods Agent Pods (Local Multi-Pod Compose)
+# Runs all 6 official Astropods agent containers paired with their official
+# `astropods/messaging:latest` gRPC + Web Adapter sidecars on ports 3110..3115.
+# ============================================================================
+
+services:
+  # --- Pod 1: Financial Planner (Port 3110) ---
+  planner-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3110:8080"
+    networks:
+      - pod-planner
+
+  planner-agent:
+    image: aura-financial-planner-linux-amd64:c800fdc6
+    depends_on:
+      - planner-messaging
+    environment:
+      - GRPC_SERVER_ADDR=planner-messaging:9090
+      - ASTRO_AGENT_NAME=aura-financial-planner
+    volumes:
+      - ./aura-financial-planner/agent:/app/agent:ro
+    networks:
+      - pod-planner
+
+  # --- Pod 2: Transaction Intelligence (Port 3111) ---
+  tx-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3111:8080"
+    networks:
+      - pod-tx
+
+  tx-agent:
+    image: aura-transaction-intelligence-linux-amd64:47ae4937
+    depends_on:
+      - tx-messaging
+    environment:
+      - GRPC_SERVER_ADDR=tx-messaging:9090
+      - ASTRO_AGENT_NAME=aura-transaction-intelligence
+    volumes:
+      - ./aura-transaction-intelligence/agent:/app/agent:ro
+    networks:
+      - pod-tx
+
+  # --- Pod 3: Mandate Intelligence (Port 3112) ---
+  mandate-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3112:8080"
+    networks:
+      - pod-mandate
+
+  mandate-agent:
+    image: aura-mandate-intelligence-linux-amd64:6e3cee10
+    depends_on:
+      - mandate-messaging
+    environment:
+      - GRPC_SERVER_ADDR=mandate-messaging:9090
+      - ASTRO_AGENT_NAME=aura-mandate-intelligence
+    volumes:
+      - ./aura-mandate-intelligence/agent:/app/agent:ro
+    networks:
+      - pod-mandate
+
+  # --- Pod 4: Financial Recovery Advisor (Port 3113) ---
+  recovery-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3113:8080"
+    networks:
+      - pod-recovery
+
+  recovery-agent:
+    image: aura-financial-recovery-linux-amd64:da6515a8
+    depends_on:
+      - recovery-messaging
+    environment:
+      - GRPC_SERVER_ADDR=recovery-messaging:9090
+      - ASTRO_AGENT_NAME=aura-financial-recovery
+    volumes:
+      - ./aura-financial-recovery/agent:/app/agent:ro
+    networks:
+      - pod-recovery
+
+  # --- Pod 5: Purchase Intelligence (Port 3114) ---
+  purchase-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3114:8080"
+    networks:
+      - pod-purchase
+
+  purchase-agent:
+    image: aura-purchase-intelligence-linux-amd64:c17150db
+    depends_on:
+      - purchase-messaging
+    environment:
+      - GRPC_SERVER_ADDR=purchase-messaging:9090
+      - ASTRO_AGENT_NAME=aura-purchase-intelligence
+    volumes:
+      - ./aura-purchase-intelligence/agent:/app/agent:ro
+    networks:
+      - pod-purchase
+
+  # --- Pod 6: Financial Guardian (Port 3115) ---
+  guardian-messaging:
+    image: astropods/messaging:latest
+    environment:
+      - WEB_LISTEN_ADDR=:8080
+      - WEB_ENABLED=true
+      - GRPC_ENABLED=true
+      - GRPC_LISTEN_ADDR=:9090
+      - STORAGE_TYPE=memory
+      - DEV=true
+    ports:
+      - "3115:8080"
+    networks:
+      - pod-guardian
+
+  guardian-agent:
+    image: aura-financial-guardian-linux-amd64:8240f8b6
+    depends_on:
+      - guardian-messaging
+    environment:
+      - GRPC_SERVER_ADDR=guardian-messaging:9090
+      - ASTRO_AGENT_NAME=aura-financial-guardian
+    volumes:
+      - ./aura-financial-guardian/agent:/app/agent:ro
+    networks:
+      - pod-guardian
+
+networks:
+  pod-planner:
+  pod-tx:
+  pod-mandate:
+  pod-recovery:
+  pod-purchase:
+  pod-guardian:

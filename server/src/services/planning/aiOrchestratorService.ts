@@ -182,7 +182,40 @@ export class AuraAiOrchestratorService {
       });
     }
 
-    // Coordinate Astropods execution trace
+    // Prepare sanitized task-specific context for remote Astropods agents (no credentials, PINs, or raw account numbers)
+    const sanitizedTransactions = allTransactions.slice(0, 40).map((t) => ({
+      date: new Date(t.date).toISOString().slice(0, 10),
+      merchant: t.merchant,
+      category: t.category,
+      type: t.type,
+      amount: t.amount,
+      isRecurring: t.isRecurring,
+      isUnusual: t.isUnusual,
+      unusualReason: t.unusualReason,
+    }));
+
+    const sanitizedMandates = mandates.map((m) => ({
+      title: m.title,
+      merchant: m.merchant,
+      category: m.category,
+      amount: m.amount,
+      frequency: m.frequency,
+      dueDayOfMonth: m.dueDayOfMonth,
+      nextDueDate: m.nextDueDate ? new Date(m.nextDueDate).toISOString().slice(0, 10) : undefined,
+      status: m.status,
+      confidenceScore: m.confidenceScore,
+    }));
+
+    const sanitizedGoals = goals.map((g) => ({
+      title: g.title,
+      category: g.category,
+      targetAmount: g.targetAmount,
+      currentAmount: g.currentAmount,
+      monthlyContribution: g.monthlyContribution,
+      priority: g.priority,
+    }));
+
+    // Coordinate Astropods remote multi-agent workflow & execution trace
     const astropodsTrace = await astropodsIntegration.executeCoordinatedWorkflow({
       prompt,
       primaryAgent: routing.primaryAgent,
@@ -190,11 +223,36 @@ export class AuraAiOrchestratorService {
       contextSummary: {
         monthlyIncome: user.monthlyIncome,
         totalCommitments,
+        liquidBalanceInr: liquidBalance,
         transactionCount: agGridPayload.rowCount,
         unusualCount: agGridPayload.summaryRow.unusualCount,
         mandateCount: mandates.length,
         productCount: purchaseEvaluationData?.evaluatedProducts?.length || 0,
-        discretionaryRemaining: purchaseEvaluationData?.discretionaryAllocatedInr || user.financialPolicy.discretionaryMonthlyCap,
+        discretionaryRemaining:
+          purchaseEvaluationData?.discretionaryAllocatedInr ||
+          user.financialPolicy.discretionaryMonthlyCap,
+        transactions: sanitizedTransactions,
+        mandates: sanitizedMandates,
+        upcomingCommitments: sanitizedMandates.filter((m) => m.category !== 'Salary'),
+        financialGoals: sanitizedGoals,
+        allocations: generatedPlanData?.allocations || [],
+        products: (purchaseEvaluationData?.evaluatedProducts || []).map((ep: any) => ({
+          id: ep.product?.id,
+          name: ep.product?.name,
+          priceInr: ep.product?.priceInr,
+          category: ep.product?.category,
+        })),
+        amountInr:
+          preparedPaymentData?.amountInr ||
+          purchaseEvaluationData?.requestedPriceInr ||
+          5000,
+        recipientName: preparedPaymentData?.recipientName || 'Authorized Merchant',
+        policy: {
+          singleTransactionLimit: user.financialPolicy.singleTransactionLimit,
+          dailySpendingLimit: user.financialPolicy.dailySpendingLimit,
+          discretionaryMonthlyCap: user.financialPolicy.discretionaryMonthlyCap,
+          blockedCategories: user.financialPolicy.blockedCategories,
+        },
       },
     });
 

@@ -43,10 +43,42 @@ export const env = {
   APIMATIC_STRICT_CONTRACT_VALIDATION: process.env.APIMATIC_STRICT_CONTRACT_VALIDATION !== 'false',
   APIMATIC_PAYPAL_SPEC_VERSION: process.env.APIMATIC_PAYPAL_SPEC_VERSION || '2.1.0',
 
-  // Sponsor 3: Astropods
-  ASTROPODS_API_URL: process.env.ASTROPODS_API_URL || 'https://api.astropods.io/v1',
-  ASTROPODS_API_KEY: process.env.ASTROPODS_API_KEY || '',
-  ASTROPODS_WORKSPACE_ID: process.env.ASTROPODS_WORKSPACE_ID || 'aura-financial-agents',
+  // Sponsor 3: Astropods (Official Platform API & Remote Agent Deployments)
+  ASTROPODS_API_URL: process.env.ASTROPODS_API_URL || 'https://astropods.com/api/v1',
+  ASTROPODS_API_KEY: process.env.ASTROPODS_API_KEY || process.env.ASTROPODS_ACCESS_TOKEN || '',
+  ASTROPODS_ACCESS_TOKEN: process.env.ASTROPODS_ACCESS_TOKEN || process.env.ASTROPODS_API_KEY || '',
+  ASTROPODS_ACCOUNT: process.env.ASTROPODS_ACCOUNT || process.env.ASTROPODS_WORKSPACE_ID || 'aura-financial-agents',
+  ASTROPODS_WORKSPACE_ID: process.env.ASTROPODS_WORKSPACE_ID || process.env.ASTROPODS_ACCOUNT || 'aura-financial-agents',
+  ASTROPODS_TIMEOUT_MS: parseInt(process.env.ASTROPODS_TIMEOUT_MS || '15000', 10),
+  ASTROPODS_MAX_RETRIES: parseInt(process.env.ASTROPODS_MAX_RETRIES || '2', 10),
+
+  // Astropods Per-Agent Cloud Deployment IDs (/api/v1/deployments/{deploymentId})
+  ASTROPODS_DEPLOYMENT_FINANCIAL_PLANNER: process.env.ASTROPODS_DEPLOYMENT_FINANCIAL_PLANNER || '',
+  ASTROPODS_DEPLOYMENT_TRANSACTION_INTELLIGENCE: process.env.ASTROPODS_DEPLOYMENT_TRANSACTION_INTELLIGENCE || '',
+  ASTROPODS_DEPLOYMENT_MANDATE_INTELLIGENCE: process.env.ASTROPODS_DEPLOYMENT_MANDATE_INTELLIGENCE || '',
+  ASTROPODS_DEPLOYMENT_FINANCIAL_RECOVERY: process.env.ASTROPODS_DEPLOYMENT_FINANCIAL_RECOVERY || '',
+  ASTROPODS_DEPLOYMENT_PURCHASE_INTELLIGENCE: process.env.ASTROPODS_DEPLOYMENT_PURCHASE_INTELLIGENCE || '',
+  ASTROPODS_DEPLOYMENT_FINANCIAL_GUARDIAN: process.env.ASTROPODS_DEPLOYMENT_FINANCIAL_GUARDIAN || '',
+
+  // Astropods Per-Agent Web Adapter URLs (e.g., https://<deployment>.astropods.com or http://127.0.0.1:3110..3115)
+  ASTROPODS_URL_FINANCIAL_PLANNER:
+    process.env.ASTROPODS_URL_FINANCIAL_PLANNER ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3110' : ''),
+  ASTROPODS_URL_TRANSACTION_INTELLIGENCE:
+    process.env.ASTROPODS_URL_TRANSACTION_INTELLIGENCE ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3111' : ''),
+  ASTROPODS_URL_MANDATE_INTELLIGENCE:
+    process.env.ASTROPODS_URL_MANDATE_INTELLIGENCE ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3112' : ''),
+  ASTROPODS_URL_FINANCIAL_RECOVERY:
+    process.env.ASTROPODS_URL_FINANCIAL_RECOVERY ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3113' : ''),
+  ASTROPODS_URL_PURCHASE_INTELLIGENCE:
+    process.env.ASTROPODS_URL_PURCHASE_INTELLIGENCE ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3114' : ''),
+  ASTROPODS_URL_FINANCIAL_GUARDIAN:
+    process.env.ASTROPODS_URL_FINANCIAL_GUARDIAN ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:3115' : ''),
 
   // Sponsor 4: Bryntum
   BRYNTUM_CALENDAR_ENABLED: process.env.BRYNTUM_CALENDAR_ENABLED !== 'false',

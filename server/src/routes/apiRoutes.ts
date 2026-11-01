@@ -937,6 +937,61 @@ apiRouter.get('/ai/agents', requireAuth, async (_req: AuthenticatedRequest, res:
   });
 });
 
+apiRouter.get('/ai/agents/availability', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const availability = await astropodsIntegration.checkRemoteAvailability();
+    res.json({
+      success: true,
+      ...availability,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ai/agents/:agentId/traces', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const agentId = req.params.agentId as any;
+    const agents = astropodsIntegration.getAgents();
+    if (!agents.some((a) => a.id === agentId)) {
+      res.status(404).json({ success: false, error: `Unknown Astropods agent ID: ${agentId}` });
+      return;
+    }
+    const remoteTraces = await astropodsIntegration.fetchRemoteAgentTraces(agentId, 15);
+    const localHistory = astropodsIntegration
+      .getRecentExecutions(25)
+      .filter((wf) => wf.participatingAgents.includes(agentId));
+    res.json({
+      success: true,
+      agentId,
+      ...remoteTraces,
+      recentBackendWorkflows: localHistory,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ai/agents/:agentId/invoke', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const agentId = req.params.agentId as any;
+    const { task, input, idempotencyKey, timeoutMs } = req.body || {};
+    const invocation = await astropodsIntegration.invokeAgent({
+      agentId,
+      task: String(task || `Invoke ${agentId}`),
+      input: input || {},
+      idempotencyKey: idempotencyKey ? String(idempotencyKey) : undefined,
+      timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+    });
+    res.json({
+      success: true,
+      invocation,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
 // ============================================================================
 // 12. Purchase Intelligence — Channel3 Smart Purchase Companion (Folder 12)
 // ============================================================================
