@@ -72,8 +72,5 @@ services:
           property: host
     routes:
       - type: rewrite
-        source: /api/*
-        destination: https://aura-backend-api.onrender.com/api/*
-      - type: rewrite
         source: /*
         destination: /index.html

@@ -1,6 +1,28 @@
 /// <reference types="vite/client" />
 
-const API_BASE = (import.meta.env?.VITE_API_URL ? `https://${import.meta.env.VITE_API_URL}`.replace('https://https://', 'https://') : '') + '/api';
+function getApiBase(): string {
+  let rawUrl = (import.meta.env?.VITE_API_URL || '').trim();
+  if (!rawUrl) {
+    return '/api';
+  }
+  // If protocol not present, add https://
+  if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+    // If Render internal host name like 'aura-backend-api-88nx' (lacks domain dots), append .onrender.com
+    if (!rawUrl.includes('.')) {
+      rawUrl = `${rawUrl}.onrender.com`;
+    }
+    rawUrl = `https://${rawUrl}`;
+  }
+  // Strip trailing slashes
+  rawUrl = rawUrl.replace(/\/+$/, '');
+  // If it already ends with /api, avoid duplicating
+  if (rawUrl.endsWith('/api')) {
+    return rawUrl;
+  }
+  return `${rawUrl}/api`;
+}
+
+const API_BASE = getApiBase();
 
 export function getStoredToken(): string | null {
   return localStorage.getItem('aura_auth_token');
