@@ -10,8 +10,11 @@ import {
   Webhook,
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 export const PaymentsPage: React.FC = () => {
+  const { balancesVisible } = useAuth();
   const [payments, setPayments] = useState<any[]>([]);
   const [paypalStatus, setPaypalStatus] = useState<any>(null);
 
@@ -288,7 +291,7 @@ export const PaymentsPage: React.FC = () => {
                     Active Payment Request • {activePayment.idempotencyKey}
                   </span>
                   <h3 className="text-base font-bold text-navy-900 mt-0.5">
-                    {formatInr(activePayment.amountInr)} (${activePayment.amountUsd?.toFixed(2)} USD) → {activePayment.recipientName}
+                    {formatInr(activePayment.amountInr, !balancesVisible)} (${activePayment.amountUsd?.toFixed(2)} USD) → {activePayment.recipientName}
                   </h3>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 uppercase">
@@ -424,7 +427,8 @@ export const PaymentsPage: React.FC = () => {
                   <td className="py-2.5 px-3 font-semibold text-navy-900">{p.recipientName}</td>
                   <td className="py-2.5 px-3 text-slate-600">{p.description}</td>
                   <td className="py-2.5 px-3 font-bold text-navy-900">
-                    {formatInr(p.amountInr)} (${p.amountUsd?.toFixed(2)})
+                    {formatInr(p.amountInr, !balancesVisible)}{' '}
+                    {!balancesVisible ? '' : <span className="text-xs text-slate-500 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
                   </td>
                   <td className="py-2.5 px-3 font-mono text-slate-600">{p.paypalOrderId || 'Pending'}</td>
                   <td className="py-2.5 px-3">

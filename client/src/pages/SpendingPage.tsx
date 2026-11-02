@@ -13,6 +13,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 const PRESET_NL_QUERIES = [
   'Show my dining expenditure over the last three months.',
@@ -22,6 +24,7 @@ const PRESET_NL_QUERIES = [
 ];
 
 export const SpendingPage: React.FC = () => {
+  const { balancesVisible } = useAuth();
   const [agGridData, setAgGridData] = useState<any>(null);
   const [pythonAnalytics, setPythonAnalytics] = useState<any>(null);
   const [nlQuery, setNlQuery] = useState('');
@@ -167,7 +170,7 @@ export const SpendingPage: React.FC = () => {
           return (
             <span className={`font-bold ${isInc ? 'text-emerald-600' : 'text-navy-900'}`}>
               {isInc ? '+' : '-'}
-              {formatInr(params.value)}
+              {formatInr(params.value, !balancesVisible)}
             </span>
           );
         },
@@ -198,7 +201,7 @@ export const SpendingPage: React.FC = () => {
         },
       },
     ],
-    []
+    [balancesVisible]
   );
 
   const summaryMetrics = useMemo(() => {
@@ -393,9 +396,9 @@ export const SpendingPage: React.FC = () => {
                 <span className="font-bold text-navy-900">{cat.category}</span>
                 <span className="text-blue-600 font-semibold">{cat.sharePercent}%</span>
               </div>
-              <div className="text-lg font-bold text-navy-900 mt-1">{formatInr(cat.totalAmount)}</div>
+              <div className="text-lg font-bold text-navy-900 mt-1">{formatInr(cat.totalAmount, !balancesVisible)}</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                {cat.count} txns • Avg {formatInr(cat.avgAmount)}
+                {cat.count} txns • Avg {formatInr(cat.avgAmount, !balancesVisible)}
               </div>
             </div>
           ))}

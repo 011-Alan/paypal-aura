@@ -13,12 +13,12 @@ import { SmartPurchasePage } from './pages/SmartPurchasePage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { AskAuraPage } from './pages/AskAuraPage';
-import { AutomationsPage } from './pages/AutomationsPage';
+import { DemoLabPage } from './pages/DemoLabPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const MainRouter: React.FC = () => {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState<NavTabId>('home');
+  const [activeTab, setActiveTab] = useState<NavTabId>('overview');
 
   if (loading) {
     return (
@@ -32,21 +32,29 @@ const MainRouter: React.FC = () => {
     return <AuthPage />;
   }
 
+  const handleNavigate = (tab: any) => {
+    setActiveTab(tab as NavTabId);
+  };
+
   return (
     <AppShell activeTab={activeTab} onSelectTab={setActiveTab}>
-      {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
-      {activeTab === 'my-money' && <MyMoneyPage />}
-      {activeTab === 'spending' && <SpendingPage />}
-      {activeTab === 'financial-plan' && <FinancialPlanPage />}
+      {(activeTab === 'overview' || activeTab === 'home') && <HomePage onNavigate={handleNavigate} />}
+      {(activeTab === 'accounts' || activeTab === 'my-money') && <MyMoneyPage />}
+      {(activeTab === 'transactions' || activeTab === 'spending') && <SpendingPage />}
+      {activeTab === 'ask-aura' && <AskAuraPage onNavigate={handleNavigate} />}
+      {(activeTab === 'financial-planning' || activeTab === 'financial-plan') && <FinancialPlanPage />}
       {activeTab === 'commitments' && <CommitmentsPage />}
       {activeTab === 'calendar' && <FinancialCalendarPage />}
       {activeTab === 'goals' && <GoalsPage />}
-      {activeTab === 'smart-purchase' && <SmartPurchasePage onNavigate={setActiveTab} />}
-      {activeTab === 'payments' && <PaymentsPage />}
+      {(activeTab === 'smart-purchases' || activeTab === 'smart-purchase') && (
+        <SmartPurchasePage onNavigate={handleNavigate} />
+      )}
       {activeTab === 'family' && <FamilyPage />}
-      {activeTab === 'ask-aura' && <AskAuraPage />}
-      {activeTab === 'automations' && <AutomationsPage />}
+      {activeTab === 'payments' && <PaymentsPage />}
       {activeTab === 'settings' && <SettingsPage />}
+      {(activeTab === 'demo-lab' || activeTab === 'automations') && (
+        <DemoLabPage onNavigateToProduct={handleNavigate} />
+      )}
     </AppShell>
   );
 };

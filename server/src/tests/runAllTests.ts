@@ -1,8 +1,132 @@
 import assert from 'assert';
+import http from 'http';
 import { app } from '../index';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import { ensureDemoUserAlexSeeded, DEMO_ALEX_CREDENTIALS } from '../seed/seedService';
-import { astropodsIntegration } from '../integrations/astropods';
+import { astropodsIntegration, AuraAgentId } from '../integrations/astropods';
+
+function createMockAstropodsPod(port: number, agentId: AuraAgentId): Promise<http.Server> {
+  const pendingStreams = new Map<string, http.ServerResponse>();
+  const completedOutputs = new Map<string, string>();
+
+  const srv = http.createServer((req, res) => {
+    const rawUrl = req.url || '';
+    const cleanUrl = rawUrl.split('?')[0];
+
+    if (req.method === 'GET' && cleanUrl === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'healthy', reachable: true }));
+      return;
+    }
+
+    if (req.method === 'POST' && cleanUrl === '/api/conversations') {
+      const convId = `conv-${agentId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ conversation_id: convId, id: convId }));
+      return;
+    }
+
+    const streamMatch = cleanUrl.match(/^\/api\/conversations\/([^/]+)\/stream$/);
+    if (req.method === 'GET' && streamMatch) {
+      const convId = streamMatch[1];
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      if (typeof res.flushHeaders === 'function') {
+        res.flushHeaders();
+      }
+      res.write(': connected\n\n');
+
+      const existingOutput = completedOutputs.get(convId);
+      if (existingOutput) {
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'chunk',
+            chunk_type: 'delta',
+            content: existingOutput,
+          })}\n\n`
+        );
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'chunk',
+            chunk_type: 'finish',
+            content: '',
+          })}\n\n`
+        );
+        res.end();
+        completedOutputs.delete(convId);
+      } else {
+        pendingStreams.set(convId, res);
+      }
+      return;
+    }
+
+    const msgMatch = cleanUrl.match(/^\/api\/conversations\/([^/]+)\/messages$/);
+    if (req.method === 'POST' && msgMatch) {
+      const convId = msgMatch[1];
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          let payload = parsed;
+          if (typeof parsed.content === 'string') {
+            try {
+              payload = JSON.parse(parsed.content);
+            } catch {
+              payload = parsed;
+            }
+          }
+          const input = payload.input || {};
+          const output = (astropodsIntegration as any).computeVerifiedDeterministicFallback(agentId, input);
+          const outputStr = JSON.stringify(output);
+
+          const streamRes = pendingStreams.get(convId);
+          if (streamRes) {
+            streamRes.write(
+              `data: ${JSON.stringify({
+                type: 'chunk',
+                chunk_type: 'delta',
+                content: outputStr,
+              })}\n\n`
+            );
+            streamRes.write(
+              `data: ${JSON.stringify({
+                type: 'chunk',
+                chunk_type: 'finish',
+                content: '',
+              })}\n\n`
+            );
+            streamRes.end();
+            pendingStreams.delete(convId);
+          } else {
+            completedOutputs.set(convId, outputStr);
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'sent' }));
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e?.message }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  return new Promise<http.Server>((resolve) => {
+    srv.listen(port, '127.0.0.1', () => resolve(srv));
+    srv.on('error', () => {
+      resolve(srv);
+    });
+  });
+}
 
 interface TestResult {
   name: string;
@@ -18,6 +142,26 @@ async function runSuite() {
 
   await connectDatabase();
   await ensureDemoUserAlexSeeded(true);
+
+  // Spin up mock web adapters for the 6 Astropods blueprints on ports 3110..3115
+  const podServers: http.Server[] = [];
+  const podConfigs: Array<{ port: number; agentId: AuraAgentId }> = [
+    { port: 3110, agentId: 'financial-planner' },
+    { port: 3111, agentId: 'transaction-intelligence' },
+    { port: 3112, agentId: 'mandate-intelligence' },
+    { port: 3113, agentId: 'financial-recovery' },
+    { port: 3114, agentId: 'purchase-intelligence' },
+    { port: 3115, agentId: 'financial-guardian' },
+  ];
+
+  for (const cfg of podConfigs) {
+    try {
+      const s = await createMockAstropodsPod(cfg.port, cfg.agentId);
+      podServers.push(s);
+    } catch {
+      // Ignore if cannot bind
+    }
+  }
 
   const server = app.listen(0);
   const address = server.address();
@@ -638,6 +782,11 @@ async function runSuite() {
   });
 
   server.close();
+  for (const s of podServers) {
+    try {
+      s.close();
+    } catch {}
+  }
   await disconnectDatabase();
 
   const passedCount = results.filter((r) => r.passed).length;

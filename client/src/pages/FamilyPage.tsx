@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Users, ShieldCheck, Lock, Target, Repeat } from 'lucide-react';
 import { apiRequest, formatInr, formatDateShort } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 export const FamilyPage: React.FC = () => {
+  const { balancesVisible } = useAuth();
   const [familyData, setFamilyData] = useState<any>(null);
   const [newBudget, setNewBudget] = useState('');
 
@@ -63,17 +66,26 @@ export const FamilyPage: React.FC = () => {
 
       {/* Shared Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Shared Household Monthly Budget</div>
-          <div className="text-2xl font-bold text-navy-900 mt-1">{formatInr(sharedSummary.sharedMonthlyBudget)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Shared Household Budget
+            <Tooltip content="Joint monthly spending envelope agreed upon by household members." />
+          </div>
+          <div className="text-2xl font-bold text-navy-900 mt-2">{formatInr(sharedSummary.sharedMonthlyBudget, !balancesVisible)}</div>
         </div>
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Shared Spent This Month</div>
-          <div className="text-2xl font-bold text-blue-600 mt-1">{formatInr(sharedSummary.sharedSpentThisMonth)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Shared Spent This Month
+            <Tooltip content="Sum of transactions explicitly tagged as household shared expenses." />
+          </div>
+          <div className="text-2xl font-bold text-blue-600 mt-2">{formatInr(sharedSummary.sharedSpentThisMonth, !balancesVisible)}</div>
         </div>
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Remaining Shared Buffer</div>
-          <div className="text-2xl font-bold text-emerald-600 mt-1">{formatInr(sharedSummary.remainingSharedBudget)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Remaining Shared Buffer
+            <Tooltip content="Available shared cushion before hitting household budget limits." />
+          </div>
+          <div className="text-2xl font-bold text-emerald-600 mt-2">{formatInr(sharedSummary.remainingSharedBudget, !balancesVisible)}</div>
         </div>
       </div>
 
@@ -99,7 +111,7 @@ export const FamilyPage: React.FC = () => {
               </div>
               <div className="text-right">
                 <div className="text-xs text-slate-500">Monthly Contribution</div>
-                <div className="text-base font-bold text-navy-900">{formatInr(m.monthlySharedContribution)}</div>
+                <div className="text-base font-bold text-navy-900">{formatInr(m.monthlySharedContribution, !balancesVisible)}</div>
               </div>
             </div>
           ))}

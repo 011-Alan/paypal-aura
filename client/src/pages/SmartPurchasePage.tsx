@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { NavTabId } from '../components/AppShell';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 const PRESET_SHOPPING_PROMPTS = [
   { label: 'Can I afford a laptop for ₹55,000?', query: 'laptop', maxPrice: 60000 },
@@ -19,6 +21,7 @@ const PRESET_SHOPPING_PROMPTS = [
 ];
 
 export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
+  const { balancesVisible } = useAuth();
   const [query, setQuery] = useState('laptop');
   const [maxPrice, setMaxPrice] = useState('60000');
   const [includeKernel, setIncludeKernel] = useState(true);
@@ -180,29 +183,41 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
       {/* Financial Context Strip */}
       {result?.financialContextSummary && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-500">Available Discretionary Budget</div>
-            <div className="text-lg font-bold text-blue-600 mt-1">
-              {formatInr(result.financialContextSummary.availableDiscretionaryBudgetInr)}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+            <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+              Available Discretionary Budget
+              <Tooltip content="Current month discretionary allowance available after all essential commitments are ringfenced." />
+            </div>
+            <div className="text-xl font-bold text-blue-600 mt-2">
+              {formatInr(result.financialContextSummary.availableDiscretionaryBudgetInr, !balancesVisible)}
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-500">Upcoming Commitments</div>
-            <div className="text-lg font-bold text-navy-900 mt-1">
-              {formatInr(result.financialContextSummary.upcomingCommitmentsInr)}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+            <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+              Upcoming Commitments
+              <Tooltip content="Confirmed bills and subscriptions that must be preserved." />
+            </div>
+            <div className="text-xl font-bold text-navy-900 mt-2">
+              {formatInr(result.financialContextSummary.upcomingCommitmentsInr, !balancesVisible)}
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-500">Monthly Goal Contributions</div>
-            <div className="text-lg font-bold text-emerald-600 mt-1">
-              {formatInr(result.financialContextSummary.activeGoalsMonthlyTargetInr)}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+            <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+              Monthly Goal Targets
+              <Tooltip content="Active monthly contributions toward your defined savings goals." />
+            </div>
+            <div className="text-xl font-bold text-emerald-600 mt-2">
+              {formatInr(result.financialContextSummary.activeGoalsMonthlyTargetInr, !balancesVisible)}
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-500">Channel3 Data Source</div>
-            <div className="text-xs font-semibold text-navy-900 mt-1 flex items-center gap-1">
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+            <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+              Channel3 Discovery Mode
+              <Tooltip content="Real-time product discovery catalog powered by Channel3." />
+            </div>
+            <div className="text-xs font-semibold text-navy-900 mt-2 flex items-center gap-1">
               <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              {result.liveChannel3ApiUsed ? 'Channel3 Live API' : 'Labelled Reference Catalog'}
+              {result.liveChannel3ApiUsed ? 'Channel3 Live API' : 'Verified Reference Catalog'}
             </div>
           </div>
         </div>
@@ -238,7 +253,7 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
                   <h3 className="text-base font-bold text-navy-900">{product.name}</h3>
                   <p className="text-xs text-slate-600 line-clamp-2">{product.description}</p>
                   <div className="pt-1 flex items-center justify-between">
-                    <span className="text-xl font-bold text-navy-900">{formatInr(product.priceInr)}</span>
+                    <span className="text-xl font-bold text-navy-900">{formatInr(product.priceInr, !balancesVisible)}</span>
                     <span className="text-xs text-slate-500">Retailer: {product.retailerName}</span>
                   </div>
                 </div>

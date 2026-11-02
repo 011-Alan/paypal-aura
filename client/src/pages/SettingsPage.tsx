@@ -2,54 +2,85 @@ import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   KeyRound,
-  Server,
-  RotateCcw,
+  Sliders,
   CheckCircle2,
-  FileText,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  User,
+  Lock,
+  LogOut,
+  Save,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
+import { Tooltip } from '../components/Tooltip';
 
 export const SettingsPage: React.FC = () => {
-  const { user, refreshUser } = useAuth();
-  const [integrations, setIntegrations] = useState<any>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const { user, refreshUser, balancesVisible, toggleBalancesVisible, logout } = useAuth();
 
-  // Policy state
+  // Profile fields
+  const [name, setName] = useState('');
+  const [monthlyIncome, setMonthlyIncome] = useState('');
+  const [riskTolerance, setRiskTolerance] = useState<'conservative' | 'balanced' | 'growth'>('balanced');
+
+  // Policy limits
   const [singleLimit, setSingleLimit] = useState('75000');
   const [dailyLimit, setDailyLimit] = useState('100000');
   const [discretionaryCap, setDiscretionaryCap] = useState('18000');
   const [pinThreshold, setPinThreshold] = useState('1000');
+  const [allowFamilySharedView, setAllowFamilySharedView] = useState(true);
 
   // PIN rotation
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
+
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-
-  const loadSettingsData = async () => {
-    const [intRes, auditRes] = await Promise.all([
-      apiRequest('/integrations/status'),
-      apiRequest('/audit-logs'),
-    ]);
-    setIntegrations(intRes.integrations || {});
-    setAuditLogs(auditRes.logs || []);
-  };
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [rotatingPin, setRotatingPin] = useState(false);
 
   useEffect(() => {
     if (user) {
-      setSingleLimit(String(user.financialPolicy.singleTransactionLimit));
-      setDailyLimit(String(user.financialPolicy.dailySpendingLimit));
-      setDiscretionaryCap(String(user.financialPolicy.discretionaryMonthlyCap));
-      setPinThreshold(String(user.financialPolicy.requirePinAboveAmount));
+      setName(user.name || '');
+      setMonthlyIncome(String(user.monthlyIncome || '85000'));
+      setRiskTolerance(user.spendingPreferences?.riskTolerance || 'balanced');
+      setSingleLimit(String(user.financialPolicy?.singleTransactionLimit || '75000'));
+      setDailyLimit(String(user.financialPolicy?.dailySpendingLimit || '100000'));
+      setDiscretionaryCap(String(user.financialPolicy?.discretionaryMonthlyCap || '18000'));
+      setPinThreshold(String(user.financialPolicy?.requirePinAboveAmount || '1000'));
+      setAllowFamilySharedView(user.financialPolicy?.allowFamilySharedView !== false);
     }
-    loadSettingsData();
   }, [user]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+    try {
+      await apiRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: name.trim(),
+          monthlyIncome: Number(monthlyIncome),
+          spendingPreferences: {
+            ...user?.spendingPreferences,
+            riskTolerance,
+          },
+        }),
+      });
+      await refreshUser();
+      setMsg('Personal profile and cashflow baselines updated successfully.');
+    } catch (error: any) {
+      setErr(error?.message || 'Failed to update profile');
+    }
+  };
 
   const handleSavePolicy = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
     setErr('');
+    setSavingPolicy(true);
     try {
       await apiRequest('/profile/policy', {
         method: 'PUT',
@@ -58,13 +89,15 @@ export const SettingsPage: React.FC = () => {
           dailySpendingLimit: Number(dailyLimit),
           discretionaryMonthlyCap: Number(discretionaryCap),
           requirePinAboveAmount: Number(pinThreshold),
+          allowFamilySharedView,
         }),
       });
       await refreshUser();
-      await loadSettingsData();
-      setMsg('Financial Permission Policy updated and enforced by Financial Guardian.');
+      setMsg('Financial Guardian policies updated. All payment workflows will enforce these caps.');
     } catch (error: any) {
-      setErr(error?.message || 'Failed to update policy');
+      setErr(error?.message || 'Failed to update financial policies');
+    } finally {
+      setSavingPolicy(false);
     }
   };
 
@@ -72,6 +105,7 @@ export const SettingsPage: React.FC = () => {
     e.preventDefault();
     setMsg('');
     setErr('');
+    setRotatingPin(true);
     try {
       const res = await apiRequest('/profile/pin', {
         method: 'PUT',
@@ -79,229 +113,307 @@ export const SettingsPage: React.FC = () => {
       });
       setCurrentPin('');
       setNewPin('');
-      setMsg(res.message);
-      await loadSettingsData();
+      setMsg(res.message || 'Security PIN rotated successfully.');
+      await refreshUser();
     } catch (error: any) {
       setErr(error?.message || 'Failed to rotate PIN');
+    } finally {
+      setRotatingPin(false);
     }
   };
 
-  const handleResetDemo = async () => {
-    await apiRequest('/seed/reset', { method: 'POST' });
-    await refreshUser();
-    await loadSettingsData();
-    setMsg('Demo user Alex Sharma & family baseline data restored.');
-  };
-
-  const integrationList = integrations
-    ? [
-        integrations.agGrid,
-        integrations.apimatic,
-        integrations.astropods,
-        integrations.bryntum,
-        integrations.channel3,
-        integrations.elastic,
-        integrations.kernel,
-        integrations.paypal,
-        integrations.render,
-        integrations.zapier,
-      ]
-    : [];
-
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-navy-900">
-            Security Policies, Argon2id PIN &amp; Ecosystem Status
-          </h2>
-          <p className="text-xs text-slate-500">
-            Configure your Financial Guardian permission boundaries, rotate your payment PIN, and inspect integration health.
+          <h2 className="text-xl font-bold text-navy-900 tracking-tight">Account &amp; Security Settings</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Manage your personal profile, Financial Guardian policy boundaries, and Argon2id payment PIN.
           </p>
         </div>
-        <button
-          onClick={handleResetDemo}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset Alex Demo Story Data
-        </button>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 self-start sm:self-center">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+          Server-Enforced Guardian
+        </span>
       </div>
 
       {msg && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold">
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           {msg}
         </div>
       )}
+
       {err && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold">
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
           {err}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Financial Permission Policy */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            Financial Guardian Permission Policy
-          </h3>
-          <form onSubmit={handleSavePolicy} className="space-y-3 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Single Transaction Limit (₹)</label>
-                <input
-                  type="number"
-                  value={singleLimit}
-                  onChange={(e) => setSingleLimit(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Daily Spending Cap (₹)</label>
-                <input
-                  type="number"
-                  value={dailyLimit}
-                  onChange={(e) => setDailyLimit(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Monthly Discretionary Cap (₹)</label>
-                <input
-                  type="number"
-                  value={discretionaryCap}
-                  onChange={(e) => setDiscretionaryCap(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Require PIN Above (₹)</label>
-                <input
-                  type="number"
-                  value={pinThreshold}
-                  onChange={(e) => setPinThreshold(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-            >
-              Save Financial Permission Policy
-            </button>
-          </form>
+      {/* 1. Profile & Income Baseline */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <User className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-navy-900">Personal Profile &amp; Financial Baseline</h3>
+            <p className="text-xs text-slate-500">Your identity and verified income parameters</p>
+          </div>
         </div>
 
-        {/* Argon2id Security PIN Rotation */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-blue-600" />
-            Rotate Argon2id Payment Security PIN
-          </h3>
-          <p className="text-xs text-slate-500">
-            Your payment PIN is hashed with Argon2id (19 MiB memory cost) and is never stored in plaintext or sent to AI models.
-          </p>
-          <form onSubmit={handleRotatePin} className="space-y-3 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Current PIN (Default: 4826)</label>
-                <input
-                  type="password"
-                  maxLength={6}
-                  value={currentPin}
-                  onChange={(e) => setCurrentPin(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">New 4–6 Digit PIN</label>
-                <input
-                  type="password"
-                  maxLength={6}
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
+        <form onSubmit={handleSaveProfile} className="space-y-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
+              <input
+                type="email"
+                value={user?.email || ''}
+                disabled
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Verified Monthly Income (INR)
+              </label>
+              <input
+                type="number"
+                value={monthlyIncome}
+                onChange={(e) => setMonthlyIncome(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Risk Tolerance Preference
+              </label>
+              <select
+                value={riskTolerance}
+                onChange={(e) => setRiskTolerance(e.target.value as any)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="conservative">Conservative (Prioritize Emergency &amp; Capital Protection)</option>
+                <option value="balanced">Balanced (50/30/20 Disciplined Savings &amp; Growth)</option>
+                <option value="growth">Growth (Aggressive Goal Funding &amp; Discretionary Flex)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-navy-900 hover:bg-navy-800 text-white font-semibold"
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center gap-1.5"
             >
-              Rotate Security PIN
+              <Save className="w-3.5 h-3.5" />
+              Save Profile Changes
             </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
 
-      {/* Live Sponsor & Ecosystem Integration Status Matrix */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+      {/* 2. Financial Guardian Policy Boundaries */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-navy-900">Financial Guardian Spending Safeguards</h3>
+              <p className="text-xs text-slate-500">Autonomous protection rules that prevent unauthorized outflows</p>
+            </div>
+          </div>
+          <Tooltip content="Rules enforced deterministically before any payment can be prepared or executed." />
+        </div>
+
+        <form onSubmit={handleSavePolicy} className="space-y-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                Single Transaction Limit (INR)
+                <Tooltip content="The maximum amount allowed for an individual payment request." />
+              </label>
+              <input
+                type="number"
+                value={singleLimit}
+                onChange={(e) => setSingleLimit(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                Daily Spending Cap (INR)
+                <Tooltip content="Total cumulative outflow allowed in a single 24-hour calendar day." />
+              </label>
+              <input
+                type="number"
+                value={dailyLimit}
+                onChange={(e) => setDailyLimit(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                Discretionary Monthly Budget Cap (INR)
+                <Tooltip content="Amount allocated for flexible, non-essential spending per month." />
+              </label>
+              <input
+                type="number"
+                value={discretionaryCap}
+                onChange={(e) => setDiscretionaryCap(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                Require PIN Verification Above (INR)
+                <Tooltip content="Transactions above this amount require entering your Argon2id security PIN." />
+              </label>
+              <input
+                type="number"
+                value={pinThreshold}
+                onChange={(e) => setPinThreshold(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="familyShared"
+              checked={allowFamilySharedView}
+              onChange={(e) => setAllowFamilySharedView(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="familyShared" className="text-xs font-medium text-slate-700">
+              Share aggregated budget overview with household family members (Personal accounts remain private)
+            </label>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={savingPolicy}
+              className="px-5 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold shadow-xs transition flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {savingPolicy ? 'Updating...' : 'Save Guardian Policies'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. Payment Security PIN Management (Argon2id) */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <KeyRound className="w-4 h-4" />
+          </div>
           <div>
-            <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-              <Server className="w-4 h-4 text-blue-600" />
-              AURA Integration Layer Health &amp; Responsibility Matrix
-            </h3>
+            <h3 className="text-sm font-bold text-navy-900">Payment Security PIN Management</h3>
             <p className="text-xs text-slate-500">
-              Live status of all 10 sponsor technologies and PayPal Sandbox execution layer
+              Protected with Argon2id cryptographic hashing. Required to authorize PayPal checkout orders.
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {integrationList.map((item: any, idx: number) => (
-            <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-navy-900">{item?.technology}</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <CheckCircle2 className="w-3 h-3" /> Active
-                </span>
-              </div>
-              <div className="text-slate-600">{item?.intendedResponsibility}</div>
-              <div className="text-[11px] text-blue-700 font-mono">{item?.status}</div>
+        <form onSubmit={handleRotatePin} className="space-y-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Current PIN</label>
+              <input
+                type="password"
+                maxLength={6}
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value)}
+                placeholder="4 to 6 digits"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          ))}
-        </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">New PIN</label>
+              <input
+                type="password"
+                maxLength={6}
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                placeholder="4 to 6 digits"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={rotatingPin}
+              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition"
+            >
+              {rotatingPin ? 'Rotating...' : 'Rotate Security PIN'}
+            </button>
+          </div>
+        </form>
       </div>
 
-      {/* Security Audit Log */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-          <FileText className="w-4 h-4 text-blue-600" />
-          Recent Security &amp; Financial Guardian Audit Log
-        </h3>
-        <div className="divide-y divide-slate-100 text-xs max-h-72 overflow-y-auto">
-          {auditLogs.map((log) => (
-            <div key={log._id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="font-bold text-navy-900">{log.action}</span>
-                <span className="text-slate-500 ml-2">
-                  Actor: {log.actor} • Resource: {log.resourceType}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                    log.status === 'blocked'
-                      ? 'bg-rose-50 text-rose-700'
-                      : 'bg-emerald-50 text-emerald-700'
-                  }`}
-                >
-                  {log.status}
-                </span>
-                <span className="text-slate-400 font-mono">
-                  {new Date(log.createdAt).toLocaleTimeString()}
-                </span>
-              </div>
-            </div>
-          ))}
+      {/* 4. Privacy & Balance Controls */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-navy-900">Financial Privacy &amp; Balance Masking</h4>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Hide liquid balances and sensitive amounts by default on all screens.
+          </p>
         </div>
+        <button
+          onClick={toggleBalancesVisible}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${
+            balancesVisible
+              ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+          }`}
+        >
+          {balancesVisible ? <EyeOff className="w-3.5 h-3.5 text-amber-700" /> : <Eye className="w-3.5 h-3.5 text-slate-600" />}
+          <span>{balancesVisible ? 'Balances Unmasked' : 'Balances Masked'}</span>
+        </button>
+      </div>
+
+      {/* 5. Session Sign Out */}
+      <div className="pt-2 flex justify-between items-center text-xs text-slate-500">
+        <span>AURA Security Model: Zero secret exposure to client • Argon2id protected</span>
+        <button
+          onClick={logout}
+          className="text-xs text-rose-600 hover:underline font-semibold flex items-center gap-1.5"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Sign Out of Account
+        </button>
       </div>
     </div>
   );

@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { PieChart, Sparkles, CheckCircle2, XCircle, RefreshCw, ShieldAlert } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 export const FinancialPlanPage: React.FC = () => {
+  const { balancesVisible } = useAuth();
   const [plan, setPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
@@ -72,24 +75,36 @@ export const FinancialPlanPage: React.FC = () => {
 
       {/* High-Level Allocation Buckets */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Confirmed Commitments</div>
-          <div className="text-2xl font-bold text-navy-900 mt-1">{formatInr(plan.totalCommitments)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Confirmed Commitments
+            <Tooltip content="Essential recurring outlays like Rent, EMIs, Insurance, and Utilities that cannot be skipped." />
+          </div>
+          <div className="text-2xl font-bold text-navy-900 mt-2">{formatInr(plan.totalCommitments, !balancesVisible)}</div>
           <div className="text-[11px] text-slate-500 mt-1">Rent, EMI, Insurance, Bills</div>
         </div>
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Essential Living Budget</div>
-          <div className="text-2xl font-bold text-navy-900 mt-1">{formatInr(plan.totalEssentialBudget)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Essential Living Budget
+            <Tooltip content="Everyday non-negotiable living costs including Groceries, Healthcare, and Transit." />
+          </div>
+          <div className="text-2xl font-bold text-navy-900 mt-2">{formatInr(plan.totalEssentialBudget, !balancesVisible)}</div>
           <div className="text-[11px] text-slate-500 mt-1">Groceries, Healthcare, Transport</div>
         </div>
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Discretionary Spending</div>
-          <div className="text-2xl font-bold text-blue-600 mt-1">{formatInr(plan.totalDiscretionaryBudget)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Discretionary Spending
+            <Tooltip content="Flexible lifestyle allocation for dining out, entertainment, and shopping." />
+          </div>
+          <div className="text-2xl font-bold text-blue-600 mt-2">{formatInr(plan.totalDiscretionaryBudget, !balancesVisible)}</div>
           <div className="text-[11px] text-slate-500 mt-1">Dining, Lifestyle, Electronics</div>
         </div>
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500">Savings &amp; Goal Contributions</div>
-          <div className="text-2xl font-bold text-emerald-600 mt-1">{formatInr(plan.totalSavingsTarget)}</div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            Savings &amp; Goals Target
+            <Tooltip content="Monthly contribution toward emergency reserve and long-term financial milestones." />
+          </div>
+          <div className="text-2xl font-bold text-emerald-600 mt-2">{formatInr(plan.totalSavingsTarget, !balancesVisible)}</div>
           <div className="text-[11px] text-slate-500 mt-1">Emergency &amp; Active Goals</div>
         </div>
       </div>
@@ -128,7 +143,7 @@ export const FinancialPlanPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-xs font-semibold text-navy-900">
-                    Spent {formatInr(alloc.spentAmount)} of {formatInr(alloc.plannedAmount)} ({alloc.utilizationPercent}%)
+                    Spent {formatInr(alloc.spentAmount, !balancesVisible)} of {formatInr(alloc.plannedAmount, !balancesVisible)} ({alloc.utilizationPercent}%)
                   </div>
                 </div>
 
@@ -139,7 +154,7 @@ export const FinancialPlanPage: React.FC = () => {
                 <div className="flex flex-wrap items-center justify-between text-xs text-slate-600">
                   <span>{alloc.recommendation}</span>
                   <span className="font-medium">
-                    Remaining: {formatInr(Math.max(0, alloc.remainingAmount))}
+                    Remaining: {formatInr(Math.max(0, alloc.remainingAmount), !balancesVisible)}
                   </span>
                 </div>
               </div>

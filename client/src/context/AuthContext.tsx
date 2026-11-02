@@ -28,6 +28,11 @@ export interface UserProfile {
 interface AuthContextValue {
   user: UserProfile | null;
   loading: boolean;
+  isDemoMode: boolean;
+  activeDemoPersona: 'alex' | 'priya' | 'maya' | null;
+  balancesVisible: boolean;
+  toggleBalancesVisible: () => void;
+  setBalancesVisible: (visible: boolean) => void;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
   registerAccount: (payload: {
     name: string;
@@ -37,6 +42,7 @@ interface AuthContextValue {
     monthlyIncome: number;
   }) => Promise<void>;
   loginAsDemoAlex: () => Promise<void>;
+  switchDemoPersona: (persona: 'alex' | 'priya' | 'maya') => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -46,33 +52,50 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [balancesVisible, setBalancesVisibleState] = useState<boolean>(() => {
+    return localStorage.getItem('aura_balances_visible') === 'true';
+  });
 
-  const loginAsDemoAlex = useCallback(async () => {
-    const res = await apiRequest('/auth/demo-login', { method: 'POST' });
-    setStoredToken(res.token);
-    setUser(res.user);
+  const toggleBalancesVisible = useCallback(() => {
+    setBalancesVisibleState((prev) => {
+      const next = !prev;
+      localStorage.setItem('aura_balances_visible', String(next));
+      return next;
+    });
   }, []);
+
+  const setBalancesVisible = useCallback((visible: boolean) => {
+    setBalancesVisibleState(visible);
+    localStorage.setItem('aura_balances_visible', String(visible));
+  }, []);
+
+  const isDemoMode = Boolean(user?.email && user.email.endsWith('@aura-demo.finance'));
+
+  const activeDemoPersona: 'alex' | 'priya' | 'maya' | null = !isDemoMode
+    ? null
+    : user?.email?.includes('priya')
+    ? 'priya'
+    : user?.email?.includes('maya')
+    ? 'maya'
+    : 'alex';
 
   const refreshUser = useCallback(async () => {
     try {
       const token = getStoredToken();
       if (!token) {
-        await loginAsDemoAlex();
+        setUser(null);
+        setLoading(false);
         return;
       }
       const res = await apiRequest('/auth/me');
       setUser(res.user);
     } catch {
-      try {
-        await loginAsDemoAlex();
-      } catch {
-        setStoredToken(null);
-        setUser(null);
-      }
+      setStoredToken(null);
+      setUser(null);
     } finally {
       setLoading(false);
     }
-  }, [loginAsDemoAlex]);
+  }, []);
 
   useEffect(() => {
     refreshUser();
@@ -102,6 +125,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.user);
   };
 
+  const loginAsDemoAlex = async () => {
+    const res = await apiRequest('/auth/demo-login', { method: 'POST' });
+    setStoredToken(res.token);
+    setUser(res.user);
+  };
+
+  const switchDemoPersona = async (persona: 'alex' | 'priya' | 'maya') => {
+    const res = await apiRequest('/auth/demo-switch', {
+      method: 'POST',
+      body: JSON.stringify({ persona }),
+    });
+    setStoredToken(res.token);
+    setUser(res.user);
+  };
+
   const logout = () => {
     setStoredToken(null);
     setUser(null);
@@ -112,9 +150,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         loading,
+        isDemoMode,
+        activeDemoPersona,
+        balancesVisible,
+        toggleBalancesVisible,
+        setBalancesVisible,
         loginWithCredentials,
         registerAccount,
         loginAsDemoAlex,
+        switchDemoPersona,
         logout,
         refreshUser,
       }}

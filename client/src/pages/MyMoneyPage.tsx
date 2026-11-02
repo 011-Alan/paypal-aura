@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Wallet, Plus, Upload, CheckCircle2, Building2, RefreshCw } from 'lucide-react';
+import {
+  Wallet,
+  Plus,
+  Upload,
+  CheckCircle2,
+  Building2,
+  RefreshCw,
+  CreditCard,
+  ShieldCheck,
+  FileSpreadsheet,
+  ArrowUpRight,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 const SAMPLE_CSV = `date,merchant,description,category,type,amount,paymentMethod,isRecurring
 2026-11-01,FreshMart Organic,Weekly Organic Groceries,Groceries,expense,2450,upi,false
@@ -8,11 +23,13 @@ const SAMPLE_CSV = `date,merchant,description,category,type,amount,paymentMethod
 2026-11-03,Luxury Watch Boutique,Impulse Designer Watch Purchase,Shopping,expense,14500,card,false`;
 
 export const MyMoneyPage: React.FC = () => {
+  const { balancesVisible, toggleBalancesVisible } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [totalBalance, setTotalBalance] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Add account state
+  // Add account modal / state
+  const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
   const [institution, setInstitution] = useState('');
   const [type, setType] = useState('checking');
@@ -20,16 +37,11 @@ export const MyMoneyPage: React.FC = () => {
   const [isShared, setIsShared] = useState(false);
 
   // CSV Import state
+  const [showImportModal, setShowImportModal] = useState(false);
   const [csvContent, setCsvContent] = useState(SAMPLE_CSV);
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [importResult, setImportResult] = useState<any>(null);
   const [importing, setImporting] = useState(false);
-
-  // Manual transaction state
-  const [txMerchant, setTxMerchant] = useState('');
-  const [txCategory, setTxCategory] = useState('Dining');
-  const [txAmount, setTxAmount] = useState('');
-  const [txType, setTxType] = useState<'expense' | 'income'>('expense');
 
   const loadAccounts = async () => {
     setLoading(true);
@@ -65,24 +77,7 @@ export const MyMoneyPage: React.FC = () => {
     setName('');
     setInstitution('');
     setBalance('');
-    await loadAccounts();
-  };
-
-  const handleAddTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!txMerchant || !txAmount) return;
-    await apiRequest('/transactions', {
-      method: 'POST',
-      body: JSON.stringify({
-        accountId: selectedAccountId || undefined,
-        merchant: txMerchant,
-        category: txCategory,
-        amount: Number(txAmount),
-        type: txType,
-      }),
-    });
-    setTxMerchant('');
-    setTxAmount('');
+    setShowAddModal(false);
     await loadAccounts();
   };
 
@@ -119,191 +114,214 @@ export const MyMoneyPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Summary Header */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Header & Combined Balance */}
+      <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-navy-900">My Financial Accounts &amp; Statement Import</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage bank accounts, wallets, manual entries, and automated CSV bank statement pipelines.
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-navy-900 tracking-tight">Connected Accounts &amp; Liquidity</h2>
+            <Tooltip content="Your aggregated checking, high-yield savings, and digital wallet repositories." />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Maintain bank linkages, statement imports, and privacy-shielded liquidity cushions.
           </p>
         </div>
-        <div className="bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100 text-right">
-          <div className="text-[11px] text-blue-700 font-semibold uppercase">Combined Account Liquidity</div>
-          <div className="text-xl font-bold text-navy-900">{formatInr(totalBalance)}</div>
+
+        <div className="flex items-center gap-4">
+          <div className="bg-blue-50 px-5 py-3 rounded-2xl border border-blue-100 text-right">
+            <div className="text-[11px] text-blue-700 font-semibold uppercase flex items-center gap-1 justify-end">
+              Combined Liquidity
+              <Tooltip content="Sum of all active non-credit balances available for discretionary spending and commitments." />
+            </div>
+            <div className="text-2xl font-bold text-navy-900">
+              {formatInr(totalBalance, !balancesVisible)}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Account
+            </button>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+              Import Statement
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Account Cards */}
+      {/* Account Cards Grid */}
       {loading ? (
-        <div className="p-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin" /> Loading accounts...
+        <div className="p-12 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-blue-600" /> Loading account portfolios...
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {accounts.map((acc) => (
-            <div key={acc._id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div
+              key={acc._id}
+              className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition"
+            >
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 uppercase">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-100">
                     {acc.type}
                   </span>
-                  {acc.isSharedWithFamily && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                      Family Shared
-                    </span>
-                  )}
+                  <span className="text-xs font-mono text-slate-400">{acc.accountNumberMasked}</span>
                 </div>
-                <h3 className="text-base font-bold text-navy-900 mt-3">{acc.name}</h3>
-                <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
-                  <Building2 className="w-3.5 h-3.5" />
-                  {acc.institution} ({acc.accountNumberMasked})
-                </p>
+                <h3 className="text-base font-bold text-navy-900">{acc.name}</h3>
+                <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  {acc.institution}
+                </div>
               </div>
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-baseline justify-between">
-                <span className="text-xs text-slate-500">Available Balance</span>
-                <span className="text-xl font-bold text-navy-900">{formatInr(acc.balance)}</span>
+
+              <div className="pt-4 border-t border-slate-100 flex items-end justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-400 block font-medium">Available Balance</span>
+                  <div className="text-xl font-bold text-navy-900 mt-0.5">
+                    {formatInr(acc.balance, !balancesVisible)}
+                  </div>
+                </div>
+                {acc.isSharedWithFamily && (
+                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Shared with Family
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Add Account & Quick Transaction */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
-            <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2 mb-4">
-              <Wallet className="w-4 h-4 text-blue-600" />
-              Link or Create Financial Account
-            </h3>
+      {/* Add Account Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <h3 className="text-base font-bold text-navy-900 mb-1">Link New Financial Account</h3>
+            <p className="text-xs text-slate-500 mb-4">Add a verified bank, high-yield savings, or digital wallet.</p>
+
             <form onSubmit={handleAddAccount} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Account Name</label>
                 <input
                   type="text"
-                  placeholder="Account Name (e.g. SBI Savings)"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Axis Prime Salary Checking"
                   required
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Institution</label>
                 <input
                   type="text"
-                  placeholder="Institution (e.g. State Bank of India)"
                   value={institution}
                   onChange={(e) => setInstitution(e.target.value)}
+                  placeholder="e.g. Axis Bank"
                   required
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white"
-                >
-                  <option value="checking">Checking / Salary Account</option>
-                  <option value="savings">High-Yield Savings</option>
-                  <option value="wallet">PayPal / Digital Wallet</option>
-                  <option value="investment">Investment Portfolio</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Opening Balance (₹)"
-                  value={balance}
-                  onChange={(e) => setBalance(e.target.value)}
-                  required
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Account Type</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="checking">Checking</option>
+                    <option value="savings">Savings</option>
+                    <option value="wallet">Digital Wallet</option>
+                    <option value="investment">Investment</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Initial Balance (INR)</label>
+                  <input
+                    type="number"
+                    value={balance}
+                    onChange={(e) => setBalance(e.target.value)}
+                    placeholder="50000"
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
-              <label className="flex items-center gap-2 text-xs text-slate-600">
+
+              <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
+                  id="modalIsShared"
                   checked={isShared}
                   onChange={(e) => setIsShared(e.target.checked)}
-                  className="rounded border-slate-300"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                Include in Family Shared Summary View
-              </label>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold inline-flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Account
-              </button>
-            </form>
-          </div>
+                <label htmlFor="modalIsShared" className="text-xs text-slate-700 font-medium">
+                  Share summary balance with household members
+                </label>
+              </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
-            <h3 className="text-sm font-bold text-navy-900 mb-4">Record Instant Income or Expense</h3>
-            <form onSubmit={handleAddTransaction} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Merchant / Description"
-                  value={txMerchant}
-                  onChange={(e) => setTxMerchant(e.target.value)}
-                  required
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
-                />
-                <select
-                  value={txCategory}
-                  onChange={(e) => setTxCategory(e.target.value)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+              <div className="flex gap-2.5 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
-                  <option value="Dining">Dining</option>
-                  <option value="Groceries">Groceries</option>
-                  <option value="Shopping">Shopping</option>
-                  <option value="Travel">Travel</option>
-                  <option value="Electricity">Electricity</option>
-                  <option value="Internet">Internet</option>
-                  <option value="Healthcare">Healthcare</option>
-                  <option value="Salary">Salary / Income</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <select
-                  value={txType}
-                  onChange={(e) => setTxType(e.target.value as any)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
                 >
-                  <option value="expense">Expense (-)</option>
-                  <option value="income">Income (+)</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Amount in ₹"
-                  value={txAmount}
-                  onChange={(e) => setTxAmount(e.target.value)}
-                  required
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
-                />
+                  Save Account
+                </button>
               </div>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
-              >
-                Save Transaction &amp; Sync to Elastic
-              </button>
             </form>
           </div>
         </div>
+      )}
 
-        {/* CSV Import Pipeline */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-blue-600" />
-                CSV Bank Statement Import Pipeline
-              </h3>
-              <label className="text-xs text-blue-600 hover:underline cursor-pointer font-medium">
-                Upload .CSV File
-                <input type="file" accept=".csv,text/csv" onChange={handleFileUpload} className="hidden" />
-              </label>
+      {/* CSV Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-navy-900">Import Bank Statement (CSV)</h3>
+                <p className="text-xs text-slate-500">
+                  Upload or paste CSV transactions. Triggers automated anomaly screening &amp; mandate detection.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
             </div>
-            <p className="text-xs text-slate-500 mb-4">
-              Automatically validates records, updates MongoDB, triggers Python anomaly detection, detects recurring mandates, and synchronises with Elastic Financial Memory.
-            </p>
+
+            {importResult && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-medium space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Import Pipeline Complete
+                </div>
+                <div>Imported {importResult.importedCount} transactions.</div>
+                <div>Render Worker: {importResult.renderWorkerAnalysis?.status || 'Active'}.</div>
+              </div>
+            )}
 
             <form onSubmit={handleCsvImport} className="space-y-3">
               <div>
@@ -311,48 +329,54 @@ export const MyMoneyPage: React.FC = () => {
                 <select
                   value={selectedAccountId}
                   onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {accounts.map((a) => (
                     <option key={a._id} value={a._id}>
-                      {a.name} ({formatInr(a.balance)})
+                      {a.name} ({a.institution})
                     </option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">CSV Statement Rows</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700">CSV Statement Data</label>
+                  <label className="text-xs text-blue-600 hover:underline cursor-pointer font-medium flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload File
+                    <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                  </label>
+                </div>
                 <textarea
-                  rows={6}
+                  rows={5}
                   value={csvContent}
                   onChange={(e) => setCsvContent(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
                 />
               </div>
-              <button
-                type="submit"
-                disabled={importing}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition"
-              >
-                {importing ? 'Running Import & Analytics Pipeline...' : 'Import CSV & Run Background Analysis'}
-              </button>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={importing}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {importing ? 'Processing Statement...' : 'Import Statement'}
+                </button>
+              </div>
             </form>
           </div>
-
-          {importResult && (
-            <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                CSV Pipeline Completed Successfully
-              </div>
-              <div>• Imported Transactions: <strong>{importResult.importedCount}</strong></div>
-              <div>• Unusual Spend Flagged: <strong>{importResult.unusualDetectedCount}</strong></div>
-              <div>• Recurring Mandates Inferred: <strong>{importResult.inferredMandatesCount}</strong></div>
-              <div>• Background Worker Status: <strong>{importResult.backgroundWorkerPipeline?.status}</strong></div>
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

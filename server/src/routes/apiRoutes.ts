@@ -23,7 +23,14 @@ import {
   signSessionToken,
   recordAuditLog,
 } from '../middleware/security';
-import { ensureDemoUserAlexSeeded, DEMO_ALEX_CREDENTIALS } from '../seed/seedService';
+import {
+  ensureDemoUserAlexSeeded,
+  ensureDemoUserMayaSeeded,
+  getDemoPersonas,
+  DEMO_ALEX_CREDENTIALS,
+  DEMO_PRIYA_CREDENTIALS,
+  DEMO_MAYA_CREDENTIALS,
+} from '../seed/seedService';
 import { coreFinancialService } from '../services/financial/financialService';
 import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
@@ -226,6 +233,139 @@ apiRouter.post('/auth/demo-login', async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Demo login failed' });
+  }
+});
+
+apiRouter.get('/auth/demo-personas', async (_req: Request, res: Response) => {
+  try {
+    const personas = getDemoPersonas();
+    res.json({ success: true, personas });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
+  try {
+    const { persona } = req.body || {};
+    let targetUser: any = null;
+    let targetCreds: any = null;
+
+    if (persona === 'priya') {
+      let priya = await UserModel.findOne({ email: DEMO_PRIYA_CREDENTIALS.email });
+      if (!priya) {
+        await ensureDemoUserAlexSeeded(true);
+        priya = await UserModel.findOne({ email: DEMO_PRIYA_CREDENTIALS.email });
+      }
+      targetUser = priya;
+      targetCreds = DEMO_PRIYA_CREDENTIALS;
+    } else if (persona === 'maya') {
+      const resMaya = await ensureDemoUserMayaSeeded(false);
+      targetUser = resMaya.user;
+      targetCreds = DEMO_MAYA_CREDENTIALS;
+    } else {
+      // Default to Alex
+      const resAlex = await ensureDemoUserAlexSeeded(false);
+      targetUser = resAlex.user;
+      targetCreds = DEMO_ALEX_CREDENTIALS;
+    }
+
+    if (!targetUser) {
+      res.status(404).json({ success: false, error: 'Could not load requested demo persona' });
+      return;
+    }
+
+    const token = signSessionToken(targetUser);
+    res.json({
+      success: true,
+      token,
+      user: sanitizeUser(targetUser),
+      demoCredentials: {
+        email: targetCreds.email,
+        pinHint: targetCreds.pin,
+        role: targetCreds.role,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Demo persona switch failed' });
+  }
+});
+
+apiRouter.post('/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      res.status(400).json({ success: false, error: 'Email address is required.' });
+      return;
+    }
+    const user = await UserModel.findOne({ email: String(email).toLowerCase().trim() });
+    if (!user) {
+      // Don't disclose user existence to prevent account enumeration, but return helpful message
+      res.json({
+        success: true,
+        message: 'If an account exists for this email, you may reset your password using your security PIN.',
+        requiresPin: true,
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      message: 'Account verified. Please confirm your 4-digit security PIN to establish a new password.',
+      requiresPin: true,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/auth/reset-password', strictAuthRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, pin, newPassword } = req.body || {};
+    if (!email || !pin || !newPassword || String(newPassword).length < 6) {
+      res.status(400).json({
+        success: false,
+        error: 'Email, valid 4-digit PIN, and new password (minimum 6 characters) are required.',
+      });
+      return;
+    }
+
+    const user = await UserModel.findOne({ email: String(email).toLowerCase().trim() });
+    if (!user) {
+      res.status(400).json({ success: false, error: 'Invalid verification details.' });
+      return;
+    }
+
+    const pinValid = await verifySecretArgon2id(user.pinHash, String(pin).trim());
+    if (!pinValid) {
+      await recordAuditLog({
+        userId: String(user._id),
+        actor: 'user',
+        action: 'password_reset_pin_failed',
+        resourceType: 'user',
+        status: 'blocked',
+      });
+      res.status(401).json({ success: false, error: 'Incorrect security PIN. Reset denied.' });
+      return;
+    }
+
+    user.passwordHash = await hashSecretArgon2id(String(newPassword));
+    await user.save();
+
+    await recordAuditLog({
+      userId: String(user._id),
+      actor: 'user',
+      action: 'password_reset_success',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      status: 'success',
+    });
+
+    res.json({
+      success: true,
+      message: 'Password reset successful. Please sign in with your new password.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Password reset failed' });
   }
 });
 
@@ -806,6 +946,43 @@ apiRouter.patch('/goals/:id/contribute', requireAuth, async (req: AuthenticatedR
   }
 });
 
+apiRouter.put('/goals/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const goal = await GoalModel.findOne({ _id: req.params.id, userId: req.userId });
+    if (!goal) {
+      res.status(404).json({ success: false, error: 'Goal not found.' });
+      return;
+    }
+    const { title, targetAmount, monthlyContribution, deadline, priority, status } = req.body || {};
+    if (title) goal.title = String(title).trim();
+    if (typeof targetAmount === 'number' && targetAmount > 0) goal.targetAmount = targetAmount;
+    if (typeof monthlyContribution === 'number' && monthlyContribution > 0) goal.monthlyContribution = monthlyContribution;
+    if (deadline) goal.deadline = new Date(deadline);
+    if (priority) goal.priority = priority;
+    if (status) goal.status = status;
+
+    await goal.save();
+    await bryntumIntegration.syncUserFinancialCalendar(req.userId!);
+    res.json({ success: true, goal, message: 'Goal updated successfully.' });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/goals/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const goal = await GoalModel.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    if (!goal) {
+      res.status(404).json({ success: false, error: 'Goal not found.' });
+      return;
+    }
+    await bryntumIntegration.syncUserFinancialCalendar(req.userId!);
+    res.json({ success: true, message: 'Goal removed.' });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
 // ============================================================================
 // 9. Family Finance (Folder 9 — Strict Privacy Boundaries Enforced)
 // ============================================================================
@@ -1368,6 +1545,149 @@ apiRouter.post('/workers/run-daily', requireAuth, async (req: AuthenticatedReque
 apiRouter.get('/audit-logs', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const logs = await AuditLogModel.find({ userId: req.userId }).sort({ createdAt: -1 }).limit(40);
   res.json({ success: true, logs });
+});
+
+apiRouter.post('/scenarios/simulate', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { scenarioType } = req.body || {};
+    const userId = req.userId!;
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const primaryAccount = await AccountModel.findOne({ userId: userObjId, type: 'checking', status: 'active' });
+
+    let resultSummary = '';
+    let simulationDetails: any = null;
+
+    if (scenarioType === 'fine_dining_spike') {
+      const tx = await TransactionModel.create({
+        userId: userObjId,
+        accountId: primaryAccount?._id,
+        accountName: primaryAccount?.name || 'Primary Checking',
+        date: new Date(),
+        merchant: 'Trishna Gourmet Seafood & Wine',
+        description: 'Simulated Weekend Dining Spike (Scenario Simulation)',
+        category: 'Dining',
+        type: 'expense',
+        amount: 6800,
+        currency: 'INR',
+        status: 'completed',
+        paymentMethod: 'card',
+        isRecurring: false,
+        isUnusual: true,
+        unusualReason: 'Exceeds historical 90-day dining average by 240%',
+        anomalyScore: 0.88,
+        tags: ['simulated', 'dining_spike'],
+      });
+
+      if (primaryAccount) {
+        primaryAccount.balance = Math.max(0, primaryAccount.balance - 6800);
+        await primaryAccount.save();
+      }
+
+      await coreFinancialService.generateOrUpdateMonthlyPlan(userId);
+
+      resultSummary = 'Simulated ₹6,800 fine-dining spike. Flagged as unusual transaction and updated monthly recovery plan.';
+      simulationDetails = { transaction: tx };
+    } else if (scenarioType === 'salary_bonus') {
+      const tx = await TransactionModel.create({
+        userId: userObjId,
+        accountId: primaryAccount?._id,
+        accountName: primaryAccount?.name || 'Primary Checking',
+        date: new Date(),
+        merchant: 'TechCorp India Pvt Ltd',
+        description: 'Simulated Quarterly Performance Bonus',
+        category: 'Income',
+        type: 'income',
+        amount: 25000,
+        currency: 'INR',
+        status: 'completed',
+        paymentMethod: 'bank_transfer',
+        isRecurring: false,
+        isUnusual: false,
+        tags: ['simulated', 'bonus'],
+      });
+
+      if (primaryAccount) {
+        primaryAccount.balance += 25000;
+        await primaryAccount.save();
+      }
+
+      await coreFinancialService.generateOrUpdateMonthlyPlan(userId);
+
+      resultSummary = 'Simulated ₹25,000 performance bonus credit. Available balance and savings capacity increased.';
+      simulationDetails = { transaction: tx };
+    } else if (scenarioType === 'emergency_medical') {
+      const tx = await TransactionModel.create({
+        userId: userObjId,
+        accountId: primaryAccount?._id,
+        accountName: primaryAccount?.name || 'Primary Checking',
+        date: new Date(),
+        merchant: 'Apollo Multispecialty Hospital',
+        description: 'Simulated Unexpected Emergency Medical Diagnostic',
+        category: 'Healthcare',
+        type: 'expense',
+        amount: 14500,
+        currency: 'INR',
+        status: 'completed',
+        paymentMethod: 'card',
+        isRecurring: false,
+        isUnusual: true,
+        unusualReason: 'Unplanned medical expense — Emergency Reserve protection active',
+        anomalyScore: 0.79,
+        tags: ['simulated', 'emergency'],
+      });
+
+      if (primaryAccount) {
+        primaryAccount.balance = Math.max(0, primaryAccount.balance - 14500);
+        await primaryAccount.save();
+      }
+
+      await coreFinancialService.generateOrUpdateMonthlyPlan(userId);
+
+      resultSummary = 'Simulated ₹14,500 emergency medical expense. Emergency reserve cushion evaluated.';
+      simulationDetails = { transaction: tx };
+    } else {
+      // Default: subscription surge
+      const mandate = await MandateModel.create({
+        userId: userObjId,
+        accountId: primaryAccount?._id,
+        title: 'Cloud AI Developer Suite',
+        merchant: 'CloudAI Platforms Inc',
+        category: 'Subscription',
+        amount: 2200,
+        currency: 'INR',
+        frequency: 'monthly',
+        dueDayOfMonth: 12,
+        nextDueDate: new Date(Date.now() + 10 * 86400000),
+        status: 'confirmed',
+        confidenceScore: 0.95,
+        autoPayEnabled: false,
+        notes: 'Simulated new software subscription',
+      });
+
+      await bryntumIntegration.syncUserFinancialCalendar(userId);
+      resultSummary = 'Simulated new recurring commitment: Cloud AI Developer Suite (₹2,200/mo) synced to Financial Calendar.';
+      simulationDetails = { mandate };
+    }
+
+    await recordAuditLog({
+      userId,
+      actor: 'system_worker',
+      action: 'scenario_simulated',
+      resourceType: 'simulation',
+      status: 'success',
+      details: { scenarioType, summary: resultSummary },
+    });
+
+    res.json({
+      success: true,
+      scenarioType,
+      message: resultSummary,
+      simulationDetails,
+      isSimulated: true,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Scenario simulation failed' });
+  }
 });
 
 apiRouter.post('/seed/reset', async (_req: Request, res: Response) => {

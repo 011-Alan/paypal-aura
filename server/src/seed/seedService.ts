@@ -25,6 +25,9 @@ export const DEMO_ALEX_CREDENTIALS = {
   password: 'AuraDemo#2026',
   pin: '4826',
   name: 'Alex Sharma',
+  role: 'Senior Tech Lead (Salaried Professional)',
+  monthlyIncome: 95000,
+  bio: 'Salaried tech lead managing household finances, savings goals, and regular recurring commitments.',
 };
 
 export const DEMO_PRIYA_CREDENTIALS = {
@@ -32,6 +35,19 @@ export const DEMO_PRIYA_CREDENTIALS = {
   password: 'PriyaDemo#2026',
   pin: '7391',
   name: 'Priya Sharma',
+  role: 'Healthcare Professional (Family Member)',
+  monthlyIncome: 78000,
+  bio: 'Healthcare professional with strict individual account privacy and shared household budget contribution.',
+};
+
+export const DEMO_MAYA_CREDENTIALS = {
+  email: 'maya@aura-demo.finance',
+  password: 'MayaDemo#2026',
+  pin: '1942',
+  name: 'Maya Patel',
+  role: 'Freelance Designer & Graduate Student',
+  monthlyIncome: 42000,
+  bio: 'Freelancer with variable cash flow, design subscription commitments, and student equipment savings target.',
 };
 
 export async function ensureDemoUserAlexSeeded(forceReset = false) {
@@ -45,20 +61,35 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
   }
 
   if (forceReset) {
-    await Promise.all([
-      UserModel.deleteMany({ email: { $in: [DEMO_ALEX_CREDENTIALS.email, DEMO_PRIYA_CREDENTIALS.email] } }),
-      AccountModel.deleteMany({}),
-      TransactionModel.deleteMany({}),
-      MandateModel.deleteMany({}),
-      FinancialPlanModel.deleteMany({}),
-      GoalModel.deleteMany({}),
-      FamilyGroupModel.deleteMany({}),
-      CalendarEventModel.deleteMany({}),
-      PaymentRequestModel.deleteMany({}),
-      NotificationModel.deleteMany({}),
-      AutomationRuleModel.deleteMany({}),
-      AuditLogModel.deleteMany({}),
-    ]);
+    // CRITICAL ISOLATION GUARANTEE:
+    // Only clean up records belonging to demo personas. NEVER delete personal user accounts or data!
+    const demoUsers = await UserModel.find({
+      email: {
+        $in: [
+          DEMO_ALEX_CREDENTIALS.email,
+          DEMO_PRIYA_CREDENTIALS.email,
+          DEMO_MAYA_CREDENTIALS.email,
+        ],
+      },
+    });
+    const demoUserIds = demoUsers.map((u) => u._id);
+
+    if (demoUserIds.length > 0) {
+      await Promise.all([
+        UserModel.deleteMany({ _id: { $in: demoUserIds } }),
+        AccountModel.deleteMany({ userId: { $in: demoUserIds } }),
+        TransactionModel.deleteMany({ userId: { $in: demoUserIds } }),
+        MandateModel.deleteMany({ userId: { $in: demoUserIds } }),
+        FinancialPlanModel.deleteMany({ userId: { $in: demoUserIds } }),
+        GoalModel.deleteMany({ userId: { $in: demoUserIds } }),
+        FamilyGroupModel.deleteMany({ familyGroupId: { $in: ['aura-family-sharma', 'aura-family-patel'] } }),
+        CalendarEventModel.deleteMany({ userId: { $in: demoUserIds } }),
+        PaymentRequestModel.deleteMany({ userId: { $in: demoUserIds } }),
+        NotificationModel.deleteMany({ userId: { $in: demoUserIds } }),
+        AutomationRuleModel.deleteMany({ userId: { $in: demoUserIds } }),
+        AuditLogModel.deleteMany({ userId: { $in: demoUserIds } }),
+      ]);
+    }
   }
 
   logger.info('SeedService', 'Seeding demo user Alex Sharma & family member Priya Sharma...');
@@ -695,4 +726,183 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
     user: alex,
     credentials: DEMO_ALEX_CREDENTIALS,
   };
+}
+
+export async function ensureDemoUserMayaSeeded(forceReset = false) {
+  const existingMaya = await UserModel.findOne({ email: DEMO_MAYA_CREDENTIALS.email });
+  if (existingMaya && !forceReset) {
+    return {
+      seeded: false,
+      user: existingMaya,
+      credentials: DEMO_MAYA_CREDENTIALS,
+    };
+  }
+
+  logger.info('SeedService', 'Seeding demo user Maya Patel (Freelancer & Student persona)...');
+  const passwordHash = await hashSecretArgon2id(DEMO_MAYA_CREDENTIALS.password);
+  const pinHash = await hashSecretArgon2id(DEMO_MAYA_CREDENTIALS.pin);
+
+  const maya = await UserModel.create({
+    name: DEMO_MAYA_CREDENTIALS.name,
+    email: DEMO_MAYA_CREDENTIALS.email,
+    passwordHash,
+    pinHash,
+    role: 'user',
+    currency: 'INR',
+    monthlyIncome: 42000,
+    familyGroupId: 'aura-family-patel',
+    spendingPreferences: {
+      riskTolerance: 'growth',
+      priorityCategories: ['Education', 'Technology', 'Savings'],
+      savingsTargetPercent: 15,
+    },
+    financialPolicy: {
+      requirePinAboveAmount: 1000,
+      singleTransactionLimit: 30000,
+      dailySpendingLimit: 40000,
+      requireExplicitApproval: true,
+      discretionaryMonthlyCap: 12000,
+      allowFamilySharedView: false,
+      blockedCategories: ['Gambling'],
+    },
+    onboardingCompleted: true,
+  });
+
+  const mayaChecking = await AccountModel.create({
+    userId: maya._id,
+    name: 'HDFC Student & Freelance Checking',
+    institution: 'HDFC Bank',
+    type: 'checking',
+    accountNumberMasked: 'XXXX-3199',
+    balance: 24500,
+    currency: 'INR',
+    isSharedWithFamily: false,
+    status: 'active',
+  });
+
+  const mayaPaypal = await AccountModel.create({
+    userId: maya._id,
+    name: 'PayPal Freelance Client Wallet',
+    institution: 'PayPal Sandbox',
+    type: 'wallet',
+    accountNumberMasked: 'maya-freelance@paypal',
+    balance: 16800,
+    currency: 'INR',
+    isSharedWithFamily: false,
+    status: 'active',
+  });
+
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+
+  await MandateModel.create([
+    {
+      userId: maya._id,
+      accountId: mayaChecking._id,
+      title: 'Figma Professional Subscription',
+      merchant: 'Figma Inc',
+      category: 'Subscription',
+      amount: 1200,
+      currency: 'INR',
+      frequency: 'monthly',
+      dueDayOfMonth: 5,
+      nextDueDate: new Date(y, m + 1, 5),
+      status: 'confirmed',
+      confidenceScore: 0.98,
+      autoPayEnabled: true,
+    },
+    {
+      userId: maya._id,
+      accountId: mayaChecking._id,
+      title: 'High-Speed Broadband Internet',
+      merchant: 'ACT Fibernet',
+      category: 'Internet',
+      amount: 600,
+      currency: 'INR',
+      frequency: 'monthly',
+      dueDayOfMonth: 10,
+      nextDueDate: new Date(y, m + 1, 10),
+      status: 'confirmed',
+      confidenceScore: 0.95,
+      autoPayEnabled: false,
+    },
+    {
+      userId: maya._id,
+      accountId: mayaChecking._id,
+      title: 'Adobe Creative Cloud All Apps',
+      merchant: 'Adobe Systems',
+      category: 'Subscription',
+      amount: 3500,
+      currency: 'INR',
+      frequency: 'monthly',
+      dueDayOfMonth: 15,
+      nextDueDate: new Date(y, m + 1, 15),
+      status: 'confirmed',
+      confidenceScore: 0.96,
+      autoPayEnabled: false,
+    },
+    {
+      userId: maya._id,
+      accountId: mayaChecking._id,
+      title: 'Graduate Student Tuition EMI',
+      merchant: 'National Institute of Design',
+      category: 'Education',
+      amount: 8000,
+      currency: 'INR',
+      frequency: 'monthly',
+      dueDayOfMonth: 20,
+      nextDueDate: new Date(y, m + 1, 20),
+      status: 'confirmed',
+      confidenceScore: 0.99,
+      autoPayEnabled: true,
+    },
+  ]);
+
+  await GoalModel.create({
+    userId: maya._id,
+    title: 'Ergonomic Studio Workstation & 4K Display',
+    category: 'Technology',
+    targetAmount: 35000,
+    currentAmount: 14000,
+    monthlyContribution: 4000,
+    deadline: new Date(y, m + 6, 1),
+    priority: 'high',
+    isSharedWithFamily: false,
+    milestones: [
+      { percentage: 25, reached: true, reachedAt: new Date(y, m - 2, 10), confirmedByUser: true },
+      { percentage: 50, reached: false, confirmedByUser: false },
+      { percentage: 75, reached: false, confirmedByUser: false },
+      { percentage: 100, reached: false, confirmedByUser: false },
+    ],
+    status: 'active',
+  });
+
+  const mayaIdStr = String(maya._id);
+  await coreFinancialService.generateOrUpdateMonthlyPlan(mayaIdStr);
+  await bryntumIntegration.syncUserFinancialCalendar(mayaIdStr);
+  await zapierIntegration.ensureDefaultAutomationRules(mayaIdStr, maya.email);
+
+  return {
+    seeded: true,
+    user: maya,
+    credentials: DEMO_MAYA_CREDENTIALS,
+  };
+}
+
+export function getDemoPersonas() {
+  return [
+    {
+      id: 'alex',
+      ...DEMO_ALEX_CREDENTIALS,
+    },
+    {
+      id: 'priya',
+      ...DEMO_PRIYA_CREDENTIALS,
+    },
+    {
+      id: 'maya',
+      ...DEMO_MAYA_CREDENTIALS,
+    },
+  ];
 }

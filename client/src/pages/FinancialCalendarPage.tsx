@@ -10,10 +10,13 @@ import {
   Edit3,
 } from 'lucide-react';
 import { apiRequest, formatInr, formatDateShort } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Tooltip } from '../components/Tooltip';
 
 type CalendarViewMode = 'month' | 'week' | 'day' | 'agenda';
 
 export const FinancialCalendarPage: React.FC = () => {
+  const { balancesVisible } = useAuth();
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [resources, setResources] = useState<any[]>([]);
@@ -387,7 +390,7 @@ export const FinancialCalendarPage: React.FC = () => {
                       <div className="text-sm font-bold text-navy-900">{ev.name}</div>
                       <div className="text-xs text-slate-500">{ev.notes || ev.eventType}</div>
                     </div>
-                    <div className="font-bold text-navy-900">{formatInr(ev.amount)}</div>
+                    <div className="font-bold text-navy-900">{formatInr(ev.amount, !balancesVisible)}</div>
                   </div>
                 ))
             )}
@@ -412,7 +415,7 @@ export const FinancialCalendarPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {ev.amount > 0 && <span className="font-bold text-navy-900">{formatInr(ev.amount)}</span>}
+                  {ev.amount > 0 && <span className="font-bold text-navy-900">{formatInr(ev.amount, !balancesVisible)}</span>}
                   <button
                     onClick={() => {
                       setEditingEvent(ev);

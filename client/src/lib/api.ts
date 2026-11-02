@@ -61,9 +61,16 @@ export async function apiRequest<T = any>(
   return data as T;
 }
 
-export function formatInr(amount: number | undefined | null): string {
+export function formatInr(amount: number | undefined | null, isMasked: boolean = false): string {
+  if (isMasked) {
+    return '₹••••••';
+  }
   const num = Number(amount || 0);
   return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+export function formatMaskedInr(amount: number | undefined | null, isVisible: boolean = false): string {
+  return formatInr(amount, !isVisible);
 }
 
 export function formatDateShort(dateStr: string | Date | undefined): string {
