@@ -12,6 +12,8 @@ import {
   NotificationModel,
   AutomationRuleModel,
   AuditLogModel,
+  ConversationModel,
+  MessageModel,
 } from '../models';
 import { hashSecretArgon2id, recordAuditLog } from '../middleware/security';
 import { coreFinancialService } from '../services/financial/financialService';
@@ -88,6 +90,8 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
         NotificationModel.deleteMany({ userId: { $in: demoUserIds } }),
         AutomationRuleModel.deleteMany({ userId: { $in: demoUserIds } }),
         AuditLogModel.deleteMany({ userId: { $in: demoUserIds } }),
+        ConversationModel.deleteMany({ userId: { $in: demoUserIds } }),
+        MessageModel.deleteMany({ userId: { $in: demoUserIds } }),
       ]);
     }
   }

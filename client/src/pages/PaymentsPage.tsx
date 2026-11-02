@@ -337,8 +337,9 @@ export const PaymentsPage: React.FC = () => {
                       <KeyRound className="w-4 h-4 text-blue-600" />
                       Step 2: Explicit User Approval &amp; Argon2id PIN Verification
                     </span>
-                    <span className="text-[11px] text-slate-500">
-                      Demo PIN for Alex: <code className="font-mono font-bold text-blue-700">4826</code>
+                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      Argon2id Encrypted Protection
                     </span>
                   </div>
 
@@ -346,7 +347,7 @@ export const PaymentsPage: React.FC = () => {
                     <input
                       type="password"
                       maxLength={6}
-                      placeholder="Enter 4-digit PIN (4826)"
+                      placeholder="Enter security PIN"
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
                       required

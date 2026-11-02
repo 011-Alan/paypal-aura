@@ -9,12 +9,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
-  Eye,
-  EyeOff,
   ShoppingBag,
   Target,
   Send,
-  HelpCircle,
 } from 'lucide-react';
 import { apiRequest, formatInr, formatDateShort } from '../lib/api';
 import { NavTabId } from '../components/AppShell';
@@ -22,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
 
 export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
-  const { user, balancesVisible, toggleBalancesVisible } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,8 +90,7 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
   const briefingStatement =
     activePlan?.aiSummary ||
     `You are on track with your monthly savings target (${metrics.savingsRatePercent}% savings rate). You have ${mandates.length} confirmed recurring commitments scheduled this month totalling ${formatInr(
-      upcomingTotal,
-      !balancesVisible
+      upcomingTotal
     )}, with essential housing and utility allocations safely ringfenced.`;
 
   // 5. Build "Needs Attention" items based on real verified state
@@ -107,7 +103,7 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
       id: 'unusual-spend',
       type: 'warning',
       category: 'Unusual Expenditure Flagged',
-      title: `${unusualTx.merchant} — ${formatInr(unusualTx.amount, !balancesVisible)}`,
+      title: `${unusualTx.merchant} — ${formatInr(unusualTx.amount)}`,
       why: unusualTx.unusualReason || 'Transaction exceeds typical historical pattern for this category.',
       actionLabel: 'Inspect in Transactions',
       onAction: () => onNavigate('transactions'),
@@ -121,7 +117,7 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
       id: 'upcoming-bill',
       type: 'info',
       category: 'Upcoming Commitment Due',
-      title: `${nextBill.title} — ${formatInr(nextBill.amount, !balancesVisible)}`,
+      title: `${nextBill.title} — ${formatInr(nextBill.amount)}`,
       why: `Scheduled for the ${nextBill.dueDayOfMonth}th of this month. Financial Guardian has verified sufficient checking liquidity.`,
       actionLabel: 'Review in Commitments',
       onAction: () => onNavigate('commitments'),
@@ -136,7 +132,7 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
       type: 'success',
       category: 'Goal Checkpoint',
       title: `${primaryGoal.title} (${Math.round((primaryGoal.currentAmount / primaryGoal.targetAmount) * 100)}% Funded)`,
-      why: `Monthly contribution of ${formatInr(primaryGoal.monthlyContribution, !balancesVisible)} is scheduled to keep you on pace for deadline.`,
+      why: `Monthly contribution of ${formatInr(primaryGoal.monthlyContribution)} is scheduled to keep you on pace for deadline.`,
       actionLabel: 'View in Financial Planning',
       onAction: () => onNavigate('financial-planning'),
     });
@@ -179,18 +175,9 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
 
       {/* 2. Section 1: Financial Overview (The 3 Core Numbers) */}
       <div>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">1. How Am I Doing?</h3>
-            <Tooltip content="Key indicators representing spendable cushion, verified obligations, and wealth accumulation." />
-          </div>
-          <button
-            onClick={toggleBalancesVisible}
-            className="text-xs text-blue-600 hover:underline font-semibold flex items-center gap-1.5"
-          >
-            {balancesVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {balancesVisible ? 'Hide Amounts' : 'Reveal Amounts'}
-          </button>
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">1. How Am I Doing?</h3>
+          <Tooltip content="Key indicators representing spendable cushion, verified obligations, and wealth accumulation." />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -207,14 +194,14 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
                 </div>
               </div>
               <div className="text-2xl font-bold text-navy-900 mt-3">
-                {formatInr(discretionaryRemaining, !balancesVisible)}
+                {formatInr(discretionaryRemaining)}
               </div>
               <div className="text-xs text-slate-500 mt-1">Discretionary safe spending cushion</div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="text-slate-400">Total liquid balance</span>
               <span className="font-semibold text-navy-900">
-                {formatInr(metrics.totalNetBalance, !balancesVisible)}
+                {formatInr(metrics.totalNetBalance)}
               </span>
             </div>
           </div>
@@ -232,7 +219,7 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
                 </div>
               </div>
               <div className="text-2xl font-bold text-navy-900 mt-3">
-                {formatInr(upcomingTotal, !balancesVisible)}
+                {formatInr(upcomingTotal)}
               </div>
               <div className="text-xs text-slate-500 mt-1">{mandates.length} confirmed recurring obligations</div>
             </div>
@@ -257,14 +244,14 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
                 </div>
               </div>
               <div className="text-2xl font-bold text-navy-900 mt-3">
-                {formatInr(totalGoalSaved, !balancesVisible)}
+                {formatInr(totalGoalSaved)}
               </div>
               <div className="text-xs text-emerald-600 font-semibold mt-1">
                 Savings Rate: {metrics.savingsRatePercent}% of monthly income
               </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Target: {formatInr(totalGoalTarget, !balancesVisible)}</span>
+              <span className="text-slate-400">Target: {formatInr(totalGoalTarget)}</span>
               <span className="font-semibold text-emerald-700">{goalProgressPercent}% funded</span>
             </div>
           </div>

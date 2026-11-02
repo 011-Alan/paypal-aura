@@ -13,6 +13,8 @@ import {
   NotificationModel,
   AutomationRuleModel,
   AuditLogModel,
+  ConversationModel,
+  MessageModel,
 } from '../models';
 import {
   AuthenticatedRequest,
@@ -1081,6 +1083,266 @@ apiRouter.patch('/calendar/events/:id/reschedule', requireAuth, async (req: Auth
     });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// ============================================================================
+// 10b. Financial Profile Management
+// ============================================================================
+apiRouter.get('/user/financial-profile', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await UserModel.findById(req.userId);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    const profile = user.financialProfile || {
+      monthlyIncome: user.monthlyIncome || 95000,
+      incomeType: 'salary',
+      incomeFrequency: 'monthly',
+      expectedIncomeDate: 1,
+      additionalIncome: 0,
+      incomeStatus: 'user_estimate',
+      preferredCurrency: user.currency || 'INR',
+    };
+    res.json({
+      success: true,
+      profile,
+      user: {
+        name: user.name,
+        email: user.email,
+        currency: user.currency,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.put('/user/financial-profile', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await UserModel.findById(req.userId);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    const {
+      monthlyIncome,
+      incomeType,
+      incomeFrequency,
+      expectedIncomeDate,
+      additionalIncome,
+      incomeStatus,
+      preferredCurrency,
+    } = req.body || {};
+
+    const newIncome = Number(monthlyIncome ?? user.monthlyIncome ?? 95000);
+    user.monthlyIncome = newIncome;
+    user.currency = preferredCurrency || user.currency || 'INR';
+
+    user.financialProfile = {
+      monthlyIncome: newIncome,
+      incomeType: incomeType || user.financialProfile?.incomeType || 'salary',
+      incomeFrequency: incomeFrequency || user.financialProfile?.incomeFrequency || 'monthly',
+      expectedIncomeDate: Number(expectedIncomeDate ?? user.financialProfile?.expectedIncomeDate ?? 1),
+      additionalIncome: Number(additionalIncome ?? user.financialProfile?.additionalIncome ?? 0),
+      incomeStatus: incomeStatus || user.financialProfile?.incomeStatus || 'user_estimate',
+      preferredCurrency: user.currency,
+    };
+
+    await user.save();
+
+    // Recalculate current month's financial plan if one exists
+    try {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      await coreFinancialService.generateOrUpdateMonthlyPlan(req.userId!, currentMonth);
+    } catch {
+      // Non-fatal if plan recalculation will run on next load
+    }
+
+    res.json({
+      success: true,
+      message: 'Financial profile updated successfully',
+      profile: user.financialProfile,
+      monthlyIncome: user.monthlyIncome,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// ============================================================================
+// 11. AI Assistant & Persistent Conversations
+// ============================================================================
+apiRouter.get('/conversations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+    let filter: any = { userId };
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { conversationSummary: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const conversations = await ConversationModel.find(filter)
+      .sort({ lastMessageAt: -1 })
+      .limit(50);
+
+    res.json({ success: true, conversations });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/conversations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const title = (req.body?.title || 'New Conversation').trim();
+    const conversation = await ConversationModel.create({
+      userId,
+      title,
+      lastMessageAt: new Date(),
+    });
+    res.status(201).json({ success: true, conversation });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/conversations/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const convId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(convId)) {
+      res.status(400).json({ success: false, error: 'Invalid conversation ID' });
+      return;
+    }
+    const conversation = await ConversationModel.findOne({ _id: convId, userId });
+    if (!conversation) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+    const messages = await MessageModel.find({ conversationId: conversation._id, userId }).sort({ createdAt: 1 });
+    res.json({ success: true, conversation, messages });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.put('/conversations/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const convId = req.params.id;
+    const title = (req.body?.title || '').trim();
+    if (!title) {
+      res.status(400).json({ success: false, error: 'Title is required' });
+      return;
+    }
+    const conversation = await ConversationModel.findOneAndUpdate(
+      { _id: convId, userId },
+      { title },
+      { new: true }
+    );
+    if (!conversation) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+    res.json({ success: true, conversation });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/conversations/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const convId = req.params.id;
+    const conversation = await ConversationModel.findOneAndDelete({ _id: convId, userId });
+    if (!conversation) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+    await MessageModel.deleteMany({ conversationId: convId, userId });
+    res.json({ success: true, message: 'Conversation deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/conversations/:id/messages', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const convId = req.params.id;
+    const { content, includeKernelResearch } = req.body || {};
+    if (!content || typeof content !== 'string') {
+      res.status(400).json({ success: false, error: 'Message content is required' });
+      return;
+    }
+
+    const conversation = await ConversationModel.findOne({ _id: convId, userId });
+    if (!conversation) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+
+    // Load recent messages for conversational context
+    const previousMessages = await MessageModel.find({ conversationId: conversation._id, userId })
+      .sort({ createdAt: -1 })
+      .limit(8);
+    previousMessages.reverse();
+
+    const conversationHistory = previousMessages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    // Process through AURA AI Orchestrator
+    const aiResult = await auraAiOrchestrator.processConversationalQuery({
+      userId: req.userId!,
+      prompt: content,
+      conversationHistory,
+      includeKernelResearch: Boolean(includeKernelResearch),
+    });
+
+    // Save user message
+    const userMsg = await MessageModel.create({
+      conversationId: conversation._id,
+      userId,
+      role: 'user',
+      content,
+    });
+
+    // Save assistant message
+    const assistantMsg = await MessageModel.create({
+      conversationId: conversation._id,
+      userId,
+      role: 'assistant',
+      content: aiResult.explanation || aiResult.answer,
+      toolAction: aiResult.toolAction,
+      suggestedNextPrompts: aiResult.suggestedNextPrompts || [],
+    });
+
+    // Update conversation title if default
+    if (conversation.title === 'New Conversation') {
+      const generatedTitle = content.length > 36 ? content.slice(0, 36).trim() + '...' : content;
+      conversation.title = generatedTitle;
+    }
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+
+    res.json({
+      success: true,
+      conversation,
+      userMessage: userMsg,
+      assistantMessage: assistantMsg,
+      toolAction: aiResult.toolAction,
+      suggestedNextPrompts: aiResult.suggestedNextPrompts,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 

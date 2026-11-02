@@ -77,6 +77,7 @@ export class AuraAiOrchestratorService {
   async processConversationalQuery(params: {
     userId: string;
     prompt: string;
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
     includeKernelResearch?: boolean;
   }) {
     const userObjId = new mongoose.Types.ObjectId(params.userId);
@@ -187,7 +188,7 @@ export class AuraAiOrchestratorService {
       const newGoal = await GoalModel.create({
         userId: userObjId,
         title: goalTitle,
-        category: 'Savings',
+        category: goalTitle.toLowerCase().includes('emergency') ? 'Emergency Fund' : 'Savings',
         targetAmount,
         currentAmount: 0,
         monthlyContribution,
@@ -597,13 +598,18 @@ In AURA, compounding works in your favor through your automated goal contributio
           status: 'informational',
         };
       } else {
+        const historyText = (params.conversationHistory || [])
+          .slice(-6)
+          .map((m) => `${m.role === 'user' ? 'User' : 'AURA'}: ${m.content}`)
+          .join('\n');
+
         // Fallback natural language answer via Gemini if configured, or thoughtful synthesis
         if (this.geminiClient) {
           try {
             const resp = await this.geminiClient.models.generateContent({
               model: env.GEMINI_MODEL,
               contents: `You are AURA, an intelligent, empathetic, versatile AI companion.
-The user asked: "${prompt}"
+${historyText ? `Recent conversation context:\n${historyText}\n\n` : ''}The user asked: "${prompt}"
 
 Context about the user:
 - Name: ${user.name}
@@ -611,7 +617,7 @@ Context about the user:
 - Active Goals: ${goals.map((g) => g.title).join(', ') || 'General savings'}
 - Monthly Income: ₹${user.monthlyIncome.toLocaleString('en-IN')}
 
-Answer their question warmly, conversationally, and accurately. You may answer any general knowledge, technical, financial, or everyday question. If you mention financial numbers, use ONLY the verified context provided above. Never claim to have completed payments independently.`,
+Answer their question warmly, conversationally, clearly, and accurately. You may answer any general knowledge, technical, educational, financial, or everyday question. If they ask follow-up questions, resolve pronouns and references using the conversation context above. If they ask to simplify, rephrase in clear, everyday language without technical jargon. If you mention financial numbers, use ONLY the verified context provided above. Never claim to have completed payments independently.`,
             });
             const text = resp.text?.trim();
             if (text && text.length > 15) {
@@ -625,7 +631,11 @@ Answer their question warmly, conversationally, and accurately. You may answer a
         }
 
         if (!answerText) {
-          answerText = `I understand your question about "${prompt}". AURA is designed to help you make informed decisions, whether exploring educational topics, analyzing past spending, organizing upcoming payments, or structuring long-term plans. Let me know if you would like me to retrieve specific records or schedule any actions for you.`;
+          if (promptLower.includes('simply') || promptLower.includes('simpler') || promptLower.includes('simple')) {
+            answerText = `In simple terms: You have ₹${liquidBalance.toLocaleString('en-IN')} available across your accounts right now. Your monthly fixed commitments come to ₹${totalCommitments.toLocaleString('en-IN')}, and you are saving ₹${activeGoalsMonthly.toLocaleString('en-IN')} towards your goals each month. Everything else is flexible money you can spend or save as you choose.`;
+          } else {
+            answerText = `I understand your question about "${prompt}". AURA is designed to help you make informed decisions, whether exploring educational topics, analyzing past spending, organizing upcoming payments, or structuring long-term plans. Let me know if you would like me to retrieve specific records or schedule any actions for you.`;
+          }
         }
 
         toolAction = {
@@ -705,6 +715,7 @@ ${answerText}`,
       prompt,
       workflowType: routing.workflowType,
       explanation: answerText,
+      answer: answerText,
       toolAction,
       suggestedNextPrompts,
       astropodsOrchestration: astropodsTrace,

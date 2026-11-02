@@ -781,6 +781,83 @@ async function runSuite() {
     assert.ok(unsafeRecoveryCheck.errors.some((e) => e.includes('Unsafe recovery adjustment rejected')));
   });
 
+  // 17. Persistent Conversations System & Context Retention
+  await runTest('33. Persistent Conversations Lifecycle & Context Retention (/api/conversations)', async () => {
+    // Create new conversation
+    const createRes = await api('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Retirement & Long Term Planning' }),
+    });
+    assert.strictEqual(createRes.status, 201);
+    const convId = createRes.body.conversation._id;
+    assert.ok(convId);
+
+    // Send first turn
+    const msg1Res = await api(`/conversations/${convId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content: 'I want to save ₹30,000 for emergency resilience.' }),
+    });
+    assert.strictEqual(msg1Res.status, 200);
+    assert.strictEqual(msg1Res.body.userMessage.content, 'I want to save ₹30,000 for emergency resilience.');
+    assert.ok(msg1Res.body.assistantMessage.content.length > 10);
+
+    // Send follow-up turn (testing context retention)
+    const msg2Res = await api(`/conversations/${convId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Can you explain it more simply?' }),
+    });
+    assert.strictEqual(msg2Res.status, 200);
+    assert.ok(msg2Res.body.assistantMessage.content.length > 10);
+
+    // Retrieve conversation with message history
+    const getRes = await api(`/conversations/${convId}`);
+    assert.strictEqual(getRes.status, 200);
+    assert.strictEqual(getRes.body.messages.length, 4); // 2 user + 2 assistant
+
+    // Search conversations
+    const searchRes = await api('/conversations?q=Retirement');
+    assert.strictEqual(searchRes.status, 200);
+    assert.ok(searchRes.body.conversations.some((c: any) => c._id === convId));
+
+    // Rename conversation
+    const renameRes = await api(`/conversations/${convId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title: 'Resilience Strategy' }),
+    });
+    assert.strictEqual(renameRes.status, 200);
+    assert.strictEqual(renameRes.body.conversation.title, 'Resilience Strategy');
+
+    // Delete conversation
+    const delRes = await api(`/conversations/${convId}`, { method: 'DELETE' });
+    assert.strictEqual(delRes.status, 200);
+  });
+
+  // 18. Financial Profile Management
+  await runTest('34. Financial Profile Management & Source Distinction (/api/user/financial-profile)', async () => {
+    // Get financial profile
+    const getProfile = await api('/user/financial-profile');
+    assert.strictEqual(getProfile.status, 200);
+    assert.ok(getProfile.body.profile);
+
+    // Update financial profile with income, source level, and frequency
+    const updateProfile = await api('/user/financial-profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        monthlyIncome: 105000,
+        incomeType: 'freelance',
+        incomeFrequency: 'monthly',
+        expectedIncomeDate: 5,
+        additionalIncome: 12000,
+        incomeStatus: 'user_estimate',
+        preferredCurrency: 'INR',
+      }),
+    });
+    assert.strictEqual(updateProfile.status, 200);
+    assert.strictEqual(updateProfile.body.profile.monthlyIncome, 105000);
+    assert.strictEqual(updateProfile.body.profile.incomeType, 'freelance');
+    assert.strictEqual(updateProfile.body.profile.incomeStatus, 'user_estimate');
+  });
+
   server.close();
   for (const s of podServers) {
     try {

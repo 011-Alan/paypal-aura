@@ -13,6 +13,16 @@ export interface IFinancialPolicy {
   blockedCategories: string[];
 }
 
+export interface IFinancialProfile {
+  monthlyIncome: number;
+  incomeType: 'salary' | 'freelance' | 'business' | 'pension' | 'other';
+  incomeFrequency: 'monthly' | 'biweekly' | 'weekly';
+  expectedIncomeDate: number; // day of month, e.g. 1
+  additionalIncome: number;
+  incomeStatus: 'user_estimate' | 'imported_record' | 'verified';
+  preferredCurrency: string;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -21,6 +31,7 @@ export interface IUser extends Document {
   role: 'user' | 'family_admin' | 'family_member';
   currency: string;
   monthlyIncome: number;
+  financialProfile?: IFinancialProfile;
   familyGroupId?: string;
   spendingPreferences: {
     riskTolerance: 'conservative' | 'balanced' | 'growth';
@@ -42,6 +53,15 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ['user', 'family_admin', 'family_member'], default: 'family_admin' },
     currency: { type: String, default: 'INR' },
     monthlyIncome: { type: Number, default: 95000 },
+    financialProfile: {
+      monthlyIncome: { type: Number, default: 95000 },
+      incomeType: { type: String, enum: ['salary', 'freelance', 'business', 'pension', 'other'], default: 'salary' },
+      incomeFrequency: { type: String, enum: ['monthly', 'biweekly', 'weekly'], default: 'monthly' },
+      expectedIncomeDate: { type: Number, default: 1 },
+      additionalIncome: { type: Number, default: 0 },
+      incomeStatus: { type: String, enum: ['user_estimate', 'imported_record', 'verified'], default: 'user_estimate' },
+      preferredCurrency: { type: String, default: 'INR' },
+    },
     familyGroupId: { type: String, index: true },
     spendingPreferences: {
       riskTolerance: { type: String, enum: ['conservative', 'balanced', 'growth'], default: 'balanced' },
@@ -358,7 +378,7 @@ const GoalSchema = new Schema<IGoal>(
     title: { type: String, required: true, trim: true },
     category: {
       type: String,
-      enum: ['Emergency Fund', 'Technology', 'Travel', 'Education', 'Home', 'Investment', 'Family', 'Other'],
+      enum: ['Emergency Fund', 'Savings', 'Technology', 'Travel', 'Education', 'Home', 'Investment', 'Family', 'Other'],
       default: 'Other',
     },
     targetAmount: { type: Number, required: true },
@@ -743,3 +763,51 @@ const AuditLogSchema = new Schema<IAuditLog>(
 );
 
 export const AuditLogModel = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
+
+// ============================================================================
+// 12. Persistent Conversation & Message Models (Ask AURA Memory)
+// ============================================================================
+export interface IConversation extends Document {
+  userId: mongoose.Types.ObjectId;
+  title: string;
+  conversationSummary?: string;
+  lastMessageAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ConversationSchema = new Schema<IConversation>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    title: { type: String, required: true, default: 'New Conversation', trim: true },
+    conversationSummary: { type: String },
+    lastMessageAt: { type: Date, default: Date.now, index: true },
+  },
+  { timestamps: true }
+);
+
+export const ConversationModel = mongoose.model<IConversation>('Conversation', ConversationSchema);
+
+export interface IMessage extends Document {
+  conversationId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  toolAction?: any;
+  suggestedNextPrompts?: string[];
+  createdAt: Date;
+}
+
+const MessageSchema = new Schema<IMessage>(
+  {
+    conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
+    content: { type: String, required: true },
+    toolAction: { type: Schema.Types.Mixed },
+    suggestedNextPrompts: { type: [String], default: [] },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+
+export const MessageModel = mongoose.model<IMessage>('Message', MessageSchema);
