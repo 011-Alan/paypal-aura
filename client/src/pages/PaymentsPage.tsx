@@ -9,12 +9,12 @@ import {
   ArrowRight,
   Webhook,
 } from 'lucide-react';
-import { apiRequest, formatInr } from '../lib/api';
+import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
 
 export const PaymentsPage: React.FC = () => {
-  const { balancesVisible } = useAuth();
+  const { balancesVisible, formatMoney } = useAuth();
   const [payments, setPayments] = useState<any[]>([]);
   const [paypalStatus, setPaypalStatus] = useState<any>(null);
 
@@ -34,16 +34,26 @@ export const PaymentsPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
 
   const loadPayments = async () => {
-    const res = await apiRequest('/payments');
-    setPayments(res.payments || []);
-    setPaypalStatus(res.paypalSandboxStatus || null);
-    if (res.payments?.length > 0 && !activePaymentId) {
-      setActivePaymentId(res.payments[0]._id);
+    try {
+      const res = await apiRequest('/payments');
+      setPayments(res.payments || []);
+      setPaypalStatus(res.paypalSandboxStatus || null);
+      if (res.payments?.length > 0 && !activePaymentId) {
+        setActivePaymentId(res.payments[0]._id);
+      }
+    } catch {
+      // Ignored
     }
   };
 
   useEffect(() => {
     loadPayments();
+
+    const handleStateChange = () => {
+      loadPayments();
+    };
+    window.addEventListener('aura-state-changed', handleStateChange);
+    return () => window.removeEventListener('aura-state-changed', handleStateChange);
   }, []);
 
   const activePayment = payments.find((p) => p._id === activePaymentId) || payments[0];
@@ -133,6 +143,7 @@ export const PaymentsPage: React.FC = () => {
         `Step 4 Complete: Order captured (${res.captureResult?.captureId || activePayment.paypalCaptureId}). MongoDB balance, AG Grid history, Elastic index, and Zapier notification updated!`
       );
       await loadPayments();
+      window.dispatchEvent(new CustomEvent('aura-state-changed'));
     } catch (err: any) {
       setErrorMsg(err?.message || 'Capture failed');
     } finally {
@@ -177,36 +188,36 @@ export const PaymentsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 transition-colors">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            PayPal Sandbox Execution Layer + Financial Guardian + APIMatic Contract Guard
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900 px-3 py-1 rounded-full">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            User Financial Authority • Argon2id PIN • PayPal Sandbox Execution
           </span>
-          <h2 className="text-xl font-bold text-navy-900 mt-2">
-            Controlled Payment Preparation, PIN Approval &amp; PayPal Checkout
+          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white mt-2">
+            Controlled Payment Preparation, PIN Approval &amp; PayPal Settlement
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            No AI agent or external workflow can bypass this gate. Every payment requires Financial Guardian policy validation, explicit user approval, and Argon2id PIN verification.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            No AI agent or background process can transfer funds automatically. Every payment requires Financial Guardian policy validation, explicit user approval, and Argon2id PIN verification.
           </p>
         </div>
         {paypalStatus && (
-          <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 text-xs">
-            <div className="font-bold text-navy-900">PayPal Sandbox Environment</div>
-            <div className="text-slate-500">APIMatic Contract Validation: Active</div>
+          <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs shrink-0">
+            <div className="font-bold text-navy-900 dark:text-white">PayPal Sandbox Active</div>
+            <div className="text-slate-500 dark:text-slate-400">APIMatic Contract Guard Verified</div>
           </div>
         )}
       </div>
 
       {statusMessage && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-900 font-medium flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-xs sm:text-sm text-emerald-900 dark:text-emerald-300 font-medium flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           {statusMessage}
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs sm:text-sm text-rose-800 font-medium flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-xs sm:text-sm text-rose-800 dark:text-rose-300 font-medium flex items-center gap-2">
           <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
           {errorMsg}
         </div>
@@ -214,39 +225,39 @@ export const PaymentsPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Step 1: Prepare Payment Request */}
-        <div className="lg:col-span-5 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-navy-900 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-blue-600" />
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
+          <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             1. Prepare Controlled Payment Request
           </h3>
           <form onSubmit={handlePrepare} className="space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Recipient or Merchant Name</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Recipient or Merchant Name</label>
               <input
                 type="text"
                 value={recipientName}
                 onChange={(e) => setRecipientName(e.target.value)}
                 required
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Amount (₹ INR)</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount</label>
                 <input
                   type="number"
                   value={amountInr}
                   onChange={(e) => setAmountInr(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
                 <select
                   value={merchantCategory}
                   onChange={(e) => setMerchantCategory(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="Rent">Rent &amp; Housing</option>
                   <option value="Electronics">Electronics</option>
@@ -257,19 +268,19 @@ export const PaymentsPage: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Purpose / Memo</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Purpose / Memo</label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-2 transition"
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs"
             >
               <span>Prepare &amp; Run Financial Guardian Check</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -278,48 +289,48 @@ export const PaymentsPage: React.FC = () => {
         </div>
 
         {/* Step 2-5: Financial Guardian Verdict, PIN Gate & PayPal Sandbox Execution */}
-        <div className="lg:col-span-7 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5 transition-colors">
           {!activePayment ? (
-            <div className="p-8 text-center text-xs text-slate-500">
+            <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
               Prepare a payment request on the left to begin the controlled PayPal Sandbox workflow.
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
                     Active Payment Request • {activePayment.idempotencyKey}
                   </span>
-                  <h3 className="text-base font-bold text-navy-900 mt-0.5">
-                    {formatInr(activePayment.amountInr, !balancesVisible)} (${activePayment.amountUsd?.toFixed(2)} USD) → {activePayment.recipientName}
+                  <h3 className="text-base font-bold text-navy-900 dark:text-white mt-0.5">
+                    {!balancesVisible ? '••••••' : `${formatMoney(activePayment.amountInr)} ($${activePayment.amountUsd?.toFixed(2)} USD)`} → {activePayment.recipientName}
                   </h3>
                 </div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 uppercase">
                   {activePayment.status.replace(/_/g, ' ')}
                 </span>
               </div>
 
               {/* Financial Guardian 4-Rule Policy Evaluation */}
               <div className="space-y-2">
-                <div className="text-xs font-bold text-navy-900 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <div className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   Financial Guardian Policy Evaluation
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {(activePayment.guardianEvaluation?.policyChecks || []).map((chk: any, idx: number) => (
                     <div
                       key={idx}
-                      className={`p-3 rounded-xl border text-xs ${
+                      className={`p-3 rounded-2xl border text-xs ${
                         chk.passed
-                          ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900'
-                          : 'bg-rose-50 border-rose-200 text-rose-900'
+                          ? 'bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-300'
+                          : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-300'
                       }`}
                     >
                       <div className="font-bold flex items-center gap-1.5">
                         {chk.passed ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         ) : (
-                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                          <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                         )}
                         {chk.rule}
                       </div>
@@ -331,13 +342,13 @@ export const PaymentsPage: React.FC = () => {
 
               {/* Step 2: Argon2id PIN Verification */}
               {activePayment.guardianEvaluation?.passed && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-navy-900 flex items-center gap-1.5">
-                      <KeyRound className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       Step 2: Explicit User Approval &amp; Argon2id PIN Verification
                     </span>
-                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                       <Lock className="w-3 h-3 text-slate-400" />
                       Argon2id Encrypted Protection
                     </span>
@@ -351,12 +362,12 @@ export const PaymentsPage: React.FC = () => {
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
                       required
-                      className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-white w-48"
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono tracking-widest w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       type="submit"
                       disabled={busy}
-                      className="px-4 py-2 rounded-xl bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold flex items-center gap-1.5"
+                      className="px-4 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition"
                     >
                       <Lock className="w-3.5 h-3.5" />
                       Approve &amp; Verify PIN
@@ -371,7 +382,7 @@ export const PaymentsPage: React.FC = () => {
                   type="button"
                   onClick={handleCreatePayPalOrder}
                   disabled={busy || (!approvalToken && activePayment.status === 'guardian_approved')}
-                  className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 text-white text-xs font-bold transition shadow-xs"
+                  className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs"
                 >
                   3. Create PayPal Sandbox Order v2
                 </button>
@@ -383,7 +394,7 @@ export const PaymentsPage: React.FC = () => {
                     busy ||
                     !['pin_verified', 'paypal_order_created'].includes(activePayment.status)
                   }
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-xs font-bold transition shadow-xs"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs"
                 >
                   4. Capture Approved PayPal Order
                 </button>
@@ -392,7 +403,7 @@ export const PaymentsPage: React.FC = () => {
                   type="button"
                   onClick={handleVerifyWebhook}
                   disabled={busy || !['captured', 'webhook_verified'].includes(activePayment.status)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:bg-slate-200 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
                 >
                   <Webhook className="w-3.5 h-3.5" />
                   5. Verify PayPal Webhook Signature
@@ -404,42 +415,42 @@ export const PaymentsPage: React.FC = () => {
       </div>
 
       {/* Payment Request History */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
-        <h3 className="text-sm font-bold text-navy-900 mb-4">Controlled Payment Audit &amp; PayPal Order History</h3>
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+        <h3 className="text-sm font-bold text-navy-900 dark:text-white mb-4">Controlled Payment Audit &amp; PayPal Order History</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-500">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                 <th className="py-2.5 px-3">Recipient</th>
                 <th className="py-2.5 px-3">Description</th>
-                <th className="py-2.5 px-3">Amount (INR / USD)</th>
+                <th className="py-2.5 px-3">Amount</th>
                 <th className="py-2.5 px-3">PayPal Order ID</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Webhook</th>
                 <th className="py-2.5 px-3 text-right">Select</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {payments.map((p) => (
                 <tr
                   key={p._id}
-                  className={p._id === activePayment?._id ? 'bg-blue-50/40' : 'hover:bg-slate-50'}
+                  className={p._id === activePayment?._id ? 'bg-blue-50/40 dark:bg-blue-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}
                 >
-                  <td className="py-2.5 px-3 font-semibold text-navy-900">{p.recipientName}</td>
-                  <td className="py-2.5 px-3 text-slate-600">{p.description}</td>
-                  <td className="py-2.5 px-3 font-bold text-navy-900">
-                    {formatInr(p.amountInr, !balancesVisible)}{' '}
-                    {!balancesVisible ? '' : <span className="text-xs text-slate-500 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
+                  <td className="py-2.5 px-3 font-semibold text-navy-900 dark:text-white">{p.recipientName}</td>
+                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{p.description}</td>
+                  <td className="py-2.5 px-3 font-bold text-navy-900 dark:text-white">
+                    {!balancesVisible ? '••••••' : formatMoney(p.amountInr)}{' '}
+                    {!balancesVisible ? '' : <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
                   </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-600">{p.paypalOrderId || 'Pending'}</td>
+                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{p.paypalOrderId || 'Pending'}</td>
                   <td className="py-2.5 px-3">
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-800 uppercase">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 uppercase">
                       {p.status.replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td className="py-2.5 px-3">
                     {p.webhookVerified ? (
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Verified
                       </span>
                     ) : (
@@ -449,7 +460,7 @@ export const PaymentsPage: React.FC = () => {
                   <td className="py-2.5 px-3 text-right">
                     <button
                       onClick={() => setActivePaymentId(p._id)}
-                      className="text-blue-600 hover:underline font-semibold"
+                      className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
                     >
                       Inspect
                     </button>

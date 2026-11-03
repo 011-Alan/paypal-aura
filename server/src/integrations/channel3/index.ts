@@ -51,6 +51,83 @@ export interface EvaluatedProductOption {
 }
 
 const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
+  // --- Sneakers & Footwear ---
+  {
+    id: 'ch3-sneaker-nike-pegasus-40',
+    name: 'Nike Air Zoom Pegasus 40 Men\'s Road Running Shoes',
+    brand: 'Nike',
+    category: 'Footwear & Sneakers',
+    description: 'Responsive road running shoes featuring dual Zoom Air units, breathable engineered mesh, and resilient React foam midsole.',
+    priceInr: 10495,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80',
+    variants: ['UK 8 / Black & White', 'UK 9 / Pure Platinum', 'UK 10 / Wolf Grey'],
+    availability: 'in_stock',
+    retailerName: 'Nike Direct India (PayPal Partner)',
+    purchaseUrl: 'https://www.nike.com/in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-sneaker-adidas-ultraboost-light',
+    name: 'Adidas Ultraboost Light Running Shoes',
+    brand: 'Adidas',
+    category: 'Footwear & Sneakers',
+    description: 'Flagship long-distance running shoes with Light BOOST cushioning, Primeknit+ textile upper, and Continental rubber outsole.',
+    priceInr: 14999,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=600&q=80',
+    variants: ['UK 8 / Core Black', 'UK 9 / Cloud White', 'UK 10 / Solar Red'],
+    availability: 'in_stock',
+    retailerName: 'Adidas Official Store (PayPal Supported)',
+    purchaseUrl: 'https://www.adidas.co.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-sneaker-puma-velocity-nitro-2',
+    name: 'Puma Velocity Nitro 2 Men\'s Everyday Running Shoes',
+    brand: 'Puma',
+    category: 'Footwear & Sneakers',
+    description: 'Lightweight and durable daily trainer equipped with NITRO foam cushioning and PUMAGRIP all-surface rubber outsole.',
+    priceInr: 6499,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?auto=format&fit=crop&w=600&q=80',
+    variants: ['UK 8 / Royal Blue', 'UK 9 / Puma Black', 'UK 10 / Fizzy Lime'],
+    availability: 'in_stock',
+    retailerName: 'Puma India Direct (PayPal Supported)',
+    purchaseUrl: 'https://in.puma.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-sneaker-puma-smash-v2',
+    name: 'Puma Smash V2 Leather Casual Sneakers',
+    brand: 'Puma',
+    category: 'Footwear & Sneakers',
+    description: 'Classic tennis-inspired everyday casual sneaker with clean leather upper, cushioned SoftFoam+ sockliner, and durable rubber sole.',
+    priceInr: 3499,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=600&q=80',
+    variants: ['UK 8 / White & Black', 'UK 9 / Triple Black', 'UK 10 / White & Navy'],
+    availability: 'in_stock',
+    retailerName: 'Puma India Direct (PayPal Supported)',
+    purchaseUrl: 'https://in.puma.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-sneaker-asics-gel-kayano-30',
+    name: 'Asics Gel-Kayano 30 Stability Running Shoes',
+    brand: 'Asics',
+    category: 'Footwear & Sneakers',
+    description: 'Premium stability distance running shoes with 4D GUIDANCE SYSTEM, PureGEL cushioning, and FF BLAST PLUS ECO foam.',
+    priceInr: 13999,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=600&q=80',
+    variants: ['UK 8.5 / Black & Glow', 'UK 9.5 / Sheet Rock'],
+    availability: 'in_stock',
+    retailerName: 'Asics India Official Store',
+    purchaseUrl: 'https://www.asics.com/in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  // --- Laptops & Computers ---
   {
     id: 'ch3-laptop-asus-vivobook-16',
     name: 'ASUS VivoBook 16 (Intel Core i5-13500H, 16GB RAM, 512GB NVMe SSD)',
@@ -111,6 +188,7 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     purchaseUrl: 'https://www.apple.com/in/',
     supportsPayPalSandboxCheckout: true,
   },
+  // --- Smartphones ---
   {
     id: 'ch3-phone-samsung-m35',
     name: 'Samsung Galaxy M35 5G (8GB RAM, 128GB Storage, 6000mAh Battery)',
@@ -141,6 +219,7 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     purchaseUrl: 'https://www.flipkart.com/',
     supportsPayPalSandboxCheckout: false,
   },
+  // --- Audio & Electronics ---
   {
     id: 'ch3-headphones-sony-wh-ch720n',
     name: 'Sony WH-CH720N Wireless Noise Cancelling Headphones',
@@ -154,6 +233,145 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     availability: 'in_stock',
     retailerName: 'Sony Center Direct (PayPal Supported)',
     purchaseUrl: 'https://www.sony.co.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-audio-apple-airpods-pro-2',
+    name: 'Apple AirPods Pro (2nd Gen) with MagSafe Case (USB-C)',
+    brand: 'Apple',
+    category: 'Audio & Accessories',
+    description: 'Active Noise Cancellation with Transparency mode, Personalized Spatial Audio with dynamic head tracking, and H2 chip.',
+    priceInr: 22900,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?auto=format&fit=crop&w=600&q=80',
+    variants: ['White with MagSafe USB-C Case'],
+    availability: 'in_stock',
+    retailerName: 'Imagine Apple Premium Reseller (PayPal Enabled)',
+    purchaseUrl: 'https://www.apple.com/in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  // --- Clothing & Apparel ---
+  {
+    id: 'ch3-clothing-uniqlo-supima-tee',
+    name: 'Uniqlo Supima Cotton Crew Neck T-Shirt',
+    brand: 'Uniqlo',
+    category: 'Clothing & Apparel',
+    description: '100% premium long-staple Supima cotton crew neck tee with supple texture, natural sheen, and durable weave.',
+    priceInr: 1290,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80',
+    variants: ['Size M / Navy', 'Size L / White', 'Size XL / Olive'],
+    availability: 'in_stock',
+    retailerName: 'Uniqlo India Online (PayPal Partner)',
+    purchaseUrl: 'https://www.uniqlo.com/in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-clothing-levis-511-jeans',
+    name: 'Levi\'s 511 Slim Fit Stretch Denim Jeans',
+    brand: 'Levi\'s',
+    category: 'Clothing & Apparel',
+    description: 'Modern slim-cut jeans with room to move, crafted with Levi\'s Flex advanced stretch technology for maximum comfort.',
+    priceInr: 3299,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=600&q=80',
+    variants: ['32W x 32L Dark Indigo', '34W x 32L Mid Stonewash'],
+    availability: 'in_stock',
+    retailerName: 'Levi\'s Official Store India',
+    purchaseUrl: 'https://www.levi.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  // --- Furniture & Home Office ---
+  {
+    id: 'ch3-furniture-wakefit-ergonomic-chair',
+    name: 'Wakefit High-Back Ergonomic Office Chair with Lumbar Support',
+    brand: 'Wakefit',
+    category: 'Furniture',
+    description: 'Breathable mesh back ergonomic desk chair with 2D adjustable armrests, multi-lock synchro-tilt mechanism, and Class 4 gas lift.',
+    priceInr: 7899,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1580481077195-7385f50d8857?auto=format&fit=crop&w=600&q=80',
+    variants: ['Black Mesh / Grey Frame', 'All-Black Mesh'],
+    availability: 'in_stock',
+    retailerName: 'Wakefit Innovations Direct (PayPal Supported)',
+    purchaseUrl: 'https://www.wakefit.co/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-furniture-ikea-study-desk',
+    name: 'IKEA LINNMON / ADILS Study & Computer Desk (100x60 cm)',
+    brand: 'IKEA',
+    category: 'Furniture',
+    description: 'Clean Scandinavian pre-drilled minimalist work desk with sturdy adjustable leveling feet and scratch-resistant tabletop.',
+    priceInr: 3490,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=600&q=80',
+    variants: ['White / White Legs', 'Black-Brown / Silver Legs'],
+    availability: 'in_stock',
+    retailerName: 'IKEA India Online Store',
+    purchaseUrl: 'https://www.ikea.com/in/en/',
+    supportsPayPalSandboxCheckout: false,
+  },
+  // --- Home Appliances ---
+  {
+    id: 'ch3-appliance-philips-air-fryer',
+    name: 'Philips Digital Air Fryer HD9252/90 (4.1L, Rapid Air Technology)',
+    brand: 'Philips',
+    category: 'Home Appliances',
+    description: 'Touchscreen digital air fryer with 7 preset cooking programs, Rapid Air technology for 90% less fat, and keep-warm function.',
+    priceInr: 7995,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=600&q=80',
+    variants: ['Black Glossy 4.1L', 'White 4.1L'],
+    availability: 'in_stock',
+    retailerName: 'Philips Domestic Appliances Partner (PayPal Supported)',
+    purchaseUrl: 'https://www.philips.co.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-appliance-dyson-v8-vacuum',
+    name: 'Dyson V8 Cordless Vacuum Cleaner with De-tangling Motorbar',
+    brand: 'Dyson',
+    category: 'Home Appliances',
+    description: 'Lightweight cordless vacuum with 40-minute fade-free suction, whole-machine advanced filtration, and anti-tangle hair screw tool.',
+    priceInr: 29900,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1558317374-067fb5f30001?auto=format&fit=crop&w=600&q=80',
+    variants: ['Silver / Nickel'],
+    availability: 'in_stock',
+    retailerName: 'Dyson India Direct (PayPal Supported)',
+    purchaseUrl: 'https://www.dyson.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  // --- Books & Education ---
+  {
+    id: 'ch3-book-atomic-habits',
+    name: 'Atomic Habits by James Clear (Paperback / Best-selling Guide)',
+    brand: 'Penguin',
+    category: 'Books & Learning',
+    description: 'An Easy & Proven Way to Build Good Habits & Break Bad Ones. Practical framework for small daily improvements that lead to massive results.',
+    priceInr: 650,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+    variants: ['Paperback Edition', 'Hardcover Edition'],
+    availability: 'in_stock',
+    retailerName: 'BookStore Partner India (PayPal Supported)',
+    purchaseUrl: 'https://www.penguin.co.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-book-psychology-of-money',
+    name: 'The Psychology of Money by Morgan Housel (Timeless Financial Lessons)',
+    brand: 'Jaico',
+    category: 'Books & Learning',
+    description: '19 short stories exploring the strange ways people think about money, personal finance, greed, happiness, and investing decisions.',
+    priceInr: 399,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1592496431122-2349e0fbc666?auto=format&fit=crop&w=600&q=80',
+    variants: ['Paperback Special Edition'],
+    availability: 'in_stock',
+    retailerName: 'BookStore Partner India (PayPal Supported)',
+    purchaseUrl: 'https://www.jaicobooks.com/',
     supportsPayPalSandboxCheckout: true,
   },
 ];
@@ -242,18 +460,127 @@ export class Channel3IntegrationService {
       }
     }
 
-    // Filter reference catalog transparently
+    // Filter reference catalog transparently across diverse product categories
     let matches = REFERENCE_CATALOG.filter((item) => {
-      if (q.includes('laptop') || q.includes('macbook') || q.includes('computer') || q.includes('notebook')) {
+      // Direct category override if provided
+      if (params.category && item.category.toLowerCase().includes(params.category.toLowerCase())) {
+        return true;
+      }
+
+      // Footwear & Sneakers
+      if (
+        q.includes('sneaker') ||
+        q.includes('shoe') ||
+        q.includes('running') ||
+        q.includes('footwear') ||
+        q.includes('trainer') ||
+        q.includes('nike') ||
+        q.includes('adidas') ||
+        q.includes('puma') ||
+        q.includes('asics')
+      ) {
+        if (item.category === 'Footwear & Sneakers') {
+          // If running specific, prefer running shoes
+          if (q.includes('running') || q.includes('sports')) {
+            return item.description.toLowerCase().includes('running') || item.name.toLowerCase().includes('running');
+          }
+          if (q.includes('casual') || q.includes('everyday')) {
+            return item.description.toLowerCase().includes('casual') || item.name.toLowerCase().includes('casual');
+          }
+          return true;
+        }
+        return false;
+      }
+
+      // Clothing & Apparel
+      if (
+        q.includes('cloth') ||
+        q.includes('apparel') ||
+        q.includes('shirt') ||
+        q.includes('tee') ||
+        q.includes('jeans') ||
+        q.includes('denim') ||
+        q.includes('jacket') ||
+        q.includes('uniqlo') ||
+        q.includes('levi')
+      ) {
+        return item.category === 'Clothing & Apparel';
+      }
+
+      // Furniture & Home Office
+      if (
+        q.includes('furniture') ||
+        q.includes('chair') ||
+        q.includes('desk') ||
+        q.includes('table') ||
+        q.includes('wakefit') ||
+        q.includes('ikea')
+      ) {
+        return item.category === 'Furniture';
+      }
+
+      // Home Appliances
+      if (
+        q.includes('appliance') ||
+        q.includes('air fryer') ||
+        q.includes('fryer') ||
+        q.includes('vacuum') ||
+        q.includes('philips') ||
+        q.includes('dyson')
+      ) {
+        return item.category === 'Home Appliances';
+      }
+
+      // Books & Learning
+      if (
+        q.includes('book') ||
+        q.includes('read') ||
+        q.includes('habits') ||
+        q.includes('psychology of money') ||
+        q.includes('novel')
+      ) {
+        return item.category === 'Books & Learning';
+      }
+
+      // Laptops & Computers
+      if (
+        q.includes('laptop') ||
+        q.includes('macbook') ||
+        q.includes('computer') ||
+        q.includes('notebook') ||
+        q.includes('asus') ||
+        q.includes('lenovo') ||
+        q.includes('acer')
+      ) {
         return item.category === 'Laptops & Computers';
       }
-      if (q.includes('phone') || q.includes('mobile') || q.includes('smartphone') || q.includes('galaxy')) {
+
+      // Smartphones
+      if (
+        q.includes('phone') ||
+        q.includes('mobile') ||
+        q.includes('smartphone') ||
+        q.includes('galaxy') ||
+        q.includes('cmf')
+      ) {
         return item.category === 'Smartphones';
       }
-      if (q.includes('headphone') || q.includes('audio') || q.includes('sony')) {
+
+      // Audio & Accessories
+      if (
+        q.includes('headphone') ||
+        q.includes('audio') ||
+        q.includes('earphone') ||
+        q.includes('airpod') ||
+        q.includes('earbud') ||
+        q.includes('sound')
+      ) {
         return item.category === 'Audio & Accessories';
       }
+
       if (!q.trim()) return true;
+
+      // General fallback keyword matching
       return (
         item.name.toLowerCase().includes(q) ||
         item.brand.toLowerCase().includes(q) ||

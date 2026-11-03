@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
 import {
   UserModel,
   AccountModel,
@@ -378,6 +379,52 @@ apiRouter.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Re
   });
 });
 
+apiRouter.post('/auth/logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await recordAuditLog({
+      userId: req.userId,
+      actor: 'user',
+      action: 'user_logged_out',
+      resourceType: 'user',
+      resourceId: req.userId,
+      status: 'success',
+      details: { reason: req.body?.reason || 'user_initiated_logout' },
+    });
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/auth/logout-beacon', async (req: Request, res: Response) => {
+  try {
+    // Navigator.sendBeacon best-effort logout
+    const authHeader = req.headers.authorization;
+    const bodyToken = typeof req.body === 'string' ? req.body : req.body?.token;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : bodyToken;
+    if (token) {
+      try {
+        const decoded: any = (jwt as any)?.verify ? (jwt as any).verify(token, env.JWT_SECRET) : null;
+        if (decoded?.id) {
+          await recordAuditLog({
+            userId: decoded.id,
+            actor: 'user',
+            action: 'user_session_window_closed',
+            resourceType: 'user',
+            resourceId: decoded.id,
+            status: 'success',
+          });
+        }
+      } catch {
+        // Ignored for beacon
+      }
+    }
+    res.json({ success: true });
+  } catch {
+    res.json({ success: true });
+  }
+});
+
 // ============================================================================
 // 2. User Profiles & Policies (Folder 2)
 // ============================================================================
@@ -391,11 +438,10 @@ apiRouter.get('/profile', requireAuth, async (req: AuthenticatedRequest, res: Re
 apiRouter.put('/profile', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = req.user!;
-    const { name, monthlyIncome, spendingPreferences } = req.body || {};
+    const { name, monthlyIncome, currency, spendingPreferences } = req.body || {};
     if (name) user.name = String(name).trim();
-    if (typeof monthlyIncome === 'number' && monthlyIncome > 0) {
-      user.monthlyIncome = monthlyIncome;
-    }
+    if (typeof monthlyIncome === 'number' && monthlyIncome > 0) user.monthlyIncome = monthlyIncome;
+    if (currency) user.currency = String(currency).toUpperCase().trim();
     if (spendingPreferences && typeof spendingPreferences === 'object') {
       user.spendingPreferences = {
         ...user.spendingPreferences,
@@ -1346,6 +1392,95 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
   }
 });
 
+apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    const convId = req.params.id;
+    const { content, includeKernelResearch } = req.body || {};
+    if (!content || typeof content !== 'string') {
+      res.status(400).json({ success: false, error: 'Message content is required' });
+      return;
+    }
+
+    const conversation = await ConversationModel.findOne({ _id: convId, userId });
+    if (!conversation) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+
+    const previousMessages = await MessageModel.find({ conversationId: conversation._id, userId })
+      .sort({ createdAt: -1 })
+      .limit(8);
+    previousMessages.reverse();
+
+    const conversationHistory = previousMessages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    res.write(': connected\n\n');
+
+    // Save user message immediately
+    const userMsg = await MessageModel.create({
+      conversationId: conversation._id,
+      userId,
+      role: 'user',
+      content,
+    });
+
+    await auraAiOrchestrator.processConversationalQueryStream(
+      {
+        userId: req.userId!,
+        prompt: content,
+        conversationHistory,
+        includeKernelResearch: Boolean(includeKernelResearch),
+      },
+      (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
+      },
+      async (finalResult) => {
+        const assistantMsg = await MessageModel.create({
+          conversationId: conversation._id,
+          userId,
+          role: 'assistant',
+          content: finalResult.explanation || finalResult.answer,
+          toolAction: finalResult.toolAction,
+          suggestedNextPrompts: finalResult.suggestedNextPrompts || [],
+        });
+
+        if (conversation.title === 'New Conversation') {
+          const generatedTitle = content.length > 36 ? content.slice(0, 36).trim() + '...' : content;
+          conversation.title = generatedTitle;
+        }
+        conversation.lastMessageAt = new Date();
+        await conversation.save();
+
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'finish',
+            userMessage: userMsg,
+            assistantMessage: assistantMsg,
+            result: finalResult,
+          })}\n\n`
+        );
+        res.end();
+      }
+    );
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err?.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 // ============================================================================
 // 11. AI Assistant & Astropods Multi-Agent Orchestration (Folder 11)
 // ============================================================================
@@ -1364,6 +1499,45 @@ apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Re
     res.json({ success: true, ...response });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { prompt, includeKernelResearch } = req.body || {};
+    if (!prompt || typeof prompt !== 'string') {
+      res.status(400).json({ success: false, error: 'A natural-language prompt is required.' });
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    res.write(': connected\n\n');
+
+    await auraAiOrchestrator.processConversationalQueryStream(
+      {
+        userId: req.userId!,
+        prompt,
+        includeKernelResearch: Boolean(includeKernelResearch),
+      },
+      (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
+      },
+      (finalResult) => {
+        res.write(`data: ${JSON.stringify({ type: 'finish', result: finalResult })}\n\n`);
+        res.end();
+      }
+    );
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err?.message });
+    } else {
+      res.end();
+    }
   }
 });
 

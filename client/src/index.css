@@ -8,6 +8,11 @@
     background-color: #f8fafc;
     color: #102a43;
   }
+
+  .dark body {
+    background-color: #0b1329;
+    color: #f8fafc;
+  }
 }
 
 /* Clean custom styling for AG Grid inside AURA's white & navy financial theme */
@@ -22,4 +27,14 @@
   --ag-font-family: 'Inter', system-ui, sans-serif;
   --ag-font-size: 13px;
   --ag-card-radius: 12px;
+}
+
+.dark .ag-theme-quartz {
+  --ag-background-color: #0f172a;
+  --ag-header-background-color: #1e293b;
+  --ag-header-foreground-color: #94a3b8;
+  --ag-foreground-color: #f8fafc;
+  --ag-border-color: #334155;
+  --ag-row-hover-color: #1e293b;
+  --ag-selected-row-background-color: #1e3a8a;
 }

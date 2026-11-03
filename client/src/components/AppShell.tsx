@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   ArrowRight,
   ShoppingBag,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
@@ -102,11 +104,23 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, children }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, theme, setTheme, formatMoney } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Listen for AI application control navigation events (Section 4)
+  useEffect(() => {
+    const handleAuraNavigate = (e: any) => {
+      const page = e.detail?.page;
+      if (page) {
+        onSelectTab(page as NavTabId);
+      }
+    };
+    window.addEventListener('aura-navigate', handleAuraNavigate);
+    return () => window.removeEventListener('aura-navigate', handleAuraNavigate);
+  }, [onSelectTab]);
 
   const isDemoLabActive = activeTab === 'demo-lab' || activeTab === 'automations';
 
@@ -187,21 +201,21 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-slate-800 antialiased font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex text-slate-800 dark:text-slate-100 antialiased font-sans">
       {/* Desktop Navigation Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40">
+      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40">
         {/* App Logo & Header */}
-        <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between">
+        <div className="h-16 px-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
               A
             </div>
             <div>
-              <div className="font-bold text-base tracking-tight text-navy-900 leading-tight">PROJECT AURA</div>
-              <div className="text-xs text-slate-500">Financial Companion</div>
+              <div className="font-bold text-base tracking-tight text-navy-900 dark:text-white leading-tight">PROJECT AURA</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">Financial Companion</div>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
             <ShieldCheck className="w-3 h-3" />
             Secure
           </span>
@@ -211,7 +225,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
           {NAVIGATION_GROUPS.map((group) => (
             <div key={group.group}>
-              <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 {group.group}
               </div>
               <div className="space-y-0.5">
@@ -224,16 +238,16 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                       onClick={() => onSelectTab(item.id)}
                       className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                         active
-                          ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs border border-blue-100'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-navy-900'
+                          ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
                       }`}
                     >
                       <div className="flex items-center gap-3 truncate">
-                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
                         <span className="truncate">{item.label}</span>
                       </div>
                       {item.badge && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
                           {item.badge}
                         </span>
                       )}
@@ -245,16 +259,16 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           ))}
 
           {/* Strict Separation: Dedicated Demo Lab Navigation Item */}
-          <div className="pt-3 border-t border-slate-100">
-            <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
               Testing &amp; Evaluation
             </div>
             <button
               onClick={() => onSelectTab('demo-lab')}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isDemoLabActive
-                  ? 'bg-navy-900 text-white shadow-xs'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
               }`}
             >
               <div className="flex items-center gap-2.5 truncate">
@@ -263,7 +277,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               </div>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  isDemoLabActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'
+                  isDemoLabActive ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                 }`}
               >
                 Sim &amp; Dev
@@ -274,28 +288,28 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
         {/* User Card */}
         {user && (
-          <div className="p-4 border-t border-slate-200 bg-slate-50/70">
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <div className="text-sm font-bold text-navy-900 truncate">{user.name}</div>
-                <div className="text-xs text-slate-500 truncate">{user.email}</div>
+                <div className="text-sm font-bold text-navy-900 dark:text-white truncate">{user.name}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</div>
               </div>
               <button
-                onClick={logout}
+                onClick={() => logout('sidebar_sign_out')}
                 title="Sign Out"
-                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                 aria-label="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200">
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
               <span className="flex items-center gap-1.5">
                 <span>Monthly Income</span>
                 <Tooltip content="Configured monthly baseline income used for financial calculations" />
               </span>
-              <span className="font-semibold text-navy-900">{formatInr(user.monthlyIncome)}</span>
+              <span className="font-semibold text-navy-900 dark:text-white">{formatMoney(user.monthlyIncome)}</span>
             </div>
           </div>
         )}
@@ -304,18 +318,18 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0">
         {/* Top Header */}
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 lg:px-8 h-16 flex items-center justify-between">
+        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 lg:px-8 h-16 flex items-center justify-between">
           {/* Left Title & Mobile Menu Button */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               aria-label="Toggle navigation menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             <div>
-              <h1 className="text-base lg:text-lg font-bold text-navy-900 leading-tight">
+              <h1 className="text-base lg:text-lg font-bold text-navy-900 dark:text-white leading-tight">
                 {getPageTitle(activeTab)}
               </h1>
               {isDemoLabActive && (
@@ -406,8 +420,8 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               onClick={() => onSelectTab('settings')}
               className={`p-2.5 rounded-xl transition border ${
                 activeTab === 'settings'
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                  : 'text-slate-600 hover:bg-slate-100 border-slate-200'
+                  ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'
               }`}
               aria-label="Account Settings"
               title="Settings"
@@ -415,14 +429,24 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               <Settings className="w-4 h-4" />
             </button>
 
+            {/* Appearance Theme Toggle (Section 13) */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700"
+              aria-label="Toggle theme appearance"
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+            </button>
+
             {/* Clearly Visible Logout Action (Immediately next to Settings) */}
             <button
-              onClick={logout}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition"
+              onClick={() => logout('header_sign_out')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800 transition"
               aria-label="Sign out of account"
               title="Sign Out"
             >
-              <LogOut className="w-4 h-4 text-rose-600" />
+              <LogOut className="w-4 h-4 text-rose-600 dark:text-rose-400" />
               <span className="hidden sm:inline">Log Out</span>
             </button>
           </div>
@@ -489,7 +513,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                   <div className="text-xs text-slate-500">{user.email}</div>
                 </div>
                 <button
-                  onClick={logout}
+                  onClick={() => logout()}
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200"
                 >
                   Log Out

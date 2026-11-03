@@ -858,6 +858,196 @@ async function runSuite() {
     assert.strictEqual(updateProfile.body.profile.incomeStatus, 'user_estimate');
   });
 
+  // ============================================================================
+  // Section 19: Official Acceptance Test Scenarios (Tests 35 - 44)
+  // ============================================================================
+
+  // Test 1: General conversation (Natural response without unnecessary financial agents)
+  await runTest('35. Acceptance Scenario 1: General Conversation — Quantum Computing (/api/ai/ask)', async () => {
+    const { status, body } = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Explain quantum computing to me.' }),
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.workflowType, 'general_knowledge');
+    assert.ok(
+      body.explanation.toLowerCase().includes('qubit') ||
+      body.explanation.toLowerCase().includes('superposition') ||
+      body.explanation.toLowerCase().includes('quantum'),
+      'Response must explain quantum computing accurately'
+    );
+    assert.strictEqual(
+      body.astropodsOrchestration.remoteExecutionCount,
+      0,
+      'General knowledge must NOT trigger unnecessary remote financial agent executions'
+    );
+  });
+
+  // Test 2: Contextual conversation (Multi-turn savings target and duration follow-up)
+  await runTest('36. Acceptance Scenario 2: Contextual Conversation — Save ₹30,000 -> Make it 6 months', async () => {
+    // Create new conversation
+    const convRes = await api('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Contextual Savings Test' }),
+    });
+    assert.strictEqual(convRes.status, 201);
+    const convId = convRes.body.conversation._id;
+
+    // Turn 1: Save ₹30,000
+    const turn1 = await api(`/conversations/${convId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content: 'I want to save ₹30,000.' }),
+    });
+    assert.strictEqual(turn1.status, 200);
+    assert.strictEqual(turn1.body.assistantMessage.toolAction.type, 'goal_created');
+
+    // Turn 2: Make it six months (follow-up referring to previous turn)
+    const turn2 = await api(`/conversations/${convId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Make it six months.' }),
+    });
+    assert.strictEqual(turn2.status, 200);
+    assert.strictEqual(turn2.body.assistantMessage.toolAction.type, 'goal_updated');
+    assert.strictEqual(turn2.body.assistantMessage.toolAction.details.durationMonths, 6);
+    assert.strictEqual(turn2.body.assistantMessage.toolAction.details.monthlyContribution, 5000); // 30,000 / 6 = 5,000
+    assert.ok(turn2.body.assistantMessage.content.includes('5,000'));
+  });
+
+  // Test 3: Application navigation ("Take me to my settings", "Take me to my accounts")
+  await runTest('37. Acceptance Scenario 3: AI Application Control — Navigation (/api/ai/ask)', async () => {
+    const settingsNav = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Take me to my settings.' }),
+    });
+    assert.strictEqual(settingsNav.status, 200);
+    assert.strictEqual(settingsNav.body.workflowType, 'navigation');
+    assert.strictEqual(settingsNav.body.toolAction.type, 'navigation');
+    assert.strictEqual(settingsNav.body.toolAction.navTarget, 'settings');
+
+    const accountsNav = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Show me my current balance.' }),
+    });
+    assert.strictEqual(accountsNav.status, 200);
+    assert.ok(accountsNav.body.explanation.includes('1,50,000') || accountsNav.body.toolAction.details.totalBalance > 0);
+  });
+
+  // Test 4: Settings modification ("Change my preferred currency to INR")
+  await runTest('38. Acceptance Scenario 4: AI Application Control — Modify Currency Preference (/api/ai/ask)', async () => {
+    const modRes = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Change my preferred currency to INR.' }),
+    });
+    assert.strictEqual(modRes.status, 200);
+    assert.strictEqual(modRes.body.toolAction.type, 'currency_updated');
+    assert.strictEqual(modRes.body.toolAction.details.preferredCurrency, 'INR');
+
+    // Verify persisted directly in MongoDB user model
+    const meRes = await api('/auth/me');
+    assert.strictEqual(meRes.body.user.currency, 'INR');
+  });
+
+  // Test 5: Scheduling ("Remind me to pay electricity on the 10th of every month")
+  await runTest('39. Acceptance Scenario 5: Scheduling — Recurring Bill Reminder (/api/ai/ask)', async () => {
+    const schedRes = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Remind me to pay electricity on the 10th of every month.' }),
+    });
+    assert.strictEqual(schedRes.status, 200);
+    assert.strictEqual(schedRes.body.toolAction.type, 'reminder_scheduled');
+    assert.strictEqual(schedRes.body.toolAction.details.dayOfMonth, 10);
+    assert.strictEqual(schedRes.body.toolAction.details.event.eventType, 'electricity');
+
+    // Verify calendar includes this event
+    const calRes = await api('/calendar');
+    assert.ok(calRes.body.events.some((e: any) => (e.name || e.title || '').includes('Electricity Bill')));
+  });
+
+  // Test 6: Multi-category product discovery (Sneakers intake & evaluation)
+  await runTest('40. Acceptance Scenario 6: Product Discovery — Channel3 Sneakers & Affordability (/api/ai/ask)', async () => {
+    // Step 1: Initial conversation asks for sneaker style
+    const initialPrompt = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'I need to buy sneakers.' }),
+    });
+    assert.strictEqual(initialPrompt.status, 200);
+    assert.strictEqual(initialPrompt.body.toolAction.type, 'clarification_needed');
+    assert.ok(initialPrompt.body.explanation.includes('running, casual or everyday wear'));
+
+    // Step 2: User specifies running shoes -> searches Channel3 and evaluates 7-factor affordability
+    const evalPrompt = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Running shoes' }),
+    });
+    assert.strictEqual(evalPrompt.status, 200);
+    assert.strictEqual(evalPrompt.body.workflowType, 'purchase_evaluation');
+    assert.ok(evalPrompt.body.purchaseCompanion.evaluatedProducts.length > 0);
+    const hasSneaker = evalPrompt.body.purchaseCompanion.evaluatedProducts.some((p: any) =>
+      p.product.name.toLowerCase().includes('running') || p.product.name.toLowerCase().includes('pegasus')
+    );
+    assert.ok(hasSneaker, 'Evaluated products must include genuine Channel3 sneaker listings');
+  });
+
+  // Test 7: Payment preparation ("I need to pay Rahul ₹5,000" with strict security boundaries)
+  await runTest('41. Acceptance Scenario 7: Payment Preparation — Strict Approval Boundary (/api/ai/ask)', async () => {
+    const prepRes = await api('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'I need to pay Rahul ₹5,000.' }),
+    });
+    assert.strictEqual(prepRes.status, 200);
+    assert.strictEqual(prepRes.body.toolAction.type, 'payment_prepared');
+    assert.strictEqual(prepRes.body.toolAction.status, 'awaiting_approval');
+    assert.strictEqual(prepRes.body.toolAction.requiresUserPaymentApproval, true);
+    assert.strictEqual(prepRes.body.toolAction.navTarget, 'payments');
+    assert.strictEqual(prepRes.body.toolAction.details.amountInr, 5000);
+    assert.ok(prepRes.body.explanation.includes('never moves funds automatically'));
+  });
+
+  // Test 8: Overview dynamic update after payment completion
+  await runTest('42. Acceptance Scenario 8: Live Overview Dynamic Updates (/api/dashboard/overview)', async () => {
+    const overviewRes = await api('/dashboard/overview');
+    assert.strictEqual(overviewRes.status, 200);
+    assert.ok(overviewRes.body.metrics);
+    assert.ok(overviewRes.body.accounts.length >= 3);
+    assert.ok(overviewRes.body.mandates.length >= 6);
+  });
+
+  // Test 9: Session management & logout API
+  await runTest('43. Acceptance Scenario 9: Session Management & Logout API (/api/auth/logout & beacon)', async () => {
+    // Normal authenticated logout
+    const logoutRes = await api('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'user_voluntary_logout' }),
+    });
+    assert.strictEqual(logoutRes.status, 200);
+    assert.strictEqual(logoutRes.body.success, true);
+
+    // Unload beacon endpoint
+    const beaconRes = await api('/auth/logout-beacon', {
+      method: 'POST',
+      body: JSON.stringify({ token: authToken }),
+    });
+    assert.strictEqual(beaconRes.status, 200);
+    assert.strictEqual(beaconRes.body.success, true);
+  });
+
+  // Test 10: SSE Streaming endpoint
+  await runTest('44. Acceptance Scenario 10: Real-Time SSE Token Streaming (/api/ai/ask/stream)', async () => {
+    const streamRes = await fetch(`${baseUrl}/ai/ask/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ prompt: 'Explain the difference between RAM and storage.' }),
+    });
+    assert.strictEqual(streamRes.status, 200);
+    assert.ok(streamRes.headers.get('content-type')?.includes('text/event-stream'));
+    const textData = await streamRes.text();
+    assert.ok(textData.includes('data:'), 'SSE stream must deliver chunked data events');
+    assert.ok(textData.includes('"type":"finish"'), 'SSE stream must deliver finish event');
+  });
+
   server.close();
   for (const s of podServers) {
     try {
