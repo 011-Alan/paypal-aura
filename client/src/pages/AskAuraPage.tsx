@@ -34,6 +34,7 @@ import {
 import { apiRequest, formatDateShort } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { ConversationalResponseRenderer } from '../components/ConversationalResponseRenderer';
 
 interface Message {
   _id?: string;
@@ -53,6 +54,7 @@ interface Message {
     details?: any;
   };
   suggestedNextPrompts?: string[];
+  purchaseCompanion?: any;
 }
 
 interface ConversationSummary {
@@ -711,42 +713,57 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                     className={`p-4 sm:p-5 rounded-3xl text-sm leading-relaxed ${
                       isUser
                         ? 'bg-blue-600 text-white rounded-tr-xs shadow-xs'
-                        : 'bg-slate-50 dark:bg-slate-800/90 text-navy-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 rounded-tl-xs whitespace-pre-wrap'
+                        : 'bg-slate-50 dark:bg-slate-800/90 text-navy-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 rounded-tl-xs'
                     }`}
                   >
-                    {msgContent}
+                    {isUser ? (
+                      <div className="whitespace-pre-wrap">{msgContent}</div>
+                    ) : (
+                      <ConversationalResponseRenderer
+                        content={msgContent}
+                        onNavigate={onNavigate}
+                        toolAction={msg.toolAction}
+                        purchaseCompanion={msg.purchaseCompanion}
+                      />
+                    )}
                   </div>
 
-                  {/* Assistant Actions: Audio, Copy, Regenerate */}
+                  {/* Assistant Actions: Audio, Copy, Regenerate — cleanly separated from message content */}
                   {!isUser && msgContent && (
-                    <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pl-1">
+                    <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pl-1 pt-1 border-t border-slate-100 dark:border-slate-800/60 mt-1" role="toolbar" aria-label="Message options">
                       <button
+                        type="button"
                         onClick={() => speakText(msgContent, msgId)}
-                        className={`inline-flex items-center gap-1 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition ${
+                        className={`inline-flex items-center gap-1.5 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition ${
                           isSpeakingId === msgId ? 'text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950' : ''
                         }`}
                         title="Listen to this response"
+                        aria-label="Listen to this response"
                       >
-                        <Volume2 className="w-3.5 h-3.5" />
+                        <Volume2 className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>{isSpeakingId === msgId ? 'Speaking...' : 'Listen'}</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleCopyText(msgContent, msgId)}
-                        className="inline-flex items-center gap-1 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition"
+                        className="inline-flex items-center gap-1.5 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition"
                         title="Copy to clipboard"
+                        aria-label="Copy to clipboard"
                       >
-                        {copiedId === msgId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedId === msgId ? <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
                         <span>{copiedId === msgId ? 'Copied' : 'Copy'}</span>
                       </button>
 
                       {idx === messages.length - 1 && (
                         <button
+                          type="button"
                           onClick={handleRegenerateLast}
-                          className="inline-flex items-center gap-1 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition"
+                          className="inline-flex items-center gap-1.5 hover:text-navy-900 dark:hover:text-white px-2 py-1 rounded-lg transition"
                           title="Regenerate last response"
+                          aria-label="Regenerate last response"
                         >
-                          <RotateCcw className="w-3.5 h-3.5" />
+                          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                           <span>Regenerate</span>
                         </button>
                       )}

@@ -1386,6 +1386,7 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       assistantMessage: assistantMsg,
       toolAction: aiResult.toolAction,
       suggestedNextPrompts: aiResult.suggestedNextPrompts,
+      purchaseCompanion: aiResult.purchaseCompanion,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });

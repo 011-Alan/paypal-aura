@@ -314,6 +314,66 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
   },
   // --- Home Appliances ---
   {
+    id: 'ch3-appliance-daikin-1-5t-ac',
+    name: 'Daikin 1.5 Ton 5 Star Inverter Split AC (Copper, PM 2.5 Filter, Triple Display)',
+    brand: 'Daikin',
+    category: 'Home Appliances',
+    description: 'Energy-efficient 1.5 ton 5-star inverter split air conditioner featuring Neo Swing compressor, PM 2.5 air filtration, and 100% copper condenser.',
+    priceInr: 45490,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
+    variants: ['1.5 Ton 5 Star / White', '1.5 Ton 3 Star / White'],
+    availability: 'in_stock',
+    retailerName: 'Croma Direct (PayPal Supported)',
+    purchaseUrl: 'https://www.croma.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-appliance-voltas-1-5t-ac',
+    name: 'Voltas 1.5 Ton 3 Star Adjustable Inverter Split AC (Copper, Anti-Dust Filter)',
+    brand: 'Voltas',
+    category: 'Home Appliances',
+    description: 'High-ambient cooling split air conditioner with 4-in-1 adjustable cooling modes, dual filtration, and low power consumption.',
+    priceInr: 32990,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80',
+    variants: ['1.5 Ton 3 Star / White', '1 Ton 3 Star / White'],
+    availability: 'in_stock',
+    retailerName: 'Tata CLiQ Electronics (PayPal Supported)',
+    purchaseUrl: 'https://www.tatacliq.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-appliance-lg-refrigerator-260l',
+    name: 'LG 260L 3 Star Smart Inverter Frost-Free Double Door Refrigerator',
+    brand: 'LG',
+    category: 'Home Appliances',
+    description: 'Double door frost-free refrigerator with Smart Inverter Compressor, Multi Air Flow cooling, and toughened glass shelves.',
+    priceInr: 26990,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80',
+    variants: ['Dazzle Steel 260L', 'Shiny Steel 242L'],
+    availability: 'in_stock',
+    retailerName: 'Reliance Digital Direct (PayPal Partner)',
+    purchaseUrl: 'https://www.reliancedigital.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-appliance-samsung-refrigerator-236l',
+    name: 'Samsung 236L 3 Star Digital Inverter Double Door Refrigerator',
+    brand: 'Samsung',
+    category: 'Home Appliances',
+    description: 'Energy-saving double door refrigerator with Digital Inverter technology, all-around cooling, and deodorizing filter.',
+    priceInr: 24490,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?auto=format&fit=crop&w=600&q=80',
+    variants: ['Elegant Inox 236L', 'Refined Inox 256L'],
+    availability: 'in_stock',
+    retailerName: 'Samsung Direct India (PayPal Supported)',
+    purchaseUrl: 'https://www.samsung.com/in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
     id: 'ch3-appliance-philips-air-fryer',
     name: 'Philips Digital Air Fryer HD9252/90 (4.1L, Rapid Air Technology)',
     brand: 'Philips',
@@ -519,16 +579,40 @@ export class Channel3IntegrationService {
         return item.category === 'Furniture';
       }
 
-      // Home Appliances
+      // Home Appliances (Air Conditioners, Refrigerators, Vacuum, Air Fryer, etc.)
       if (
         q.includes('appliance') ||
+        /\bac\b|\bair conditioner\b|\bair conditioning\b|\bcooler\b/i.test(q) ||
+        /\brefrigerator\b|\bfridge\b/i.test(q) ||
         q.includes('air fryer') ||
         q.includes('fryer') ||
         q.includes('vacuum') ||
         q.includes('philips') ||
-        q.includes('dyson')
+        q.includes('dyson') ||
+        q.includes('daikin') ||
+        q.includes('voltas') ||
+        q.includes('lg')
       ) {
-        return item.category === 'Home Appliances';
+        if (item.category === 'Home Appliances') {
+          if (/\bac\b|\bair conditioner\b|\bair conditioning\b|\bcooler\b/i.test(q)) {
+            return (
+              item.id.includes('-ac') ||
+              /\b(ac|air conditioner|air conditioning)\b/i.test(item.name) ||
+              /\b(air conditioner|air conditioning)\b/i.test(item.description)
+            );
+          }
+          if (/\brefrigerator\b|\bfridge\b/i.test(q)) {
+            return item.name.toLowerCase().includes('refrigerator') || item.description.toLowerCase().includes('refrigerator');
+          }
+          if (q.includes('air fryer') || q.includes('fryer')) {
+            return item.name.toLowerCase().includes('air fryer');
+          }
+          if (q.includes('vacuum')) {
+            return item.name.toLowerCase().includes('vacuum');
+          }
+          return true;
+        }
+        return false;
       }
 
       // Books & Learning
@@ -589,8 +673,13 @@ export class Channel3IntegrationService {
       );
     });
 
+    // If query was specific (e.g. AC or Refrigerator) but yielded no matches, do not pollute with random running shoes
     if (matches.length === 0) {
-      matches = REFERENCE_CATALOG;
+      const isSpecificQuery =
+        /\bac\b|\bair conditioner\b|\bfridge\b|\brefrigerator\b|\blaptop\b|\bsneaker\b|\bphone\b|\bchair\b|\bbook\b/i.test(q);
+      if (!isSpecificQuery && !q.trim()) {
+        matches = REFERENCE_CATALOG;
+      }
     }
 
     if (typeof params.maxPriceInr === 'number' && params.maxPriceInr > 0) {

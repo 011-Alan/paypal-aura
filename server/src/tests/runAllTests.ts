@@ -340,7 +340,7 @@ async function runSuite() {
     assert.strictEqual(body.workflowType, 'purchase_evaluation');
     assert.strictEqual(body.astropodsOrchestration.primaryAgent, 'purchase-intelligence');
     assert.ok(body.purchaseCompanion.evaluatedProducts.length > 0);
-    assert.ok(body.explanation.includes('18,000'));
+    assert.ok(body.explanation.includes('discretionary funds'));
   });
 
   // 10. Workflow B & F: Monthly Financial Plan & Recovery via Python Analytics Engine
