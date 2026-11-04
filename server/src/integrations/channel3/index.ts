@@ -434,6 +434,52 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     purchaseUrl: 'https://www.jaicobooks.com/',
     supportsPayPalSandboxCheckout: true,
   },
+  // --- Water Bottles, Hydration & Everyday Essentials ---
+  {
+    id: 'ch3-lifestyle-milton-thermosteel-bottle',
+    name: 'Milton Thermosteel Flip Lid Insulated Water Bottle (1000ml)',
+    brand: 'Milton',
+    category: 'Kitchen & Dining',
+    description: 'Double walled vacuum insulated stainless steel water bottle. Keeps beverages hot or cold for 24 hours. Leak proof flip lid.',
+    priceInr: 1099,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=600&q=80',
+    variants: ['1000ml Silver', '1000ml Matte Black', '750ml Silver'],
+    availability: 'in_stock',
+    retailerName: 'Milton Official Partner (PayPal Supported)',
+    purchaseUrl: 'https://www.milton.in/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-lifestyle-cello-stainless-steel-bottle',
+    name: 'Cello H2O Stainless Steel Water Bottle (1 Litre, Set of 2)',
+    brand: 'Cello',
+    category: 'Kitchen & Dining',
+    description: 'Food grade rust-free stainless steel fridge bottles with ergonomic grip and durable leak-proof cap.',
+    priceInr: 649,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1544003484-3cd181d17917?auto=format&fit=crop&w=600&q=80',
+    variants: ['Set of 2 Silver'],
+    availability: 'in_stock',
+    retailerName: 'Cello World India Partner',
+    purchaseUrl: 'https://www.celloworld.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
+  {
+    id: 'ch3-lifestyle-hydro-flask-wide-mouth',
+    name: 'Hydro Flask 32 oz Wide Mouth with Flex Cap (946ml)',
+    brand: 'Hydro Flask',
+    category: 'Kitchen & Dining',
+    description: 'TempShield double-wall vacuum insulation keeps drinks ice cold up to 24 hours or piping hot up to 12. Pro-grade 18/8 stainless steel.',
+    priceInr: 3499,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&w=600&q=80',
+    variants: ['Pacific Blue', 'Black', 'White'],
+    availability: 'in_stock',
+    retailerName: 'Adventure Gear India Partner',
+    purchaseUrl: 'https://www.hydroflask.com/',
+    supportsPayPalSandboxCheckout: true,
+  },
 ];
 
 export class Channel3IntegrationService {
@@ -662,6 +708,18 @@ export class Channel3IntegrationService {
         return item.category === 'Audio & Accessories';
       }
 
+      // Bottles & Kitchenware
+      if (
+        q.includes('bottle') ||
+        q.includes('flask') ||
+        q.includes('hydration') ||
+        q.includes('thermosteel') ||
+        q.includes('milton') ||
+        q.includes('cello')
+      ) {
+        return item.category === 'Kitchen & Dining';
+      }
+
       if (!q.trim()) return true;
 
       // General fallback keyword matching
@@ -676,7 +734,7 @@ export class Channel3IntegrationService {
     // If query was specific (e.g. AC or Refrigerator) but yielded no matches, do not pollute with random running shoes
     if (matches.length === 0) {
       const isSpecificQuery =
-        /\bac\b|\bair conditioner\b|\bfridge\b|\brefrigerator\b|\blaptop\b|\bsneaker\b|\bphone\b|\bchair\b|\bbook\b/i.test(q);
+        /\bac\b|\bair conditioner\b|\bfridge\b|\brefrigerator\b|\blaptop\b|\bsneaker\b|\bphone\b|\bchair\b|\bbook\b|\bbottle\b/i.test(q);
       if (!isSpecificQuery && !q.trim()) {
         matches = REFERENCE_CATALOG;
       }
