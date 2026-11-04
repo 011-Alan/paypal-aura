@@ -32,6 +32,8 @@ services:
         generateValue: true
       - key: GEMINI_API_KEY
         sync: false
+      - key: PAYPAL_MODE
+        value: sandbox
       - key: PAYPAL_ENVIRONMENT
         value: sandbox
       - key: PAYPAL_BASE_URL
@@ -39,6 +41,10 @@ services:
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_IDENTITY_CLIENT_ID
+        sync: false
+      - key: PAYPAL_IDENTITY_CLIENT_SECRET
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false

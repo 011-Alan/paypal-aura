@@ -33,6 +33,13 @@ export interface IUser extends Document {
   monthlyIncome: number;
   financialProfile?: IFinancialProfile;
   familyGroupId?: string;
+  // PayPal Identity API Fields
+  paypalUserId?: string;
+  paypalPayerId?: string;
+  paypalEmail?: string;
+  paypalAccountLinked?: boolean;
+  paypalIdentityVerified?: boolean;
+  authenticationProvider?: 'local' | 'paypal' | 'both';
   spendingPreferences: {
     riskTolerance: 'conservative' | 'balanced' | 'growth';
     priorityCategories: string[];
@@ -53,6 +60,13 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ['user', 'family_admin', 'family_member'], default: 'family_admin' },
     currency: { type: String, default: 'INR' },
     monthlyIncome: { type: Number, default: 95000 },
+    // PayPal Identity Fields
+    paypalUserId: { type: String, unique: true, sparse: true, index: true },
+    paypalPayerId: { type: String, sparse: true },
+    paypalEmail: { type: String, lowercase: true, trim: true, sparse: true },
+    paypalAccountLinked: { type: Boolean, default: false },
+    paypalIdentityVerified: { type: Boolean, default: false },
+    authenticationProvider: { type: String, enum: ['local', 'paypal', 'both'], default: 'local' },
     financialProfile: {
       monthlyIncome: { type: Number, default: 95000 },
       incomeType: { type: String, enum: ['salary', 'freelance', 'business', 'pension', 'other'], default: 'salary' },

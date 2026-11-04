@@ -49,6 +49,30 @@ export const PaymentsPage: React.FC = () => {
   useEffect(() => {
     loadPayments();
 
+    if (typeof window !== 'undefined' && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const checkoutStatus = params.get('status');
+      const orderToken = params.get('token');
+      if (checkoutStatus === 'approved') {
+        setStatusMessage(
+          `PayPal Checkout Approved for order ${orderToken || ''}! Click "Capture Approved PayPal Order" below to complete settlement.`
+        );
+        params.delete('status');
+        params.delete('token');
+        params.delete('PayerID');
+        const remaining = params.toString();
+        const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      } else if (checkoutStatus === 'cancelled') {
+        setErrorMsg('PayPal Checkout was cancelled by the user.');
+        params.delete('status');
+        params.delete('token');
+        const remaining = params.toString();
+        const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+
     const handleStateChange = () => {
       loadPayments();
     };
@@ -376,7 +400,7 @@ export const PaymentsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Step 3, 4 & 5: PayPal Orders API v2 Create, Capture & Webhook Verification */}
+              {/* Step 3, 4 & 5: PayPal Orders API v2 Create, User Approval, Capture & Webhook */}
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
                   type="button"
@@ -384,8 +408,20 @@ export const PaymentsPage: React.FC = () => {
                   disabled={busy || (!approvalToken && activePayment.status === 'guardian_approved')}
                   className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs"
                 >
-                  3. Create PayPal Sandbox Order v2
+                  3. Create PayPal Order v2
                 </button>
+
+                {activePayment.paypalApprovalUrl && activePayment.status === 'paypal_order_created' && (
+                  <a
+                    href={activePayment.paypalApprovalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-xl bg-[#003087] hover:bg-[#00256c] text-white text-xs font-bold transition shadow-xs inline-flex items-center gap-1.5"
+                  >
+                    <span>Approve on PayPal</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                )}
 
                 <button
                   type="button"

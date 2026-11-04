@@ -373,9 +373,12 @@ export class PaymentGuardianService {
       throw new Error('Financial Guardian violation: Cannot capture an order that has not passed PIN verification.');
     }
 
-    const orderIdToCapture = paymentReq.paypalOrderId || `PAYPAL-SBX-${Date.now()}`;
+    if (!paymentReq.paypalOrderId) {
+      throw new Error('Cannot capture payment: No valid PayPal Order has been created for this request.');
+    }
+
     const captureResult = await paypalIntegration.captureOrder({
-      orderId: orderIdToCapture,
+      orderId: paymentReq.paypalOrderId,
       idempotencyKey: paymentReq.idempotencyKey,
     });
 

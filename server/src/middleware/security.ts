@@ -108,20 +108,70 @@ export function verifyPaymentApprovalToken(
 }
 
 // ============================================================================
+// Cookie Session Helpers
+// ============================================================================
+export function parseCookies(cookieHeader?: string): Record<string, string> {
+  if (!cookieHeader) return {};
+  const list: Record<string, string> = {};
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    const name = parts[0]?.trim();
+    if (name) {
+      list[name] = decodeURIComponent(parts.slice(1).join('=').trim());
+    }
+  });
+  return list;
+}
+
+export function setSessionCookie(res: Response, token: string): void {
+  const isProd = env.NODE_ENV === 'production';
+  res.cookie('aura_session', token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    path: '/',
+  });
+}
+
+export function clearSessionCookie(res: Response): void {
+  const isProd = env.NODE_ENV === 'production';
+  res.cookie('aura_session', '', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    expires: new Date(0),
+    path: '/',
+  });
+}
+
+// ============================================================================
 // Authentication & Role-Based Authorization Middleware
 // ============================================================================
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
+    let token: string | undefined;
+
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim();
+    } else if (req.headers.cookie) {
+      const cookies = parseCookies(req.headers.cookie);
+      if (cookies['aura_session']) {
+        token = cookies['aura_session'];
+      }
+    } else if ((req as any).cookies?.aura_session) {
+      token = (req as any).cookies.aura_session;
+    }
+
+    if (!token) {
       res.status(401).json({
         success: false,
-        error: 'Authentication required. Please provide a valid Bearer token.',
+        error: 'Authentication required. Please provide a valid Bearer token or session cookie.',
       });
       return;
     }
 
-    const token = authHeader.slice(7).trim();
     const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string; email: string; role: string };
     const user = await UserModel.findById(payload.sub);
 

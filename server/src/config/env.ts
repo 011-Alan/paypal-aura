@@ -39,11 +39,35 @@ export const env = {
   GEMINI_MAX_HISTORY_TURNS: parseInt(process.env.GEMINI_MAX_HISTORY_TURNS || '6', 10),
   GEMINI_ENABLE_SAFE_CACHE: process.env.GEMINI_ENABLE_SAFE_CACHE !== 'false',
 
-  // PayPal Sandbox
-  PAYPAL_ENVIRONMENT: process.env.PAYPAL_ENVIRONMENT || 'sandbox',
-  PAYPAL_BASE_URL: process.env.PAYPAL_BASE_URL || 'https://api-m.sandbox.paypal.com',
+  // PayPal Configuration (Sandbox & Live Environment Switcher)
+  PAYPAL_MODE: (process.env.PAYPAL_MODE || process.env.PAYPAL_ENVIRONMENT || 'sandbox').toLowerCase() === 'live' ? 'live' : 'sandbox',
+  PAYPAL_ENVIRONMENT: (process.env.PAYPAL_MODE || process.env.PAYPAL_ENVIRONMENT || 'sandbox').toLowerCase() === 'live' ? 'live' : 'sandbox',
+  get PAYPAL_BASE_URL(): string {
+    if (process.env.PAYPAL_BASE_URL) return process.env.PAYPAL_BASE_URL;
+    return this.PAYPAL_MODE === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+  },
+  get PAYPAL_WEB_URL(): string {
+    return this.PAYPAL_MODE === 'live' ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
+  },
   PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID || '',
   PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET || '',
+
+  // PayPal Identity API (Log in with PayPal)
+  PAYPAL_IDENTITY_CLIENT_ID: process.env.PAYPAL_IDENTITY_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || '',
+  PAYPAL_IDENTITY_CLIENT_SECRET: process.env.PAYPAL_IDENTITY_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET || '',
+  get PAYPAL_IDENTITY_REDIRECT_URI(): string {
+    if (process.env.PAYPAL_IDENTITY_REDIRECT_URI) return process.env.PAYPAL_IDENTITY_REDIRECT_URI;
+    return `${this.PUBLIC_API_URL}/auth/paypal/callback`;
+  },
+  get PAYPAL_RETURN_URL(): string {
+    if (process.env.PAYPAL_RETURN_URL) return process.env.PAYPAL_RETURN_URL;
+    return `${this.CLIENT_ORIGIN}/payments?status=approved`;
+  },
+  get PAYPAL_CANCEL_URL(): string {
+    if (process.env.PAYPAL_CANCEL_URL) return process.env.PAYPAL_CANCEL_URL;
+    return `${this.CLIENT_ORIGIN}/payments?status=cancelled`;
+  },
+
   PAYPAL_WEBHOOK_ID: process.env.PAYPAL_WEBHOOK_ID || '',
   PAYPAL_DEFAULT_CURRENCY: process.env.PAYPAL_DEFAULT_CURRENCY || 'USD',
   INR_TO_USD_RATE: parseFloat(process.env.INR_TO_USD_RATE || '0.01190476'),

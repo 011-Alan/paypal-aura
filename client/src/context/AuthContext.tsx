@@ -10,6 +10,12 @@ export interface UserProfile {
   preferredCurrency?: string;
   monthlyIncome: number;
   familyGroupId?: string;
+  paypalUserId?: string;
+  paypalPayerId?: string;
+  paypalEmail?: string;
+  paypalAccountLinked?: boolean;
+  paypalIdentityVerified?: boolean;
+  authenticationProvider?: 'password' | 'paypal' | 'both';
   spendingPreferences: {
     riskTolerance: 'conservative' | 'balanced' | 'growth';
     priorityCategories: string[];
@@ -136,6 +142,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUser = useCallback(async () => {
     try {
+      // Check for PayPal authentication callback in URL parameters
+      if (typeof window !== 'undefined' && window.location.search) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const authStatus = urlParams.get('auth');
+        const paypalToken = urlParams.get('token');
+
+        if (authStatus === 'paypal_success' && paypalToken) {
+          setStoredToken(paypalToken);
+          // Clean the query string without reloading the page
+          urlParams.delete('auth');
+          urlParams.delete('token');
+          urlParams.delete('isNewUser');
+          urlParams.delete('isLinked');
+          const remainingQuery = urlParams.toString();
+          const cleanUrl = window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '');
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      }
+
       const token = getStoredToken();
       if (!token) {
         setUser(null);

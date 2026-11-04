@@ -37,6 +37,41 @@ export const AuthPage: React.FC = () => {
 
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [paypalBusy, setPaypalBusy] = useState(false);
+
+  // Check URL parameters for PayPal authentication feedback
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const authStatus = params.get('auth');
+      const errorMsg = params.get('message');
+      if (authStatus === 'paypal_error' && errorMsg) {
+        setError(decodeURIComponent(errorMsg));
+        params.delete('auth');
+        params.delete('message');
+        const remaining = params.toString();
+        const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+  }, []);
+
+  const handlePayPalAuth = async () => {
+    setError('');
+    setPaypalBusy(true);
+    try {
+      const res = await apiRequest('/auth/paypal/authorize');
+      if (res.url) {
+        window.location.href = res.url;
+      } else {
+        setError('Failed to obtain PayPal authorization URL.');
+        setPaypalBusy(false);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to start Log in with PayPal.');
+      setPaypalBusy(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,6 +304,44 @@ export const AuthPage: React.FC = () => {
             )}
           </button>
         </form>
+
+        {/* PayPal Authentication Option */}
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white px-3 text-slate-400 font-medium tracking-wide">
+              or continue with
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handlePayPalAuth}
+          disabled={busy || paypalBusy}
+          className="w-full py-2.5 px-4 rounded-xl bg-[#003087] hover:bg-[#00256c] text-white font-semibold text-xs shadow-xs transition flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-60 cursor-pointer"
+        >
+          {/* Official PayPal "P" Dual-Tone Logo */}
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 2.47a.82.82 0 0 1 .81-.693h7.195c2.955 0 5.176.713 6.098 2.651.464.975.526 2.057.258 3.428-.48 2.454-2.14 4.544-4.8 5.446l-.378.115-.494 2.502-.387 1.961a.64.64 0 0 1-.632.518H8.874l-1.798 2.839z"
+              fill="#0079C1"
+            />
+            <path
+              d="M19.307 7.856c-.48 2.454-2.14 4.544-4.8 5.446l-.378.115-.881 4.463a.64.64 0 0 1-.632.518H9.08l-.133.673a.641.641 0 0 0 .633.74h4.152a.82.82 0 0 0 .81-.693l.034-.176.643-4.081.042-.224a.82.82 0 0 1 .81-.693h.512c3.418 0 6.094-1.388 6.877-5.385.328-1.67.143-3.078-.66-4.04-.616.924-1.492 1.692-2.593 2.14z"
+              fill="#00457C"
+            />
+          </svg>
+          <span>
+            {paypalBusy
+              ? 'Redirecting to PayPal...'
+              : mode === 'login'
+              ? 'Log in with PayPal'
+              : 'Sign up with PayPal'}
+          </span>
+        </button>
 
         {/* Security Disclosures */}
         <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-center gap-4 text-[11px] text-slate-400">

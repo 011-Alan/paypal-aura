@@ -25,6 +25,8 @@ import {
   verifySecretArgon2id,
   signSessionToken,
   recordAuditLog,
+  setSessionCookie,
+  clearSessionCookie,
 } from '../middleware/security';
 import {
   ensureDemoUserAlexSeeded,
@@ -50,10 +52,12 @@ import { channel3Integration } from '../integrations/channel3';
 import { elasticIntegration } from '../integrations/elastic';
 import { kernelIntegration } from '../integrations/kernel';
 import { paypalIntegration } from '../integrations/paypal';
+import { paypalIdentityService } from '../integrations/paypal/identityService';
 import { zapierIntegration } from '../integrations/zapier';
 import { renderWorkerManager } from '../workers/backgroundWorkflows';
 import { getDatabaseHealth } from '../config/database';
 import { env } from '../config/env';
+import { logger } from '../config/logger';
 
 export const apiRouter = Router();
 
@@ -70,6 +74,10 @@ function sanitizeUser(u: any) {
     spendingPreferences: u.spendingPreferences,
     financialPolicy: u.financialPolicy,
     onboardingCompleted: u.onboardingCompleted,
+    paypalAccountLinked: Boolean(u.paypalAccountLinked),
+    paypalEmail: u.paypalEmail,
+    paypalIdentityVerified: Boolean(u.paypalIdentityVerified),
+    authenticationProvider: u.authenticationProvider || 'local',
     createdAt: u.createdAt,
   };
 }
@@ -269,6 +277,7 @@ apiRouter.post('/auth/register', strictAuthRateLimiter, async (req: Request, res
 
     await zapierIntegration.ensureDefaultAutomationRules(String(user._id), user.email);
     const token = signSessionToken(user);
+    setSessionCookie(res, token);
 
     await recordAuditLog({
       userId: String(user._id),
@@ -322,6 +331,7 @@ apiRouter.post('/auth/login', strictAuthRateLimiter, async (req: Request, res: R
     }
 
     const token = signSessionToken(user);
+    setSessionCookie(res, token);
     await recordAuditLog({
       userId: String(user._id),
       actor: 'user',
@@ -345,6 +355,7 @@ apiRouter.post('/auth/demo-login', async (_req: Request, res: Response) => {
   try {
     const { user, credentials } = await ensureDemoUserAlexSeeded(false);
     const token = signSessionToken(user);
+    setSessionCookie(res, token);
     res.json({
       success: true,
       token,
@@ -411,6 +422,125 @@ apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Demo persona switch failed' });
+  }
+});
+
+// ============================================================================
+// 1b. Log in with PayPal (Identity API / OpenID Connect)
+// ============================================================================
+apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
+  try {
+    let linkUserId: string | undefined;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded: any = jwt.verify(authHeader.slice(7).trim(), env.JWT_SECRET);
+        linkUserId = decoded.sub;
+      } catch {
+        // Unauthenticated request, proceed with standard registration / login flow
+      }
+    }
+
+    const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl({
+      linkUserId,
+      prompt: req.query.prompt as string | undefined,
+    });
+
+    res.json({
+      success: true,
+      url,
+      state,
+      mode: env.PAYPAL_MODE,
+    });
+  } catch (err: any) {
+    logger.error('PayPalAuth', 'Failed to generate PayPal authorization URL', { error: err?.message });
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to initialize Log in with PayPal.',
+    });
+  }
+});
+
+apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
+  const { code, state, error, error_description } = req.query;
+
+  if (error) {
+    const errorMsg = String(error_description || error || 'Authentication cancelled by user');
+    logger.warn('PayPalAuth', 'PayPal returned authentication error', { error, error_description });
+    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent(errorMsg)}`);
+  }
+
+  if (!code || !state) {
+    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent('Missing authorization code or state from PayPal')}`);
+  }
+
+  try {
+    const result = await paypalIdentityService.handleCallback({
+      code: String(code),
+      state: String(state),
+    });
+
+    setSessionCookie(res, result.token);
+
+    const redirectUrl = `${env.CLIENT_ORIGIN}/?auth=paypal_success&token=${encodeURIComponent(result.token)}&isNewUser=${result.isNewUser}&isLinked=${result.isLinked}`;
+    return res.redirect(redirectUrl);
+  } catch (err: any) {
+    logger.error('PayPalAuth', 'Failed to process PayPal authentication callback', { error: err?.message });
+    const clientMsg = err?.message || 'PayPal authentication failed. Please try again.';
+    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent(clientMsg)}`);
+  }
+});
+
+apiRouter.post('/auth/paypal/callback', strictAuthRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { code, state } = req.body || {};
+    if (!code || !state) {
+      res.status(400).json({
+        success: false,
+        error: 'Both code and state are required to exchange PayPal authorization.',
+      });
+      return;
+    }
+
+    const result = await paypalIdentityService.handleCallback({
+      code: String(code),
+      state: String(state),
+    });
+
+    setSessionCookie(res, result.token);
+
+    res.json({
+      success: true,
+      token: result.token,
+      user: sanitizeUser(result.user),
+      isNewUser: result.isNewUser,
+      isLinked: result.isLinked,
+    });
+  } catch (err: any) {
+    logger.error('PayPalAuth', 'POST callback processing error', { error: err?.message });
+    res.status(400).json({
+      success: false,
+      error: err?.message || 'PayPal authentication failed.',
+    });
+  }
+});
+
+apiRouter.post('/auth/paypal/link', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { url, state } = paypalIdentityService.getAuthorizationUrl({
+      linkUserId: req.userId,
+    });
+    res.json({
+      success: true,
+      url,
+      state,
+      mode: env.PAYPAL_MODE,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to initialize PayPal account linking.',
+    });
   }
 });
 
@@ -501,6 +631,7 @@ apiRouter.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Re
 
 apiRouter.post('/auth/logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    clearSessionCookie(res);
     await recordAuditLog({
       userId: req.userId,
       actor: 'user',
@@ -518,6 +649,7 @@ apiRouter.post('/auth/logout', requireAuth, async (req: AuthenticatedRequest, re
 
 apiRouter.post('/auth/logout-beacon', async (req: Request, res: Response) => {
   try {
+    clearSessionCookie(res);
     // Navigator.sendBeacon best-effort logout
     const authHeader = req.headers.authorization;
     const bodyToken = typeof req.body === 'string' ? req.body : req.body?.token;

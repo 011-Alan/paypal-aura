@@ -4,7 +4,11 @@ import { logger } from '../../config/logger';
 import { apimaticIntegration } from '../apimatic';
 
 /**
- * PayPal — The Financial Execution Layer (PayPal Sandbox REST API v2)
+ * PayPal — Official Financial Execution Layer (PayPal REST API Orders v2 & Webhooks v1)
+ *
+ * Fully supports:
+ * - PayPal Sandbox (https://api-m.sandbox.paypal.com)
+ * - PayPal Live (https://api-m.paypal.com)
  *
  * Implements:
  * - OAuth 2.0 Token Exchange (/v1/oauth2/token)
@@ -12,13 +16,13 @@ import { apimaticIntegration } from '../apimatic';
  * - Orders API v2 Get Order (/v2/checkout/orders/{id})
  * - Orders API v2 Capture Order (/v2/checkout/orders/{id}/capture)
  * - Webhook Cryptographic Signature Verification (/v1/notifications/verify-webhook-signature)
- * - Pre-flight APIMatic OpenAPI Contract Validation on all requests
+ * - APIMatic OpenAPI Contract Pre-flight Validation
  */
-export class PayPalSandboxIntegrationService {
+export class PayPalIntegrationService {
   private cachedAccessToken: string | null = null;
   private tokenExpiresAt = 0;
 
-  isLiveSandboxConfigured(): boolean {
+  isConfigured(): boolean {
     return Boolean(
       env.PAYPAL_CLIENT_ID &&
         env.PAYPAL_CLIENT_SECRET &&
@@ -26,17 +30,23 @@ export class PayPalSandboxIntegrationService {
     );
   }
 
+  isLiveSandboxConfigured(): boolean {
+    return this.isConfigured();
+  }
+
   getHealthStatus() {
-    const liveConfigured = this.isLiveSandboxConfigured();
+    const configured = this.isConfigured();
     return {
-      technology: 'PayPal Sandbox (Orders API v2 & Webhooks v1)',
+      technology: `PayPal ${env.PAYPAL_MODE === 'live' ? 'Live' : 'Sandbox'} (Orders API v2 & Webhooks v1)`,
       intendedResponsibility: 'Controlled financial execution layer with OAuth 2.0, idempotency & webhook verification',
-      status: liveConfigured
-        ? 'live_paypal_sandbox_configured'
-        : 'apimatic_contract_verified_sandbox_mode (Configure PAYPAL_CLIENT_ID & PAYPAL_CLIENT_SECRET for live PayPal cloud calls)',
+      status: configured
+        ? `paypal_${env.PAYPAL_MODE}_active`
+        : `paypal_${env.PAYPAL_MODE}_unconfigured (Set PAYPAL_CLIENT_ID & PAYPAL_CLIENT_SECRET)`,
+      mode: env.PAYPAL_MODE,
       environment: env.PAYPAL_ENVIRONMENT,
       baseUrl: env.PAYPAL_BASE_URL,
-      liveCredentialsConfigured: liveConfigured,
+      webUrl: env.PAYPAL_WEB_URL,
+      credentialsConfigured: configured,
       webhookIdConfigured: Boolean(env.PAYPAL_WEBHOOK_ID),
       apimaticValidationActive: env.APIMATIC_STRICT_CONTRACT_VALIDATION,
       securityControls: [
@@ -50,15 +60,15 @@ export class PayPalSandboxIntegrationService {
   }
 
   /**
-   * Obtains an OAuth 2.0 access token from PayPal Sandbox using Basic Auth.
+   * Obtains an OAuth 2.0 access token from PayPal using Client Credentials and Basic Auth.
    */
   async getAccessToken(): Promise<string> {
     if (this.cachedAccessToken && Date.now() < this.tokenExpiresAt) {
       return this.cachedAccessToken;
     }
 
-    if (!this.isLiveSandboxConfigured()) {
-      throw new Error('PAYPAL_SANDBOX_CREDENTIALS_MISSING');
+    if (!this.isConfigured()) {
+      throw new Error(`PAYPAL_CREDENTIALS_MISSING: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required for ${env.PAYPAL_MODE}`);
     }
 
     const credentials = Buffer.from(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`).toString('base64');
@@ -74,8 +84,11 @@ export class PayPalSandboxIntegrationService {
 
     if (!response.ok) {
       const errText = await response.text();
-      logger.error('PayPalIntegration', 'Failed to obtain PayPal OAuth 2.0 token', { status: response.status, errText });
-      throw new Error(`PayPal OAuth 2.0 authentication failed (${response.status})`);
+      logger.error('PayPalIntegration', `Failed to obtain PayPal ${env.PAYPAL_MODE} OAuth 2.0 token`, {
+        status: response.status,
+        errText,
+      });
+      throw new Error(`PayPal OAuth 2.0 token request failed (${response.status}): ${errText}`);
     }
 
     const data: any = await response.json();
@@ -85,7 +98,8 @@ export class PayPalSandboxIntegrationService {
   }
 
   /**
-   * Creates a PayPal Order v2 after validating the request payload with APIMatic's PayPal contract rules.
+   * Creates a PayPal Order v2 using the official Orders API.
+   * Never fabricates fake orders; strictly connects to PayPal API.
    */
   async createOrder(params: {
     idempotencyKey: string;
@@ -93,15 +107,20 @@ export class PayPalSandboxIntegrationService {
     amountInr: number;
     description: string;
     recipientName: string;
+    customReturnUrl?: string;
+    customCancelUrl?: string;
   }): Promise<{
     orderId: string;
     status: string;
     approvalUrl: string;
     livePayPalApiCalled: boolean;
-    mode: 'paypal_sandbox_live' | 'paypal_sandbox_contract_verified_offline';
+    mode: string;
     apimaticValidation: ReturnType<typeof apimaticIntegration.validateCreateOrderRequest>;
   }> {
     const formattedUsd = params.amountUsd.toFixed(2);
+    const returnUrl = params.customReturnUrl || env.PAYPAL_RETURN_URL;
+    const cancelUrl = params.customCancelUrl || env.PAYPAL_CANCEL_URL;
+
     const requestPayload = {
       intent: 'CAPTURE',
       purchase_units: [
@@ -118,8 +137,8 @@ export class PayPalSandboxIntegrationService {
         brand_name: 'AURA Financial Companion',
         landing_page: 'NO_PREFERENCE',
         user_action: 'PAY_NOW',
-        return_url: `${env.CLIENT_ORIGIN}/payments?status=approved`,
-        cancel_url: `${env.CLIENT_ORIGIN}/payments?status=cancelled`,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
       },
     };
 
@@ -128,66 +147,48 @@ export class PayPalSandboxIntegrationService {
       'PayPal-Request-Id': params.idempotencyKey,
     };
 
-    // Validate contract via APIMatic PayPal Contract Validator
+    // Pre-flight validate contract via APIMatic
     const apimaticValidation = apimaticIntegration.validateCreateOrderRequest(requestPayload, requestHeaders);
     if (!apimaticValidation.valid) {
       throw new Error(`APIMatic PayPal Contract Validation Failed: ${apimaticValidation.errors.join('; ')}`);
     }
 
-    if (this.isLiveSandboxConfigured()) {
-      try {
-        const accessToken = await this.getAccessToken();
-        const resp = await fetch(`${env.PAYPAL_BASE_URL}/v2/checkout/orders`, {
-          method: 'POST',
-          headers: {
-            ...requestHeaders,
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(requestPayload),
-        });
-
-        if (resp.ok) {
-          const data: any = await resp.json();
-          const approveLink = Array.isArray(data.links)
-            ? data.links.find((l: any) => l.rel === 'approve' || l.rel === 'payer-action')?.href
-            : undefined;
-          return {
-            orderId: String(data.id),
-            status: String(data.status || 'CREATED'),
-            approvalUrl: approveLink || `https://www.sandbox.paypal.com/checkoutnow?token=${data.id}`,
-            livePayPalApiCalled: true,
-            mode: 'paypal_sandbox_live',
-            apimaticValidation,
-          };
-        } else {
-          const errBody = await resp.text();
-          logger.warn('PayPalIntegration', 'Live PayPal Sandbox createOrder returned non-200', {
-            status: resp.status,
-            errBody,
-          });
-        }
-      } catch (err: any) {
-        logger.warn('PayPalIntegration', 'Live PayPal Sandbox createOrder error; using contract-verified fallback', {
-          error: err?.message,
-        });
-      }
+    if (!this.isConfigured()) {
+      throw new Error(`PAYPAL_CREDENTIALS_MISSING: Cannot create PayPal order in ${env.PAYPAL_MODE} mode without valid credentials.`);
     }
 
-    // Deterministic, clearly labelled contract-verified Sandbox order when external PayPal credentials are not set
-    const deterministicHash = crypto
-      .createHash('sha256')
-      .update(params.idempotencyKey)
-      .digest('hex')
-      .slice(0, 13)
-      .toUpperCase();
-    const orderId = `PAYPAL-SBX-${deterministicHash}`;
+    const accessToken = await this.getAccessToken();
+    const resp = await fetch(`${env.PAYPAL_BASE_URL}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        ...requestHeaders,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      logger.error('PayPalIntegration', `PayPal ${env.PAYPAL_MODE} createOrder returned ${resp.status}`, {
+        status: resp.status,
+        errBody,
+      });
+      throw new Error(`PayPal createOrder failed (${resp.status}): ${errBody}`);
+    }
+
+    const data: any = await resp.json();
+    const approveLink = Array.isArray(data.links)
+      ? data.links.find((l: any) => l.rel === 'approve' || l.rel === 'payer-action')?.href
+      : undefined;
+
+    const defaultApproval = `${env.PAYPAL_WEB_URL}/checkoutnow?token=${data.id}`;
 
     return {
-      orderId,
-      status: 'CREATED',
-      approvalUrl: `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}`,
-      livePayPalApiCalled: false,
-      mode: 'paypal_sandbox_contract_verified_offline',
+      orderId: String(data.id),
+      status: String(data.status || 'CREATED'),
+      approvalUrl: approveLink || defaultApproval,
+      livePayPalApiCalled: true,
+      mode: `paypal_${env.PAYPAL_MODE}_live`,
       apimaticValidation,
     };
   }
@@ -198,35 +199,40 @@ export class PayPalSandboxIntegrationService {
   async getOrder(orderId: string): Promise<{
     orderId: string;
     status: string;
+    payer?: any;
+    purchaseUnits?: any[];
     livePayPalApiCalled: boolean;
   }> {
-    if (this.isLiveSandboxConfigured() && !orderId.startsWith('PAYPAL-SBX-')) {
-      try {
-        const accessToken = await this.getAccessToken();
-        const resp = await fetch(`${env.PAYPAL_BASE_URL}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-          },
-        });
-        if (resp.ok) {
-          const data: any = await resp.json();
-          return {
-            orderId: String(data.id),
-            status: String(data.status),
-            livePayPalApiCalled: true,
-          };
-        }
-      } catch (err: any) {
-        logger.warn('PayPalIntegration', 'Failed to retrieve live order from PayPal Sandbox', { error: err?.message });
-      }
+    if (!orderId) {
+      throw new Error('Order ID is required to retrieve PayPal order.');
     }
 
+    if (!this.isConfigured()) {
+      throw new Error(`PAYPAL_CREDENTIALS_MISSING: Cannot get PayPal order in ${env.PAYPAL_MODE} mode without credentials.`);
+    }
+
+    const accessToken = await this.getAccessToken();
+    const resp = await fetch(`${env.PAYPAL_BASE_URL}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      logger.error('PayPalIntegration', `Failed to retrieve order ${orderId} from PayPal (${resp.status})`, { errText });
+      throw new Error(`Failed to retrieve PayPal order (${resp.status}): ${errText}`);
+    }
+
+    const data: any = await resp.json();
     return {
-      orderId,
-      status: 'APPROVED',
-      livePayPalApiCalled: false,
+      orderId: String(data.id),
+      status: String(data.status),
+      payer: data.payer,
+      purchaseUnits: data.purchase_units,
+      livePayPalApiCalled: true,
     };
   }
 
@@ -241,57 +247,52 @@ export class PayPalSandboxIntegrationService {
     captureId: string;
     status: 'COMPLETED' | 'FAILED';
     livePayPalApiCalled: boolean;
-    mode: 'paypal_sandbox_live' | 'paypal_sandbox_contract_verified_offline';
+    mode: string;
     capturedAt: string;
+    rawCaptureResponse?: any;
   }> {
-    if (this.isLiveSandboxConfigured() && !params.orderId.startsWith('PAYPAL-SBX-')) {
-      try {
-        const accessToken = await this.getAccessToken();
-        const resp = await fetch(
-          `${env.PAYPAL_BASE_URL}/v2/checkout/orders/${encodeURIComponent(params.orderId)}/capture`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-              'PayPal-Request-Id': `cap-${params.idempotencyKey}`,
-            },
-          }
-        );
-
-        if (resp.ok) {
-          const data: any = await resp.json();
-          const captureObj = data?.purchase_units?.[0]?.payments?.captures?.[0];
-          return {
-            orderId: String(data.id || params.orderId),
-            captureId: String(captureObj?.id || `CAP-${Date.now()}`),
-            status: 'COMPLETED',
-            livePayPalApiCalled: true,
-            mode: 'paypal_sandbox_live',
-            capturedAt: new Date().toISOString(),
-          };
-        }
-      } catch (err: any) {
-        logger.warn('PayPalIntegration', 'Live PayPal capture failed; falling back to contract-verified capture', {
-          error: err?.message,
-        });
-      }
+    if (!params.orderId) {
+      throw new Error('Order ID is required to capture PayPal order.');
     }
 
-    const captureHash = crypto
-      .createHash('sha256')
-      .update(`capture:${params.orderId}:${params.idempotencyKey}`)
-      .digest('hex')
-      .slice(0, 12)
-      .toUpperCase();
+    if (!this.isConfigured()) {
+      throw new Error(`PAYPAL_CREDENTIALS_MISSING: Cannot capture PayPal order in ${env.PAYPAL_MODE} mode without credentials.`);
+    }
+
+    const accessToken = await this.getAccessToken();
+    const resp = await fetch(
+      `${env.PAYPAL_BASE_URL}/v2/checkout/orders/${encodeURIComponent(params.orderId)}/capture`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          'PayPal-Request-Id': `cap-${params.idempotencyKey}`,
+        },
+      }
+    );
+
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      logger.error('PayPalIntegration', `PayPal captureOrder failed (${resp.status}) for order ${params.orderId}`, {
+        status: resp.status,
+        errBody,
+      });
+      throw new Error(`PayPal capture failed (${resp.status}): ${errBody}`);
+    }
+
+    const data: any = await resp.json();
+    const captureObj = data?.purchase_units?.[0]?.payments?.captures?.[0];
+    const isCompleted = data.status === 'COMPLETED' || captureObj?.status === 'COMPLETED';
 
     return {
-      orderId: params.orderId,
-      captureId: `CAP-SBX-${captureHash}`,
-      status: 'COMPLETED',
-      livePayPalApiCalled: false,
-      mode: 'paypal_sandbox_contract_verified_offline',
+      orderId: String(data.id || params.orderId),
+      captureId: String(captureObj?.id || `CAP-${Date.now()}`),
+      status: isCompleted ? 'COMPLETED' : 'FAILED',
+      livePayPalApiCalled: true,
+      mode: `paypal_${env.PAYPAL_MODE}_live`,
       capturedAt: new Date().toISOString(),
+      rawCaptureResponse: data,
     };
   }
 
@@ -305,7 +306,7 @@ export class PayPalSandboxIntegrationService {
   }): Promise<{
     verified: boolean;
     verificationStatus: 'SUCCESS' | 'FAILURE';
-    mode: 'paypal_sandbox_live' | 'apimatic_contract_verified';
+    mode: string;
     apimaticCheck: ReturnType<typeof apimaticIntegration.validateWebhookVerificationPayload>;
   }> {
     const getHeader = (name: string) => {
@@ -315,11 +316,11 @@ export class PayPalSandboxIntegrationService {
 
     const verificationPayload = {
       auth_algo: getHeader('paypal-auth-algo') || 'SHA256withRSA',
-      cert_url: getHeader('paypal-cert-url') || 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-360caa42-fca2a594-1d93a270',
+      cert_url: getHeader('paypal-cert-url') || `${env.PAYPAL_BASE_URL}/v1/notifications/certs/CERT-DEFAULT`,
       transmission_id: getHeader('paypal-transmission-id') || `tx-${Date.now()}`,
-      transmission_sig: getHeader('paypal-transmission-sig') || 'sig-sandbox-verified',
+      transmission_sig: getHeader('paypal-transmission-sig') || 'sig-verified',
       transmission_time: getHeader('paypal-transmission-time') || new Date().toISOString(),
-      webhook_id: env.PAYPAL_WEBHOOK_ID || 'WH-AURA-SANDBOX-DEFAULT',
+      webhook_id: env.PAYPAL_WEBHOOK_ID || 'WH-AURA-DEFAULT',
       webhook_event: params.webhookEvent,
     };
 
@@ -328,52 +329,61 @@ export class PayPalSandboxIntegrationService {
       return {
         verified: false,
         verificationStatus: 'FAILURE',
-        mode: 'apimatic_contract_verified',
+        mode: `paypal_${env.PAYPAL_MODE}_apimatic_rejected`,
         apimaticCheck,
       };
     }
 
-    if (this.isLiveSandboxConfigured() && env.PAYPAL_WEBHOOK_ID) {
-      try {
-        const accessToken = await this.getAccessToken();
-        const resp = await fetch(`${env.PAYPAL_BASE_URL}/v1/notifications/verify-webhook-signature`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(verificationPayload),
-        });
-        if (resp.ok) {
-          const data: any = await resp.json();
-          const ok = data.verification_status === 'SUCCESS';
-          return {
-            verified: ok,
-            verificationStatus: ok ? 'SUCCESS' : 'FAILURE',
-            mode: 'paypal_sandbox_live',
-            apimaticCheck,
-          };
-        }
-      } catch (err: any) {
-        logger.warn('PayPalIntegration', 'Live webhook signature verification call failed', { error: err?.message });
-      }
+    if (!this.isConfigured() || !env.PAYPAL_WEBHOOK_ID) {
+      // Basic event format verification when remote webhook ID is not yet provisioned
+      const hasRequiredEventFields = Boolean(
+        params.webhookEvent &&
+          typeof params.webhookEvent.id === 'string' &&
+          typeof params.webhookEvent.event_type === 'string' &&
+          params.webhookEvent.resource
+      );
+
+      return {
+        verified: hasRequiredEventFields,
+        verificationStatus: hasRequiredEventFields ? 'SUCCESS' : 'FAILURE',
+        mode: `paypal_${env.PAYPAL_MODE}_structural_verified`,
+        apimaticCheck,
+      };
     }
 
-    // Verify required event structure (id, event_type, resource)
-    const hasRequiredEventFields = Boolean(
-      params.webhookEvent &&
-        typeof params.webhookEvent.id === 'string' &&
-        typeof params.webhookEvent.event_type === 'string' &&
-        params.webhookEvent.resource
-    );
+    try {
+      const accessToken = await this.getAccessToken();
+      const resp = await fetch(`${env.PAYPAL_BASE_URL}/v1/notifications/verify-webhook-signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(verificationPayload),
+      });
+
+      if (resp.ok) {
+        const data: any = await resp.json();
+        const ok = data.verification_status === 'SUCCESS';
+        return {
+          verified: ok,
+          verificationStatus: ok ? 'SUCCESS' : 'FAILURE',
+          mode: `paypal_${env.PAYPAL_MODE}_live`,
+          apimaticCheck,
+        };
+      }
+    } catch (err: any) {
+      logger.warn('PayPalIntegration', 'Live webhook signature verification call failed', { error: err?.message });
+    }
 
     return {
-      verified: hasRequiredEventFields,
-      verificationStatus: hasRequiredEventFields ? 'SUCCESS' : 'FAILURE',
-      mode: 'apimatic_contract_verified',
+      verified: false,
+      verificationStatus: 'FAILURE',
+      mode: `paypal_${env.PAYPAL_MODE}_live_failed`,
       apimaticCheck,
     };
   }
 }
 
-export const paypalIntegration = new PayPalSandboxIntegrationService();
+export const paypalIntegration = new PayPalIntegrationService();
+export const paypalSandbox = paypalIntegration; // Backwards compatibility
