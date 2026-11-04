@@ -111,6 +111,33 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
     }
   };
 
+  // 1. Available to spend calculation
+  const discretionaryRemaining = Math.max(
+    0,
+    data?.activePlan?.totalDiscretionaryBudget || user?.financialPolicy?.discretionaryMonthlyCap || 18000
+  );
+
+  // 2. Upcoming commitments calculation
+  const upcomingMandates = (data?.mandates || []).filter((m: any) => m.category !== 'Salary').slice(0, 3);
+  const upcomingTotal = (data?.mandates || [])
+    .filter((m: any) => m.category !== 'Salary')
+    .reduce((s: number, m: any) => s + (m.amount || 0), 0);
+
+  // 3. Savings progress calculation
+  const totalGoalTarget = (data?.goals || []).reduce((s: number, g: any) => s + (g.targetAmount || 0), 0);
+  const totalGoalSaved = (data?.goals || []).reduce((s: number, g: any) => s + (g.currentAmount || 0), 0);
+  const goalProgressPercent = totalGoalTarget > 0 ? Math.round((totalGoalSaved / totalGoalTarget) * 100) : 0;
+
+  // 4. Synthesize natural briefing statement
+  const fullBriefingStatement =
+    data?.activePlan?.aiSummary ||
+    `You are on track with your monthly savings target (${data?.metrics?.savingsRatePercent ?? 25}% savings rate). You have ${data?.mandates?.length ?? 0} confirmed recurring commitments scheduled this month totalling ${formatMoney(
+      upcomingTotal
+    )}, with essential housing and utility allocations safely ringfenced.`;
+
+  // Typing text reveal animation (Always called unconditionally at top of component!)
+  const typedBriefing = useTypingEffect(data ? fullBriefingStatement : '', 14);
+
   if (loading || !data) {
     return (
       <div className="p-16 text-center text-sm text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center gap-3">
@@ -121,33 +148,6 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
   }
 
   const { metrics, accounts, mandates, goals, activePlan, recentTransactions } = data;
-
-  // 1. Available to spend calculation
-  const discretionaryRemaining = Math.max(
-    0,
-    activePlan?.totalDiscretionaryBudget || user?.financialPolicy?.discretionaryMonthlyCap || 18000
-  );
-
-  // 2. Upcoming commitments calculation
-  const upcomingMandates = (mandates || []).filter((m: any) => m.category !== 'Salary').slice(0, 3);
-  const upcomingTotal = (mandates || [])
-    .filter((m: any) => m.category !== 'Salary')
-    .reduce((s: number, m: any) => s + (m.amount || 0), 0);
-
-  // 3. Savings progress calculation
-  const totalGoalTarget = (goals || []).reduce((s: number, g: any) => s + (g.targetAmount || 0), 0);
-  const totalGoalSaved = (goals || []).reduce((s: number, g: any) => s + (g.currentAmount || 0), 0);
-  const goalProgressPercent = totalGoalTarget > 0 ? Math.round((totalGoalSaved / totalGoalTarget) * 100) : 0;
-
-  // 4. Synthesize natural briefing statement
-  const fullBriefingStatement =
-    activePlan?.aiSummary ||
-    `You are on track with your monthly savings target (${metrics.savingsRatePercent}% savings rate). You have ${mandates.length} confirmed recurring commitments scheduled this month totalling ${formatMoney(
-      upcomingTotal
-    )}, with essential housing and utility allocations safely ringfenced.`;
-
-  // Typing text reveal animation
-  const typedBriefing = useTypingEffect(fullBriefingStatement, 14);
 
   // 5. Build "Needs Attention" items based on real verified state
   const attentionItems = [];
