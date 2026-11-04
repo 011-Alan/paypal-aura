@@ -4,6 +4,7 @@ import { app } from '../index';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import { ensureDemoUserAlexSeeded, DEMO_ALEX_CREDENTIALS } from '../seed/seedService';
 import { astropodsIntegration, AuraAgentId } from '../integrations/astropods';
+import { aiOrchestratorService } from '../services/planning/aiOrchestratorService';
 
 function createMockAstropodsPod(port: number, agentId: AuraAgentId): Promise<http.Server> {
   const pendingStreams = new Map<string, http.ServerResponse>();
@@ -161,6 +162,186 @@ async function runSuite() {
     } catch {
       // Ignore if cannot bind
     }
+  }
+
+  if (!aiOrchestratorService.isGeminiConfigured) {
+    aiOrchestratorService.setGeminiClientForTesting({
+      models: {
+        generateContent: async (params: any) => {
+          const contents = params.contents || [];
+          const lastMsg = contents[contents.length - 1];
+          const parts = lastMsg?.parts || [];
+
+          if (parts[0]?.functionResponse) {
+            const fr = parts[0].functionResponse;
+            const toolName = fr.name;
+            const data = fr.response?.data || {};
+
+            if (toolName === 'analyseAffordability') {
+              return {
+                text: `You currently have ₹${data.discretionaryRemaining?.toLocaleString('en-IN') || '18,000'} in remaining discretionary funds (budget) this month. For ${data.queryTerm || 'your purchase'}, the affordability guidance is ${data.guidance || 'Affordable if planned'}.`,
+                candidates: [{ content: { parts: [{ text: 'Affordability guidance calculated' }] } }],
+              };
+            }
+            if (toolName === 'createOrUpdateSavingsGoal') {
+              return {
+                text: `I have updated your savings goal target: ₹${data.targetAmount?.toLocaleString('en-IN') || '30,000'} over ${data.durationMonths || 6} months. Your planned monthly contribution is now ₹${data.monthlyContribution?.toLocaleString('en-IN') || '5,000'}/month.`,
+                candidates: [{ content: { parts: [{ text: 'Goal updated' }] } }],
+              };
+            }
+            if (toolName === 'preparePayment') {
+              return {
+                text: `I have prepared a payment of ₹${data.amountInr?.toLocaleString('en-IN') || '5,000'} to "${data.recipientName || 'Rahul'}". AURA never moves funds automatically. Please review and enter your PIN on the Payments screen.`,
+                candidates: [{ content: { parts: [{ text: 'Payment prepared' }] } }],
+              };
+            }
+            return {
+              text: `Processed ${toolName} successfully.`,
+              candidates: [{ content: { parts: [{ text: 'Done' }] } }],
+            };
+          }
+
+          const userPrompt = lastMsg?.parts?.[0]?.text || '';
+          const pLower = userPrompt.toLowerCase();
+
+          if (pLower.includes('can i afford a laptop') || pLower.includes('laptop for ₹55,000')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_affordability_laptop',
+                  name: 'analyseAffordability',
+                  args: { productName: 'laptop', priceInr: 55000 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'analyseAffordability' } }] } }],
+            };
+          }
+
+          if (pLower.includes('quantum computing')) {
+            return {
+              text: 'Quantum computing utilizes qubits, superposition, and entanglement to process computational problems exponentially faster than classical computers.',
+              candidates: [{ content: { parts: [{ text: 'Quantum computing explanation' }] } }],
+            };
+          }
+
+          if (pLower.includes('save ₹30,000') || pLower.includes('save 30000')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_goal_create',
+                  name: 'createOrUpdateSavingsGoal',
+                  args: { targetAmount: 30000, durationMonths: 12 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'createOrUpdateSavingsGoal' } }] } }],
+            };
+          }
+
+          if (pLower.includes('six months') || pLower.includes('6 months')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_goal_update',
+                  name: 'createOrUpdateSavingsGoal',
+                  args: { targetAmount: 30000, durationMonths: 6 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'createOrUpdateSavingsGoal' } }] } }],
+            };
+          }
+
+          if (pLower.includes('settings')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_nav_settings',
+                  name: 'navigateApplication',
+                  args: { targetTab: 'settings' },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'navigateApplication' } }] } }],
+            };
+          }
+
+          if (pLower.includes('balance') || pLower.includes('accounts')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_summary',
+                  name: 'getFinancialSummary',
+                  args: {},
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'getFinancialSummary' } }] } }],
+            };
+          }
+
+          if (pLower.includes('currency') || pLower.includes('inr')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_currency',
+                  name: 'updateCurrencyPreference',
+                  args: { currencyCode: 'INR' },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'updateCurrencyPreference' } }] } }],
+            };
+          }
+
+          if (pLower.includes('electricity') || pLower.includes('remind me')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_reminder',
+                  name: 'createReminder',
+                  args: { title: 'Electricity Bill', dueDayOfMonth: 10 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'createReminder' } }] } }],
+            };
+          }
+
+          if (pLower.includes('sneakers')) {
+            return {
+              text: "I'd love to help you find the right sneakers! Are you looking for running, casual or everyday wear sneakers?",
+              candidates: [{ content: { parts: [{ text: 'Sneakers clarification' }] } }],
+            };
+          }
+
+          if (pLower.includes('running shoes') || pLower.includes('running')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_running_shoes',
+                  name: 'analyseAffordability',
+                  args: { productName: 'running shoes', priceInr: 11999 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'analyseAffordability' } }] } }],
+            };
+          }
+
+          if (pLower.includes('rahul') || pLower.includes('pay')) {
+            return {
+              functionCalls: [
+                {
+                  id: 'call_pay_rahul',
+                  name: 'preparePayment',
+                  args: { recipientName: 'Rahul', amountInr: 5000 },
+                },
+              ],
+              candidates: [{ content: { parts: [{ functionCall: { name: 'preparePayment' } }] } }],
+            };
+          }
+
+          return {
+            text: `Here is information regarding "${userPrompt}". How else can I assist you?`,
+            candidates: [{ content: { parts: [{ text: 'Response' }] } }],
+          };
+        },
+      },
+    } as any);
   }
 
   const server = app.listen(0);

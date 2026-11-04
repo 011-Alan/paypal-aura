@@ -76,17 +76,36 @@ function sanitizeUser(u: any) {
 apiRouter.get('/health', async (_req: Request, res: Response) => {
   const dbHealth = getDatabaseHealth();
   const elasticStatus = await elasticIntegration.getHealthStatus();
+  const geminiStatus = auraAiOrchestrator.getHealthStatus();
   res.json({
     success: true,
     service: 'PROJECT AURA Backend API',
     status: dbHealth.status === 'healthy' ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     database: dbHealth,
+    gemini: geminiStatus,
     elastic: {
       status: elasticStatus.status,
       clusterReachable: elasticStatus.clusterReachable,
     },
   });
+});
+
+apiRouter.get('/ai/health', async (req: Request, res: Response) => {
+  try {
+    const force = req.query.force === 'true';
+    if (force) {
+      await auraAiOrchestrator.verifyConnectivity(true);
+    }
+    const health = auraAiOrchestrator.getHealthStatus();
+    res.json({
+      success: true,
+      gemini: health,
+      recentTraces: auraAiOrchestrator.getRecentTraces(5),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
 });
 
 // ============================================================================
@@ -1345,15 +1364,7 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       content: m.content,
     }));
 
-    // Process through AURA AI Orchestrator
-    const aiResult = await auraAiOrchestrator.processConversationalQuery({
-      userId: req.userId!,
-      prompt: content,
-      conversationHistory,
-      includeKernelResearch: Boolean(includeKernelResearch),
-    });
-
-    // Save user message
+    // 1. Save user message first so it is preserved even if Gemini is unavailable
     const userMsg = await MessageModel.create({
       conversationId: conversation._id,
       userId,
@@ -1361,12 +1372,21 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       content,
     });
 
-    // Save assistant message
+    // 2. Process through AURA Gemini Orchestrator
+    const aiResult = await auraAiOrchestrator.processConversationalQuery({
+      userId: req.userId!,
+      prompt: content,
+      conversationHistory,
+      includeKernelResearch: Boolean(includeKernelResearch),
+      conversationId: String(conversation._id),
+    });
+
+    // 3. Save assistant message (preserving error notice if service unavailable)
     const assistantMsg = await MessageModel.create({
       conversationId: conversation._id,
       userId,
       role: 'assistant',
-      content: aiResult.explanation || aiResult.answer,
+      content: aiResult.explanation || aiResult.answer || (aiResult.serviceUnavailable ? aiResult.error : ''),
       toolAction: aiResult.toolAction,
       suggestedNextPrompts: aiResult.suggestedNextPrompts || [],
     });
@@ -1380,13 +1400,17 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
     await conversation.save();
 
     res.json({
-      success: true,
+      success: !aiResult.serviceUnavailable,
       conversation,
       userMessage: userMsg,
       assistantMessage: assistantMsg,
       toolAction: aiResult.toolAction,
       suggestedNextPrompts: aiResult.suggestedNextPrompts,
       purchaseCompanion: aiResult.purchaseCompanion,
+      serviceUnavailable: Boolean(aiResult.serviceUnavailable),
+      error: aiResult.error,
+      canRetry: aiResult.canRetry,
+      observability: aiResult.observability,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
@@ -1497,7 +1521,11 @@ apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Re
       prompt,
       includeKernelResearch: Boolean(includeKernelResearch),
     });
-    res.json({ success: true, ...response });
+    if (response.serviceUnavailable) {
+      res.status(503).json(response);
+      return;
+    }
+    res.json(response);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
   }
