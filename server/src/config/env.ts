@@ -22,10 +22,19 @@ export const env = {
   APPROVAL_TOKEN_TTL_SECONDS: parseInt(process.env.APPROVAL_TOKEN_TTL_SECONDS || '300', 10),
   CSRF_SECRET: process.env.CSRF_SECRET || 'aura-csrf-token-secret-2026',
 
-  // Google Gemini AI
+  // Google Gemini AI Multi-Model Architecture
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-  GEMINI_RPM_LIMIT: parseInt(process.env.GEMINI_RPM_LIMIT || '3', 10),
+  GEMINI_PRIMARY_MODEL: process.env.GEMINI_PRIMARY_MODEL || process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+  GEMINI_LIGHTWEIGHT_MODEL: process.env.GEMINI_LIGHTWEIGHT_MODEL || 'gemini-3.1-flash-lite',
+  GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2',
+  GEMINI_MODEL: process.env.GEMINI_PRIMARY_MODEL || process.env.GEMINI_MODEL || 'gemini-3.8-flash', // Backwards compatibility
+
+  // Per-Model Application Rate Limits (Conservative Free-Tier Starting Limits)
+  GEMINI_PRIMARY_RPM_LIMIT: parseInt(process.env.GEMINI_PRIMARY_RPM_LIMIT || process.env.GEMINI_RPM_LIMIT || '3', 10),
+  GEMINI_LIGHTWEIGHT_RPM_LIMIT: parseInt(process.env.GEMINI_LIGHTWEIGHT_RPM_LIMIT || '10', 10),
+  GEMINI_EMBEDDING_RPM_LIMIT: parseInt(process.env.GEMINI_EMBEDDING_RPM_LIMIT || '80', 10),
+  GEMINI_RPM_LIMIT: parseInt(process.env.GEMINI_PRIMARY_RPM_LIMIT || process.env.GEMINI_RPM_LIMIT || '3', 10), // Backwards compatibility
+
   GEMINI_QUEUE_TIMEOUT_MS: parseInt(process.env.GEMINI_QUEUE_TIMEOUT_MS || '45000', 10),
   GEMINI_MAX_HISTORY_TURNS: parseInt(process.env.GEMINI_MAX_HISTORY_TURNS || '6', 10),
   GEMINI_ENABLE_SAFE_CACHE: process.env.GEMINI_ENABLE_SAFE_CACHE !== 'false',

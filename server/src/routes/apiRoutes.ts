@@ -39,6 +39,9 @@ import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
 import { geminiRequestManager } from '../services/planning/geminiRequestManager';
+import { GEMINI_MODEL_REGISTRY, validateModelAvailability } from '../services/planning/modelConfig';
+import { lightweightProcessingService } from '../services/ai/lightweightProcessingService';
+import { semanticRetrievalService } from '../services/ai/semanticRetrievalService';
 import { agGridIntegration } from '../integrations/ag-grid';
 import { apimaticIntegration } from '../integrations/apimatic';
 import { astropodsIntegration } from '../integrations/astropods';
@@ -115,6 +118,95 @@ apiRouter.get('/ai/metrics', async (_req: Request, res: Response) => {
     metrics: geminiRequestManager.getMetrics(),
     timestamp: new Date().toISOString(),
   });
+});
+
+apiRouter.get('/ai/models', async (_req: Request, res: Response) => {
+  try {
+    const diagnostics = await validateModelAvailability((auraAiOrchestrator as any).geminiClient);
+    res.json({
+      success: true,
+      models: GEMINI_MODEL_REGISTRY,
+      diagnostics,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ai/categorize-transaction', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { description, amount, currency } = req.body || {};
+    if (!description) {
+      res.status(400).json({ success: false, error: 'Transaction description is required.' });
+      return;
+    }
+
+    const result = await lightweightProcessingService.categorizeTransaction({
+      description: String(description),
+      amount: amount !== undefined ? Number(amount) : undefined,
+      currency: currency ? String(currency) : 'INR',
+    });
+
+    res.json({
+      success: true,
+      modelUsed: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+      result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Categorization failed' });
+  }
+});
+
+apiRouter.post('/ai/extract-entities', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { text } = req.body || {};
+    if (!text) {
+      res.status(400).json({ success: false, error: 'Text is required for entity extraction.' });
+      return;
+    }
+
+    const result = await lightweightProcessingService.extractStructuredEntities({
+      text: String(text),
+    });
+
+    res.json({
+      success: true,
+      modelUsed: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+      result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Entity extraction failed' });
+  }
+});
+
+apiRouter.get('/ai/semantic-search', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const query = String(req.query.q || '').trim();
+    if (!query) {
+      res.status(400).json({ success: false, error: 'Query parameter "q" is required.' });
+      return;
+    }
+
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 5;
+    const sourceType = req.query.sourceType ? String(req.query.sourceType) as any : undefined;
+
+    const results = await semanticRetrievalService.semanticSearch({
+      userId: req.user!.id,
+      query,
+      sourceType,
+      limit,
+    });
+
+    res.json({
+      success: true,
+      query,
+      results,
+      count: results.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Semantic search failed' });
+  }
 });
 
 // ============================================================================

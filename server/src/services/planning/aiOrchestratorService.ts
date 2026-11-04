@@ -22,6 +22,10 @@ import { coreFinancialService } from '../financial/financialService';
 import { paymentGuardianService } from '../payments/paymentGuardianService';
 import { pythonAnalyticsService } from '../analytics/analyticsService';
 import { geminiRequestManager } from './geminiRequestManager';
+import { modelRouter, ModelTaskType } from './modelRouter';
+import { GEMINI_MODEL_REGISTRY, validateModelAvailability, ModelDiagnosticResult } from './modelConfig';
+import { semanticRetrievalService } from '../ai/semanticRetrievalService';
+import { lightweightProcessingService } from '../ai/lightweightProcessingService';
 
 export interface AiToolAction {
   type:
@@ -76,6 +80,9 @@ export interface AiObservabilityTrace {
   geminiCallsMade?: number;
   cached?: boolean;
   queueWaitTimeMs?: number;
+  fallbackOccurred?: boolean;
+  originalModel?: string;
+  modelRole?: 'primary' | 'lightweight';
   errorDetails?: string;
   timestamp: string;
 }
@@ -87,6 +94,8 @@ export interface ProcessConversationalQueryResult {
   error?: string;
   canRetry?: boolean;
   retryAfterSeconds?: number | null;
+  modelUsed?: string;
+  fallbackOccurred?: boolean;
   prompt: string;
   workflowType: string;
   explanation: string;
@@ -477,9 +486,14 @@ export class AuraAiOrchestratorService {
   private lastConnectivityError: string | null = null;
   private recentTraces: AiObservabilityTrace[] = [];
   private customSleepFn: ((ms: number) => Promise<void>) | null = null;
+  private fallbackEnabled: boolean = true;
 
   constructor() {
     this.initGeminiClient();
+  }
+
+  public setFallbackEnabledForTesting(enabled: boolean) {
+    this.fallbackEnabled = enabled;
   }
 
   public setSleepFnForTesting(fn: ((ms: number) => Promise<void>) | null) {
@@ -491,8 +505,12 @@ export class AuraAiOrchestratorService {
     if (key && key !== 'your_gemini_api_key_here' && key.trim().length > 0) {
       try {
         this.geminiClient = new GoogleGenAI({ apiKey: key.trim() });
-        logger.info('AuraAiOrchestrator', 'Initialized official GoogleGenAI SDK', {
-          model: env.GEMINI_MODEL,
+        semanticRetrievalService.setGeminiClient(this.geminiClient);
+        lightweightProcessingService.setGeminiClient(this.geminiClient);
+        logger.info('AuraAiOrchestrator', 'Initialized official GoogleGenAI SDK with Multi-Model Architecture', {
+          primaryModel: GEMINI_MODEL_REGISTRY.primary.modelId,
+          lightweightModel: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+          embeddingModel: GEMINI_MODEL_REGISTRY.embedding.modelId,
         });
       } catch (err: any) {
         logger.warn('AuraAiOrchestrator', 'Could not initialize GoogleGenAI SDK', {
@@ -507,6 +525,8 @@ export class AuraAiOrchestratorService {
 
   public setGeminiClientForTesting(client: any) {
     this.geminiClient = client;
+    semanticRetrievalService.setGeminiClient(client);
+    lightweightProcessingService.setGeminiClient(client);
     this.lastConnectivitySuccess = Boolean(client);
     this.lastConnectivityError = null;
     this.lastConnectivityCheckAt = Date.now();
@@ -547,10 +567,28 @@ export class AuraAiOrchestratorService {
    * Never retries non-transient / permanent errors (400, 401, 403, 404, daily quota).
    */
   public async callGeminiWithRetry(
-    operationName: string,
-    requestId: string,
-    params: any
+    modelRoleOrOpName: 'primary' | 'lightweight' | string,
+    operationNameOrReqId: string,
+    requestIdOrParams: any,
+    maybeParams?: any
   ): Promise<{ response: any; retriesAttempted: number }> {
+    let modelRole: 'primary' | 'lightweight' = 'primary';
+    let operationName: string;
+    let requestId: string;
+    let params: any;
+
+    if (modelRoleOrOpName === 'primary' || modelRoleOrOpName === 'lightweight') {
+      modelRole = modelRoleOrOpName;
+      operationName = operationNameOrReqId;
+      requestId = requestIdOrParams as string;
+      params = maybeParams;
+    } else {
+      modelRole = 'primary';
+      operationName = modelRoleOrOpName;
+      requestId = operationNameOrReqId;
+      params = requestIdOrParams;
+    }
+
     const maxRetries = 4;
     const sleep = this.customSleepFn || ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 
@@ -560,14 +598,16 @@ export class AuraAiOrchestratorService {
     while (attempt <= maxRetries) {
       try {
         if (attempt > 0) {
-          logger.info('AuraAiOrchestrator', `Executing Gemini API retry attempt ${attempt}/${maxRetries} for ${operationName}`, {
+          logger.info('AuraAiOrchestrator', `Executing Gemini API retry attempt ${attempt}/${maxRetries} for ${operationName} (${modelRole})`, {
             requestId,
             attempt,
             maxRetries,
+            modelRole,
           });
         }
 
         const response = await geminiRequestManager.scheduleGeminiCall(
+          modelRole,
           operationName,
           requestId,
           () => this.geminiClient!.models.generateContent(params)
@@ -677,6 +717,11 @@ export class AuraAiOrchestratorService {
       service: `AURA Conversational Intelligence (Google Gemini ${env.GEMINI_MODEL})`,
       isConfigured,
       model: env.GEMINI_MODEL,
+      multiModel: {
+        primary: GEMINI_MODEL_REGISTRY.primary,
+        lightweight: GEMINI_MODEL_REGISTRY.lightweight,
+        embedding: GEMINI_MODEL_REGISTRY.embedding,
+      },
       sdkInitialized,
       functionCallingAvailable: sdkInitialized,
       lastConnectivityCheck: this.lastConnectivityCheckAt ? new Date(this.lastConnectivityCheckAt).toISOString() : null,
@@ -839,6 +884,19 @@ export class AuraAiOrchestratorService {
         geminiRequestManager.setCachedResponse(prompt, result);
       }
 
+      // Asynchronously index interaction into semantic vector store for contextual retrieval
+      if (result.success && result.workflowType !== 'service_unavailable') {
+        semanticRetrievalService.indexContent({
+          userId: params.userId,
+          sourceType: 'chat_message',
+          sourceId: `msg-${conversationId}-${Date.now()}`,
+          text: `User: ${prompt} | AURA: ${result.answer || result.explanation}`,
+          metadata: { conversationId, workflowType: result.workflowType },
+        }).catch((err) => {
+          logger.debug('AuraAiOrchestrator', 'Failed to index message for semantic retrieval', { error: err?.message });
+        });
+      }
+
       return result;
     });
   }
@@ -879,25 +937,78 @@ Preferred Currency: ${user.currency || 'INR'}`;
 
     const contents = [...formattedHistory, { role: 'user', parts: [{ text: prompt }] }];
 
-    try {
-      logger.info('AuraAiOrchestrator', 'Dispatching request to Google Gemini API', {
-        requestId,
-        model: env.GEMINI_MODEL,
-        historyTurns: history.length,
-      });
+    let activeModel = GEMINI_MODEL_REGISTRY.primary.modelId;
+    let fallbackOccurred = false;
+    let response: any = null;
+    let retriesAttempted = 0;
 
-      const { response, retriesAttempted } = await this.callGeminiWithRetry(
-        'initial_conversational_turn',
-        requestId,
-        {
-          model: env.GEMINI_MODEL,
-          contents: contents as any,
-          config: {
-            systemInstruction,
-            tools: [GEMINI_TOOL_DECLARATIONS as any],
-          },
+    try {
+      try {
+        logger.info('AuraAiOrchestrator', 'Dispatching request to Primary Google Gemini model', {
+          requestId,
+          model: GEMINI_MODEL_REGISTRY.primary.modelId,
+          historyTurns: history.length,
+        });
+
+        const initialRes = await this.callGeminiWithRetry(
+          'primary',
+          'initial_conversational_turn',
+          requestId,
+          {
+            model: GEMINI_MODEL_REGISTRY.primary.modelId,
+            contents: contents as any,
+            config: {
+              systemInstruction,
+              tools: [GEMINI_TOOL_DECLARATIONS as any],
+            },
+          }
+        );
+        response = initialRes.response;
+        retriesAttempted = initialRes.retriesAttempted;
+      } catch (primaryErr: any) {
+        const transientCheck = isTransientGeminiError(primaryErr);
+        const isPermanent = !transientCheck.retryable;
+        const promptLower = prompt.toLowerCase();
+        const isPaymentTask = promptLower.includes('pay ') || promptLower.includes('send ') || promptLower.includes('transfer ');
+        const taskType: ModelTaskType = isPaymentTask ? 'payment_preparation' : 'conversational_general';
+
+        const canFallback = this.fallbackEnabled && modelRouter.isFallbackPermitted({
+          taskType,
+          isTransientError: transientCheck.retryable,
+          isPermanentError: isPermanent,
+          hasExecutedTools: false,
+        });
+
+        if (canFallback) {
+          logger.warn('AuraAiOrchestrator', `Primary model (${GEMINI_MODEL_REGISTRY.primary.modelId}) failed with transient error (${transientCheck.reason}). Executing controlled fallback to lightweight model (${GEMINI_MODEL_REGISTRY.lightweight.modelId})`, {
+            requestId,
+            primaryRetriesAttempted: (primaryErr as any)?.retriesAttempted || 0,
+            error: this.redactSecrets(primaryErr?.message),
+          });
+
+          geminiRequestManager.recordFallbackTriggered();
+
+          const fallbackRes = await this.callGeminiWithRetry(
+            'lightweight',
+            'lightweight_fallback_conversational_turn',
+            requestId,
+            {
+              model: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+              contents: contents as any,
+              config: {
+                systemInstruction,
+                tools: [GEMINI_TOOL_DECLARATIONS as any],
+              },
+            }
+          );
+          response = fallbackRes.response;
+          retriesAttempted = ((primaryErr as any)?.retriesAttempted || 0) + fallbackRes.retriesAttempted;
+          activeModel = GEMINI_MODEL_REGISTRY.lightweight.modelId;
+          fallbackOccurred = true;
+        } else {
+          throw primaryErr;
         }
-      );
+      }
 
       const apiLatencyMs = Date.now() - t0;
       const candidate = response.candidates?.[0];
@@ -912,7 +1023,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
           requestId,
           conversationId,
           userId: ctx.userId,
-          model: env.GEMINI_MODEL,
+          model: activeModel,
           apiStatus: 'succeeded',
           apiLatencyMs,
           toolCallsRequested: [],
@@ -922,6 +1033,9 @@ Preferred Currency: ${user.currency || 'INR'}`;
           retriesAttempted,
           geminiCallsMade: 1,
           cached: false,
+          fallbackOccurred,
+          originalModel: fallbackOccurred ? GEMINI_MODEL_REGISTRY.primary.modelId : undefined,
+          modelRole: fallbackOccurred ? 'lightweight' : 'primary',
           timestamp: new Date().toISOString(),
         };
         this.recordTrace(trace);
@@ -938,6 +1052,8 @@ Preferred Currency: ${user.currency || 'INR'}`;
           workflowType: 'general_knowledge',
           explanation: text,
           toolAction,
+          modelUsed: activeModel,
+          fallbackOccurred,
           suggestedNextPrompts: [
             'Show me my current balance',
             'What are my upcoming commitments?',
@@ -1012,10 +1128,11 @@ Preferred Currency: ${user.currency || 'INR'}`;
       if (needsFollowUpCall) {
         try {
           const { response: followUpResp, retriesAttempted: fr } = await this.callGeminiWithRetry(
+            fallbackOccurred ? 'lightweight' : 'primary',
             'follow_up_tool_synthesis',
             requestId,
             {
-              model: env.GEMINI_MODEL,
+              model: activeModel,
               contents: followUpContents as any,
               config: { systemInstruction },
             }
@@ -1047,7 +1164,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         requestId,
         conversationId,
         userId: ctx.userId,
-        model: env.GEMINI_MODEL,
+        model: activeModel,
         apiStatus: 'succeeded',
         apiLatencyMs: totalLatencyMs,
         toolCallsRequested: requestedTools,
@@ -1057,6 +1174,9 @@ Preferred Currency: ${user.currency || 'INR'}`;
         retriesAttempted: retriesAttempted + followUpRetries,
         geminiCallsMade: needsFollowUpCall ? 2 : 1,
         cached: false,
+        fallbackOccurred,
+        originalModel: fallbackOccurred ? GEMINI_MODEL_REGISTRY.primary.modelId : undefined,
+        modelRole: fallbackOccurred ? 'lightweight' : 'primary',
         timestamp: new Date().toISOString(),
       };
       this.recordTrace(trace);
@@ -1066,6 +1186,8 @@ Preferred Currency: ${user.currency || 'INR'}`;
         workflowType: execution.workflowType,
         explanation: finalAiExplanation,
         toolAction: execution.toolAction,
+        modelUsed: activeModel,
+        fallbackOccurred,
         suggestedNextPrompts: execution.suggestedNextPrompts,
         purchaseCompanion: execution.purchaseCompanion,
         preparedPayment: execution.preparedPayment,
@@ -1858,6 +1980,8 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
     kernelResearch?: any;
     pythonAnalytics?: any;
     observability?: AiObservabilityTrace;
+    modelUsed?: string;
+    fallbackOccurred?: boolean;
   }): ProcessConversationalQueryResult {
     const primaryAgent =
       options.workflowType === 'purchase_evaluation'
@@ -1879,6 +2003,8 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
       answer: options.explanation,
       toolAction: options.toolAction || null,
       suggestedNextPrompts: options.suggestedNextPrompts || [],
+      modelUsed: options.modelUsed || GEMINI_MODEL_REGISTRY.primary.modelId,
+      fallbackOccurred: Boolean(options.fallbackOccurred),
       astropodsOrchestration: {
         workflowId: `astro-wf-${Date.now()}`,
         primaryAgent,

@@ -811,3 +811,45 @@ const MessageSchema = new Schema<IMessage>(
 );
 
 export const MessageModel = mongoose.model<IMessage>('Message', MessageSchema);
+
+// ============================================================================
+// 12. Semantic Embedding Model (Vector Retrieval & Context Search)
+// ============================================================================
+export interface ISemanticEmbedding extends Document {
+  userId: mongoose.Types.ObjectId;
+  sourceType: 'chat_message' | 'transaction' | 'document' | 'financial_note';
+  sourceId: string;
+  textHash: string;
+  text: string;
+  embedding: number[];
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const SemanticEmbeddingSchema = new Schema<ISemanticEmbedding>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    sourceType: {
+      type: String,
+      enum: ['chat_message', 'transaction', 'document', 'financial_note'],
+      required: true,
+      index: true,
+    },
+    sourceId: { type: String, required: true },
+    textHash: { type: String, required: true, index: true },
+    text: { type: String, required: true },
+    embedding: { type: [Number], required: true },
+    metadata: { type: Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: true }
+);
+
+// Compound indexes for fast lookup and user isolation
+SemanticEmbeddingSchema.index({ userId: 1, sourceType: 1, sourceId: 1 }, { unique: true });
+SemanticEmbeddingSchema.index({ userId: 1, textHash: 1 });
+
+export const SemanticEmbeddingModel = mongoose.model<ISemanticEmbedding>(
+  'SemanticEmbedding',
+  SemanticEmbeddingSchema
+);

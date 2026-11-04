@@ -18,6 +18,7 @@ async function runGeminiRetryTests() {
   await connectDatabase();
   await ensureDemoUserAlexSeeded(true);
   geminiRequestManager.setRpmLimitForTesting(1000);
+  auraAiOrchestrator.setFallbackEnabledForTesting(false);
 
   const alex = await UserModel.findOne({ email: DEMO_ALEX_CREDENTIALS.email });
   assert.ok(alex, 'Demo user Alex must be seeded');
