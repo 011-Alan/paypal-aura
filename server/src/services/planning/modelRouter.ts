@@ -18,6 +18,16 @@ export interface ModelRouteDecision {
   reason: string;
 }
 
+export interface FallbackEvaluationParams {
+  taskType: ModelTaskType;
+  isTransientError: boolean;
+  isPermanentError: boolean;
+  hasExecutedTools: boolean;
+  reason?: string;
+  statusCode?: number;
+  requiredCapability?: string;
+}
+
 /**
  * ModelRouter: Central deterministic routing engine for AURA.
  * All Gemini model selections pass through this service.
@@ -93,27 +103,29 @@ export class ModelRouter {
    * Fallback is permitted ONLY when:
    * 1. The task is conversational / general knowledge / non-sensitive financial advisory.
    * 2. The task is NOT payment preparation or financial movement.
-   * 3. The error is transient (HTTP 503, temporary network failure, or HTTP 429).
-   * 4. The error is NOT permanent (invalid API key 401, bad request 400).
+   * 3. The error is transient (HTTP 503, temporary network failure, or HTTP 429) OR model quota exhaustion (daily_quota_exhausted).
+   * 4. The error is NOT permanent to the client/request (invalid API key 401, bad request 400).
    * 5. Backend tools were not already executed.
+   * 6. The alternative model supports the required capabilities.
    */
-  public isFallbackPermitted(params: {
-    taskType: ModelTaskType;
-    isTransientError: boolean;
-    isPermanentError: boolean;
-    hasExecutedTools: boolean;
-  }): boolean {
-    const { taskType, isTransientError, isPermanentError, hasExecutedTools } = params;
+  public isFallbackPermitted(params: FallbackEvaluationParams): boolean {
+    const { taskType, isTransientError, isPermanentError, hasExecutedTools, reason, requiredCapability } = params;
 
-    // Permanent errors (invalid API key, bad format) must fail fast without useless fallback
-    if (isPermanentError) {
-      return false;
-    }
+    const isQuotaExhausted = reason === 'daily_quota_exhausted' || reason === 'quota_exhausted';
 
-    // Payment operations must NEVER fall back
+    // Payment operations must NEVER fall back (strict financial safety)
     if (taskType === 'payment_preparation') {
       logger.warn('ModelRouter', 'Fallback denied: Payment operations cannot fall back to lightweight models');
       return false;
+    }
+
+    // Required capability verification
+    if (requiredCapability) {
+      const lightweightCapabilities = GEMINI_MODEL_REGISTRY.lightweight.supportedCapabilities;
+      if (!lightweightCapabilities.includes(requiredCapability)) {
+        logger.warn('ModelRouter', `Fallback denied: Alternative model does not support required capability "${requiredCapability}"`);
+        return false;
+      }
     }
 
     // If tools were already executed before failure, do not re-execute or risk double execution
@@ -122,8 +134,13 @@ export class ModelRouter {
       return false;
     }
 
-    // Must be a transient error (503, 429, network)
-    if (!isTransientError) {
+    // Truly permanent request/client errors (invalid API key, bad format) must fail fast without useless fallback
+    if (isPermanentError && !isQuotaExhausted) {
+      return false;
+    }
+
+    // Must be either a transient error (503, 5xx, network) or a model quota exhaustion
+    if (!isTransientError && !isQuotaExhausted) {
       return false;
     }
 

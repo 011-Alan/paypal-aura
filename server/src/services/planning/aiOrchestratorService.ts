@@ -414,7 +414,11 @@ export function isTransientGeminiError(err: any): GeminiTransientCheck {
   }
 
   // 4. Permanent failures: Daily / hard quota exhausted
-  if (msg.includes('quota exceeded') && (msg.includes('per day') || msg.includes('daily'))) {
+  if (
+    msg.includes('daily_quota_exhausted') ||
+    msg.includes('quota_exhausted') ||
+    (msg.includes('quota') && (msg.includes('per day') || msg.includes('daily') || msg.includes('requestsperday')))
+  ) {
     return { retryable: false, statusCode: 429, reason: 'daily_quota_exhausted' };
   }
 
@@ -749,6 +753,7 @@ export class AuraAiOrchestratorService {
     conversationHistory?: ConversationTurn[];
     includeKernelResearch?: boolean;
     conversationId?: string;
+    requiredCapability?: string;
   }): Promise<ProcessConversationalQueryResult> {
     const startTime = Date.now();
     const requestId = `gemini-req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -877,6 +882,7 @@ export class AuraAiOrchestratorService {
         conversationId,
         includeKernelResearch: Boolean(params.includeKernelResearch),
         startTime,
+        requiredCapability: params.requiredCapability,
       });
 
       // Cache safe general-knowledge answers (non-personal)
@@ -914,6 +920,7 @@ export class AuraAiOrchestratorService {
     conversationId: string;
     includeKernelResearch: boolean;
     startTime: number;
+    requiredCapability?: string;
   }) {
     const { user, prompt, history, requestId, conversationId, startTime } = ctx;
     const t0 = Date.now();
@@ -944,7 +951,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
 
     try {
       try {
-        logger.info('AuraAiOrchestrator', 'Dispatching request to Primary Google Gemini model', {
+        logger.info('AuraAiOrchestrator', `[GEMINI] Primary model: ${GEMINI_MODEL_REGISTRY.primary.modelId}`, {
           requestId,
           model: GEMINI_MODEL_REGISTRY.primary.modelId,
           historyTurns: history.length,
@@ -968,6 +975,17 @@ Preferred Currency: ${user.currency || 'INR'}`;
       } catch (primaryErr: any) {
         const transientCheck = isTransientGeminiError(primaryErr);
         const isPermanent = !transientCheck.retryable;
+        const statusCode = transientCheck.statusCode || 500;
+        const failureReason = `${statusCode} ${transientCheck.reason}`;
+
+        logger.warn('AuraAiOrchestrator', `[GEMINI] Primary failure: ${failureReason}`, {
+          requestId,
+          primaryRetriesAttempted: (primaryErr as any)?.retriesAttempted || 0,
+          statusCode,
+          reason: transientCheck.reason,
+          error: this.redactSecrets(primaryErr?.message),
+        });
+
         const promptLower = prompt.toLowerCase();
         const isPaymentTask = promptLower.includes('pay ') || promptLower.includes('send ') || promptLower.includes('transfer ');
         const taskType: ModelTaskType = isPaymentTask ? 'payment_preparation' : 'conversational_general';
@@ -977,35 +995,66 @@ Preferred Currency: ${user.currency || 'INR'}`;
           isTransientError: transientCheck.retryable,
           isPermanentError: isPermanent,
           hasExecutedTools: false,
+          reason: transientCheck.reason,
+          statusCode,
+          requiredCapability: ctx.requiredCapability,
         });
 
         if (canFallback) {
-          logger.warn('AuraAiOrchestrator', `Primary model (${GEMINI_MODEL_REGISTRY.primary.modelId}) failed with transient error (${transientCheck.reason}). Executing controlled fallback to lightweight model (${GEMINI_MODEL_REGISTRY.lightweight.modelId})`, {
+          logger.info('AuraAiOrchestrator', '[GEMINI] Initiating fallback', {
             requestId,
-            primaryRetriesAttempted: (primaryErr as any)?.retriesAttempted || 0,
-            error: this.redactSecrets(primaryErr?.message),
+            reason: transientCheck.reason,
+          });
+          logger.info('AuraAiOrchestrator', `[GEMINI] Alternative model: ${GEMINI_MODEL_REGISTRY.lightweight.modelId}`, {
+            requestId,
+            model: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+          });
+          logger.info('AuraAiOrchestrator', '[GEMINI] Alternative request started', {
+            requestId,
           });
 
           geminiRequestManager.recordFallbackTriggered();
 
-          const fallbackRes = await this.callGeminiWithRetry(
-            'lightweight',
-            'lightweight_fallback_conversational_turn',
-            requestId,
-            {
-              model: GEMINI_MODEL_REGISTRY.lightweight.modelId,
-              contents: contents as any,
-              config: {
-                systemInstruction,
-                tools: [GEMINI_TOOL_DECLARATIONS as any],
-              },
-            }
-          );
-          response = fallbackRes.response;
-          retriesAttempted = ((primaryErr as any)?.retriesAttempted || 0) + fallbackRes.retriesAttempted;
-          activeModel = GEMINI_MODEL_REGISTRY.lightweight.modelId;
-          fallbackOccurred = true;
+          try {
+            const fallbackRes = await this.callGeminiWithRetry(
+              'lightweight',
+              'lightweight_fallback_conversational_turn',
+              requestId,
+              {
+                model: GEMINI_MODEL_REGISTRY.lightweight.modelId,
+                contents: contents as any,
+                config: {
+                  systemInstruction,
+                  tools: [GEMINI_TOOL_DECLARATIONS as any],
+                },
+              }
+            );
+            logger.info('AuraAiOrchestrator', '[GEMINI] Alternative request successful', {
+              requestId,
+            });
+            response = fallbackRes.response;
+            retriesAttempted = ((primaryErr as any)?.retriesAttempted || 0) + fallbackRes.retriesAttempted;
+            activeModel = GEMINI_MODEL_REGISTRY.lightweight.modelId;
+            fallbackOccurred = true;
+          } catch (altErr: any) {
+            const altCheck = isTransientGeminiError(altErr);
+            const altStatusCode = altCheck.statusCode || 500;
+            const altFailureReason = `${altStatusCode} ${altCheck.reason}`;
+            logger.error('AuraAiOrchestrator', `[GEMINI] Alternative request failed: ${altFailureReason}`, {
+              requestId,
+              statusCode: altStatusCode,
+              reason: altCheck.reason,
+              error: this.redactSecrets(altErr?.message),
+            });
+            throw altErr;
+          }
         } else {
+          logger.warn('AuraAiOrchestrator', `Model fallback denied or ineligible for task: ${taskType}`, {
+            requestId,
+            reason: transientCheck.reason,
+            taskType,
+            requiredCapability: ctx.requiredCapability,
+          });
           throw primaryErr;
         }
       }
