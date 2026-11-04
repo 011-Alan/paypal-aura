@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
+import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import { UserModel, ConversationModel, MessageModel } from '../models';
 import { ensureDemoUserAlexSeeded } from '../seed/seedService';
 import { env } from '../config/env';
@@ -240,6 +241,8 @@ async function runGeminiArchitectureVerification() {
   console.log('================================================================\n');
 
   await mongoose.connect(env.MONGODB_URI);
+  geminiRequestManager.setRpmLimitForTesting(1000);
+  auraAiOrchestrator.setSleepFnForTesting(async () => {});
   const alexResult = await ensureDemoUserAlexSeeded();
   const validUserId = String(alexResult.user._id);
 

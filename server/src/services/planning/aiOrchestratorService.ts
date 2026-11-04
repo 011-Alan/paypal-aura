@@ -21,6 +21,7 @@ import { zapierIntegration } from '../../integrations/zapier';
 import { coreFinancialService } from '../financial/financialService';
 import { paymentGuardianService } from '../payments/paymentGuardianService';
 import { pythonAnalyticsService } from '../analytics/analyticsService';
+import { geminiRequestManager } from './geminiRequestManager';
 
 export interface AiToolAction {
   type:
@@ -72,6 +73,9 @@ export interface AiObservabilityTrace {
   followUpStatus: 'not_needed' | 'succeeded' | 'failed';
   finalResponseStatus: 'succeeded' | 'service_unavailable' | 'failed';
   retriesAttempted?: number;
+  geminiCallsMade?: number;
+  cached?: boolean;
+  queueWaitTimeMs?: number;
   errorDetails?: string;
   timestamp: string;
 }
@@ -563,7 +567,11 @@ export class AuraAiOrchestratorService {
           });
         }
 
-        const response = await this.geminiClient!.models.generateContent(params);
+        const response = await geminiRequestManager.scheduleGeminiCall(
+          operationName,
+          requestId,
+          () => this.geminiClient!.models.generateContent(params)
+        );
         return { response, retriesAttempted: attempt };
       } catch (err: any) {
         lastError = err;
@@ -780,17 +788,58 @@ export class AuraAiOrchestratorService {
     }
 
     // -------------------------------------------------------------------------
-    // 3. EXECUTE GENUINE GEMINI CONVERSATIONAL LOOP
+    // 3. SAFE GENERAL-KNOWLEDGE CACHE CHECK (0 Gemini API calls!)
     // -------------------------------------------------------------------------
-    return this.executeGeminiConversationalLoop({
-      userId: params.userId,
-      user,
-      prompt,
-      history,
-      requestId,
-      conversationId,
-      includeKernelResearch: Boolean(params.includeKernelResearch),
-      startTime,
+    const cachedResponse = geminiRequestManager.getCachedResponse(prompt);
+    if (cachedResponse) {
+      const trace: AiObservabilityTrace = {
+        requestId,
+        conversationId,
+        userId: params.userId,
+        model: env.GEMINI_MODEL,
+        apiStatus: 'succeeded',
+        apiLatencyMs: 1,
+        toolCallsRequested: [],
+        toolExecutionStatus: {},
+        followUpStatus: 'not_needed',
+        finalResponseStatus: 'succeeded',
+        retriesAttempted: 0,
+        cached: true,
+        geminiCallsMade: 0,
+        timestamp: new Date().toISOString(),
+      };
+      this.recordTrace(trace);
+      return {
+        ...cachedResponse,
+        requestId,
+        conversationId,
+        observability: trace,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. IN-FLIGHT DEDUPLICATION & RATE-MANAGED EXECUTION
+    // -------------------------------------------------------------------------
+    return geminiRequestManager.executeWithDeduplication(params.userId, prompt, async () => {
+      geminiRequestManager.recordInteraction();
+      const result = await this.executeGeminiConversationalLoop({
+        userId: params.userId,
+        user,
+        prompt,
+        history,
+        requestId,
+        conversationId,
+        includeKernelResearch: Boolean(params.includeKernelResearch),
+        startTime,
+      });
+
+      // Cache safe general-knowledge answers (non-personal)
+      if (result.success && result.workflowType === 'general_knowledge') {
+        geminiRequestManager.setCachedResponse(prompt, result);
+      }
+
+      return result;
     });
   }
 
@@ -822,9 +871,10 @@ Core Behavioral Principles:
 User Name: ${user.name}
 Preferred Currency: ${user.currency || 'INR'}`;
 
-    const formattedHistory = history.slice(-10).map((h) => ({
+    const maxHistory = env.GEMINI_MAX_HISTORY_TURNS || 6;
+    const formattedHistory = history.slice(-maxHistory).map((h) => ({
       role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.content }],
+      parts: [{ text: h.content.length > 500 ? h.content.slice(0, 500) + '...' : h.content }],
     }));
 
     const contents = [...formattedHistory, { role: 'user', parts: [{ text: prompt }] }];
@@ -870,6 +920,8 @@ Preferred Currency: ${user.currency || 'INR'}`;
           followUpStatus: 'not_needed',
           finalResponseStatus: 'succeeded',
           retriesAttempted,
+          geminiCallsMade: 1,
+          cached: false,
           timestamp: new Date().toISOString(),
         };
         this.recordTrace(trace);
@@ -942,31 +994,51 @@ Preferred Currency: ${user.currency || 'INR'}`;
         },
       ];
 
+      // Intelligent Function Calling Decision:
+      // Only complex analytical workflows require an additional Gemini call for synthesis.
+      // Deterministic tools (balance, recent transactions, navigation, currency, reminders, goals, payments, product cards)
+      // return a complete, verified, human-friendly explanation immediately, saving ~50% of API calls.
+      const REQUIRES_FOLLOW_UP_AI_SYNTHESIS = new Set([
+        'analyseAffordability',
+        'researchMarketRates',
+      ]);
+
+      const needsFollowUpCall = REQUIRES_FOLLOW_UP_AI_SYNTHESIS.has(toolName);
+
       let finalAiExplanation = execution.fallbackExplanation || '';
-      let followUpStatus: 'succeeded' | 'failed' = 'failed';
+      let followUpStatus: 'not_needed' | 'succeeded' | 'failed' = 'not_needed';
       let followUpRetries = 0;
 
-      try {
-        const { response: followUpResp, retriesAttempted: fr } = await this.callGeminiWithRetry(
-          'follow_up_tool_synthesis',
-          requestId,
-          {
-            model: env.GEMINI_MODEL,
-            contents: followUpContents as any,
-            config: { systemInstruction },
+      if (needsFollowUpCall) {
+        try {
+          const { response: followUpResp, retriesAttempted: fr } = await this.callGeminiWithRetry(
+            'follow_up_tool_synthesis',
+            requestId,
+            {
+              model: env.GEMINI_MODEL,
+              contents: followUpContents as any,
+              config: { systemInstruction },
+            }
+          );
+          followUpRetries = fr;
+          const followUpText = followUpResp.text?.trim();
+          if (followUpText) {
+            finalAiExplanation = followUpText;
+            followUpStatus = 'succeeded';
           }
-        );
-        followUpRetries = fr;
-        const followUpText = followUpResp.text?.trim();
-        if (followUpText) {
-          finalAiExplanation = followUpText;
-          followUpStatus = 'succeeded';
+        } catch (followErr: any) {
+          followUpStatus = 'failed';
+          logger.warn('AuraAiOrchestrator', 'Follow-up Gemini synthesis failed; using verified backend facts', {
+            requestId,
+            error: this.redactSecrets(followErr?.message),
+            retriesAttempted: followErr?.retriesAttempted || 0,
+          });
         }
-      } catch (followErr: any) {
-        logger.warn('AuraAiOrchestrator', 'Follow-up Gemini synthesis failed; using verified backend facts', {
+      } else {
+        geminiRequestManager.recordFollowUpAvoided();
+        logger.info('AuraAiOrchestrator', `Skipped unnecessary Gemini follow-up call for deterministic tool "${toolName}"`, {
           requestId,
-          error: this.redactSecrets(followErr?.message),
-          retriesAttempted: followErr?.retriesAttempted || 0,
+          toolName,
         });
       }
 
@@ -983,6 +1055,8 @@ Preferred Currency: ${user.currency || 'INR'}`;
         followUpStatus,
         finalResponseStatus: 'succeeded',
         retriesAttempted: retriesAttempted + followUpRetries,
+        geminiCallsMade: needsFollowUpCall ? 2 : 1,
+        cached: false,
         timestamp: new Date().toISOString(),
       };
       this.recordTrace(trace);

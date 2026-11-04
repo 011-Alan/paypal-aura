@@ -100,6 +100,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isSubmittingRef = useRef<boolean>(false);
 
   // Check speech recognition support
   useEffect(() => {
@@ -360,10 +361,11 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
     }
   };
 
-  // Send Message with SSE Token Streaming Support
+  // Send Message with SSE Token Streaming Support & Duplicate Request Protection
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || input).trim();
-    if (!query || busy) return;
+    if (!query || busy || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     if (isListening) {
       recognitionRef.current?.stop();
@@ -440,8 +442,9 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
             if (trimmed.startsWith('data: ')) {
               try {
                 const event = JSON.parse(trimmed.slice(6));
-                if (event.type === 'token') {
-                  streamedContent += event.token;
+                const chunkDelta = event.delta || event.token || event.text || '';
+                if (event.type === 'delta' || event.type === 'token' || (chunkDelta && event.type !== 'final')) {
+                  streamedContent += chunkDelta;
                   setMessages((prev) =>
                     prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamedContent } : m))
                   );
@@ -523,6 +526,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
+      isSubmittingRef.current = false;
       setBusy(false);
     }
   };
@@ -1033,7 +1037,9 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleSendMessage();
+              if (!busy && !isSubmittingRef.current && input.trim()) {
+                handleSendMessage();
+              }
             }}
             className="flex items-center gap-2"
           >

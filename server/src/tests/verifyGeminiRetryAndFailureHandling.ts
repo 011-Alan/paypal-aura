@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import { ensureDemoUserAlexSeeded, DEMO_ALEX_CREDENTIALS } from '../seed/seedService';
 import { UserModel } from '../models';
+import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import {
   auraAiOrchestrator,
   isTransientGeminiError,
@@ -16,6 +17,7 @@ async function runGeminiRetryTests() {
 
   await connectDatabase();
   await ensureDemoUserAlexSeeded(true);
+  geminiRequestManager.setRpmLimitForTesting(1000);
 
   const alex = await UserModel.findOne({ email: DEMO_ALEX_CREDENTIALS.email });
   assert.ok(alex, 'Demo user Alex must be seeded');

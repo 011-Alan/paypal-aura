@@ -25,6 +25,10 @@ export const env = {
   // Google Gemini AI
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+  GEMINI_RPM_LIMIT: parseInt(process.env.GEMINI_RPM_LIMIT || '3', 10),
+  GEMINI_QUEUE_TIMEOUT_MS: parseInt(process.env.GEMINI_QUEUE_TIMEOUT_MS || '45000', 10),
+  GEMINI_MAX_HISTORY_TURNS: parseInt(process.env.GEMINI_MAX_HISTORY_TURNS || '6', 10),
+  GEMINI_ENABLE_SAFE_CACHE: process.env.GEMINI_ENABLE_SAFE_CACHE !== 'false',
 
   // PayPal Sandbox
   PAYPAL_ENVIRONMENT: process.env.PAYPAL_ENVIRONMENT || 'sandbox',

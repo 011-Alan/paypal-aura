@@ -38,6 +38,7 @@ import { coreFinancialService } from '../services/financial/financialService';
 import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
+import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import { agGridIntegration } from '../integrations/ag-grid';
 import { apimaticIntegration } from '../integrations/apimatic';
 import { astropodsIntegration } from '../integrations/astropods';
@@ -106,6 +107,14 @@ apiRouter.get('/ai/health', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
   }
+});
+
+apiRouter.get('/ai/metrics', async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    metrics: geminiRequestManager.getMetrics(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ============================================================================
