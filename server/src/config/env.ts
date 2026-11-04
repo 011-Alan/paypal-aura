@@ -24,7 +24,7 @@ export const env = {
 
   // Google Gemini AI
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
 
   // PayPal Sandbox
   PAYPAL_ENVIRONMENT: process.env.PAYPAL_ENVIRONMENT || 'sandbox',

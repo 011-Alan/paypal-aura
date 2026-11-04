@@ -404,7 +404,7 @@ export class AuraAiOrchestratorService {
     }
 
     return {
-      service: 'AURA Conversational Intelligence (Google Gemini 2.5)',
+      service: `AURA Conversational Intelligence (Google Gemini ${env.GEMINI_MODEL})`,
       isConfigured,
       model: env.GEMINI_MODEL,
       sdkInitialized,
