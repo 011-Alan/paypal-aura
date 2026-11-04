@@ -71,6 +71,7 @@ export interface AiObservabilityTrace {
   toolExecutionStatus: Record<string, 'success' | 'failed' | 'rejected'>;
   followUpStatus: 'not_needed' | 'succeeded' | 'failed';
   finalResponseStatus: 'succeeded' | 'service_unavailable' | 'failed';
+  retriesAttempted?: number;
   errorDetails?: string;
   timestamp: string;
 }
@@ -298,15 +299,187 @@ export const GEMINI_TOOL_DECLARATIONS = {
   ],
 };
 
+export interface GeminiTransientCheck {
+  retryable: boolean;
+  statusCode?: number;
+  retryAfterMs?: number;
+  reason: string;
+}
+
+export function parseGeminiError(err: any): {
+  statusCode?: number;
+  statusText?: string;
+  message: string;
+  retryAfterMs?: number;
+} {
+  let statusCode: number | undefined = err?.status || err?.statusCode || err?.code;
+  if (typeof statusCode !== 'number') {
+    statusCode = undefined;
+  }
+
+  const rawMsg = String(err?.message || err || '');
+
+  let parsedJson: any = null;
+  const jsonMatch = rawMsg.match(/\{[\s\S]*"error"[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      parsedJson = JSON.parse(jsonMatch[0]);
+    } catch {
+      // ignore JSON parse failures
+    }
+  }
+
+  if (!statusCode && parsedJson?.error?.code) {
+    statusCode = Number(parsedJson.error.code);
+  }
+
+  let retryAfterMs: number | undefined = undefined;
+  const retryAfterHeader =
+    err?.response?.headers?.get?.('retry-after') ||
+    err?.headers?.['retry-after'] ||
+    err?.response?.headers?.['retry-after'];
+  if (retryAfterHeader) {
+    const sec = parseFloat(retryAfterHeader);
+    if (!isNaN(sec) && sec > 0) {
+      retryAfterMs = Math.round(sec * 1000);
+    }
+  }
+
+  if (!retryAfterMs) {
+    const m = rawMsg.match(/retry after ([\d.]+)s/i);
+    if (m) {
+      retryAfterMs = Math.round(parseFloat(m[1]) * 1000);
+    }
+  }
+
+  return {
+    statusCode,
+    statusText: parsedJson?.error?.status,
+    message: rawMsg,
+    retryAfterMs,
+  };
+}
+
+export function isTransientGeminiError(err: any): GeminiTransientCheck {
+  const parsed = parseGeminiError(err);
+  const msg = parsed.message.toLowerCase();
+  const status = parsed.statusCode;
+  const statusText = (parsed.statusText || '').toUpperCase();
+
+  // 1. Permanent failures: Authentication (401, 403, API_KEY_INVALID, PERMISSION_DENIED)
+  if (
+    status === 401 ||
+    status === 403 ||
+    statusText === 'UNAUTHENTICATED' ||
+    statusText === 'PERMISSION_DENIED' ||
+    msg.includes('api_key_invalid') ||
+    msg.includes('api key not valid') ||
+    msg.includes('unauthenticated') ||
+    msg.includes('permission_denied')
+  ) {
+    return { retryable: false, statusCode: status || 401, reason: 'authentication_failure' };
+  }
+
+  // 2. Permanent failures: Model not found / invalid model (404, NOT_FOUND)
+  if (
+    status === 404 ||
+    statusText === 'NOT_FOUND' ||
+    msg.includes('is no longer available') ||
+    msg.includes('not found') ||
+    (msg.includes('models/') && msg.includes('not found'))
+  ) {
+    return { retryable: false, statusCode: status || 404, reason: 'model_not_found' };
+  }
+
+  // 3. Permanent failures: Bad request / invalid arguments (400, INVALID_ARGUMENT)
+  if (
+    status === 400 ||
+    statusText === 'INVALID_ARGUMENT' ||
+    msg.includes('invalid_argument')
+  ) {
+    return { retryable: false, statusCode: status || 400, reason: 'invalid_argument' };
+  }
+
+  // 4. Permanent failures: Daily / hard quota exhausted
+  if (msg.includes('quota exceeded') && (msg.includes('per day') || msg.includes('daily'))) {
+    return { retryable: false, statusCode: 429, reason: 'daily_quota_exhausted' };
+  }
+
+  // Transient retryable failures:
+  // 1. HTTP 503 (UNAVAILABLE) / Service Unavailable / overloaded
+  if (
+    status === 503 ||
+    statusText === 'UNAVAILABLE' ||
+    msg.includes('503') ||
+    msg.includes('unavailable') ||
+    msg.includes('overloaded')
+  ) {
+    return { retryable: true, statusCode: 503, retryAfterMs: parsed.retryAfterMs, reason: 'service_unavailable' };
+  }
+
+  // 2. Other HTTP 5xx errors (500, 502, 504)
+  if (
+    status === 500 ||
+    status === 502 ||
+    status === 504 ||
+    statusText === 'INTERNAL' ||
+    msg.includes('502 bad gateway') ||
+    msg.includes('504 gateway timeout') ||
+    msg.includes('internal server error')
+  ) {
+    return { retryable: true, statusCode: status || 500, retryAfterMs: parsed.retryAfterMs, reason: 'server_error' };
+  }
+
+  // 3. HTTP 429 (Transient rate limit / RESOURCE_EXHAUSTED)
+  if (
+    status === 429 ||
+    statusText === 'RESOURCE_EXHAUSTED' ||
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests')
+  ) {
+    return { retryable: true, statusCode: 429, retryAfterMs: parsed.retryAfterMs, reason: 'rate_limited' };
+  }
+
+  // 4. Transient network / socket errors
+  const isNetworkError =
+    msg.includes('fetch failed') ||
+    msg.includes('network error') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('enotfound') ||
+    msg.includes('eai_again') ||
+    msg.includes('connect timeout') ||
+    msg.includes('socket hang up') ||
+    err?.code === 'ECONNRESET' ||
+    err?.code === 'ETIMEDOUT' ||
+    err?.code === 'ENOTFOUND' ||
+    err?.code === 'EAI_AGAIN' ||
+    err?.cause?.code === 'ECONNRESET' ||
+    err?.cause?.code === 'ETIMEDOUT';
+
+  if (isNetworkError) {
+    return { retryable: true, statusCode: 0, retryAfterMs: parsed.retryAfterMs, reason: 'transient_network_error' };
+  }
+
+  return { retryable: false, statusCode: status, reason: 'unrecognized_error' };
+}
+
 export class AuraAiOrchestratorService {
   private geminiClient: GoogleGenAI | null = null;
   private lastConnectivityCheckAt: number = 0;
   private lastConnectivitySuccess: boolean = false;
   private lastConnectivityError: string | null = null;
   private recentTraces: AiObservabilityTrace[] = [];
+  private customSleepFn: ((ms: number) => Promise<void>) | null = null;
 
   constructor() {
     this.initGeminiClient();
+  }
+
+  public setSleepFnForTesting(fn: ((ms: number) => Promise<void>) | null) {
+    this.customSleepFn = fn;
   }
 
   public initGeminiClient(customApiKey?: string) {
@@ -356,6 +529,95 @@ export class AuraAiOrchestratorService {
       .replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED_GEMINI_KEY]')
       .replace(/key=[^&\s]+/gi, 'key=[REDACTED]')
       .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED_TOKEN]');
+  }
+
+  /**
+   * Shared API-request boundary for Google Gemini with exponential backoff and jitter.
+   * Maximum 4 retries after the initial request (up to 5 attempts total).
+   * Schedule:
+   *   Retry 1: approximately 1 second
+   *   Retry 2: approximately 2 seconds
+   *   Retry 3: approximately 4 seconds
+   *   Retry 4: approximately 8 seconds
+   * Respects Retry-After header / message if present (especially on transient 429).
+   * Never retries non-transient / permanent errors (400, 401, 403, 404, daily quota).
+   */
+  public async callGeminiWithRetry(
+    operationName: string,
+    requestId: string,
+    params: any
+  ): Promise<{ response: any; retriesAttempted: number }> {
+    const maxRetries = 4;
+    const sleep = this.customSleepFn || ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+
+    let attempt = 0; // 0 = initial request
+    let lastError: any = null;
+
+    while (attempt <= maxRetries) {
+      try {
+        if (attempt > 0) {
+          logger.info('AuraAiOrchestrator', `Executing Gemini API retry attempt ${attempt}/${maxRetries} for ${operationName}`, {
+            requestId,
+            attempt,
+            maxRetries,
+          });
+        }
+
+        const response = await this.geminiClient!.models.generateContent(params);
+        return { response, retriesAttempted: attempt };
+      } catch (err: any) {
+        lastError = err;
+        const transientCheck = isTransientGeminiError(err);
+
+        // Do not retry permanent errors or if retries exhausted
+        if (!transientCheck.retryable || attempt >= maxRetries) {
+          if (!transientCheck.retryable) {
+            logger.warn('AuraAiOrchestrator', `Gemini API error is non-retryable (${transientCheck.reason}). Not retrying.`, {
+              requestId,
+              statusCode: transientCheck.statusCode,
+              reason: transientCheck.reason,
+              error: this.redactSecrets(err?.message),
+            });
+          } else {
+            logger.error('AuraAiOrchestrator', `Gemini API retries exhausted (${attempt}/${maxRetries}) for ${operationName}`, {
+              requestId,
+              retriesAttempted: attempt,
+              statusCode: transientCheck.statusCode,
+              reason: transientCheck.reason,
+              error: this.redactSecrets(err?.message),
+            });
+          }
+          (err as any).retriesAttempted = attempt;
+          throw err;
+        }
+
+        // Exponential backoff: ~1s, ~2s, ~4s, ~8s with random jitter
+        const baseDelayMs = 1000 * Math.pow(2, attempt);
+        const jitterMs = Math.floor(Math.random() * (baseDelayMs * 0.2)); // +0-20% jitter
+        let delayMs = baseDelayMs + jitterMs;
+
+        // Respect Retry-After if provided
+        if (transientCheck.retryAfterMs && transientCheck.retryAfterMs > delayMs) {
+          delayMs = Math.min(transientCheck.retryAfterMs, 15000);
+        }
+
+        logger.warn('AuraAiOrchestrator', `Gemini API temporary error (${transientCheck.reason}). Retrying in ${delayMs}ms (retry ${attempt + 1}/${maxRetries})`, {
+          requestId,
+          nextAttempt: attempt + 1,
+          maxRetries,
+          delayMs,
+          statusCode: transientCheck.statusCode,
+          reason: transientCheck.reason,
+          error: this.redactSecrets(err?.message),
+        });
+
+        await sleep(delayMs);
+        attempt++;
+      }
+    }
+
+    (lastError as any).retriesAttempted = attempt;
+    throw lastError;
   }
 
   async verifyConnectivity(force = false): Promise<{ success: boolean; latencyMs?: number; error?: string }> {
@@ -574,14 +836,18 @@ Preferred Currency: ${user.currency || 'INR'}`;
         historyTurns: history.length,
       });
 
-      const response = await this.geminiClient!.models.generateContent({
-        model: env.GEMINI_MODEL,
-        contents: contents as any,
-        config: {
-          systemInstruction,
-          tools: [GEMINI_TOOL_DECLARATIONS as any],
-        },
-      });
+      const { response, retriesAttempted } = await this.callGeminiWithRetry(
+        'initial_conversational_turn',
+        requestId,
+        {
+          model: env.GEMINI_MODEL,
+          contents: contents as any,
+          config: {
+            systemInstruction,
+            tools: [GEMINI_TOOL_DECLARATIONS as any],
+          },
+        }
+      );
 
       const apiLatencyMs = Date.now() - t0;
       const candidate = response.candidates?.[0];
@@ -603,6 +869,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
           toolExecutionStatus: {},
           followUpStatus: 'not_needed',
           finalResponseStatus: 'succeeded',
+          retriesAttempted,
           timestamp: new Date().toISOString(),
         };
         this.recordTrace(trace);
@@ -633,7 +900,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
       // -----------------------------------------------------------------------
       const call = functionCalls[0];
       const toolName = call.name || 'getFinancialSummary';
-      const requestedTools = functionCalls.map((c) => c.name || '');
+      const requestedTools = (functionCalls || []).map((c: any) => c.name || '');
       const toolExecutionStatus: Record<string, 'success' | 'failed' | 'rejected'> = {};
 
       logger.info('AuraAiOrchestrator', 'Gemini model requested tool call', {
@@ -677,13 +944,19 @@ Preferred Currency: ${user.currency || 'INR'}`;
 
       let finalAiExplanation = execution.fallbackExplanation || '';
       let followUpStatus: 'succeeded' | 'failed' = 'failed';
+      let followUpRetries = 0;
 
       try {
-        const followUpResp = await this.geminiClient!.models.generateContent({
-          model: env.GEMINI_MODEL,
-          contents: followUpContents as any,
-          config: { systemInstruction },
-        });
+        const { response: followUpResp, retriesAttempted: fr } = await this.callGeminiWithRetry(
+          'follow_up_tool_synthesis',
+          requestId,
+          {
+            model: env.GEMINI_MODEL,
+            contents: followUpContents as any,
+            config: { systemInstruction },
+          }
+        );
+        followUpRetries = fr;
         const followUpText = followUpResp.text?.trim();
         if (followUpText) {
           finalAiExplanation = followUpText;
@@ -691,7 +964,9 @@ Preferred Currency: ${user.currency || 'INR'}`;
         }
       } catch (followErr: any) {
         logger.warn('AuraAiOrchestrator', 'Follow-up Gemini synthesis failed; using verified backend facts', {
+          requestId,
           error: this.redactSecrets(followErr?.message),
+          retriesAttempted: followErr?.retriesAttempted || 0,
         });
       }
 
@@ -707,6 +982,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         toolExecutionStatus,
         followUpStatus,
         finalResponseStatus: 'succeeded',
+        retriesAttempted: retriesAttempted + followUpRetries,
         timestamp: new Date().toISOString(),
       };
       this.recordTrace(trace);
@@ -724,6 +1000,9 @@ Preferred Currency: ${user.currency || 'INR'}`;
     } catch (apiErr: any) {
       const totalLatencyMs = Date.now() - t0;
       const cleanError = this.redactSecrets(apiErr?.message || 'Gemini API call failed');
+      const transientCheck = isTransientGeminiError(apiErr);
+      const retriesAttempted = (apiErr as any)?.retriesAttempted || 0;
+
       const trace: AiObservabilityTrace = {
         requestId,
         conversationId,
@@ -735,34 +1014,43 @@ Preferred Currency: ${user.currency || 'INR'}`;
         toolExecutionStatus: {},
         followUpStatus: 'not_needed',
         finalResponseStatus: 'service_unavailable',
+        retriesAttempted,
         errorDetails: cleanError,
         timestamp: new Date().toISOString(),
       };
       this.recordTrace(trace);
 
-      logger.error('AuraAiOrchestrator', 'Gemini API call failed', {
+      logger.error('AuraAiOrchestrator', 'Gemini API call failed after retries', {
         requestId,
+        retriesAttempted,
+        statusCode: transientCheck.statusCode,
+        reason: transientCheck.reason,
         error: cleanError,
       });
+
+      const FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE =
+        "I'm having a little trouble connecting to my AI engine right now. Your information is safe. Please try again in a moment.";
 
       return {
         success: false,
         serviceUnavailable: true,
-        code: 'GEMINI_REQUEST_FAILED',
-        error: `Google Gemini API request failed: ${cleanError}`,
+        code: transientCheck.statusCode === 503 ? 'GEMINI_UNAVAILABLE' : 'GEMINI_REQUEST_FAILED',
+        error: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
         canRetry: true,
         retryAfterSeconds: 5,
         prompt,
         workflowType: 'service_unavailable',
-        explanation:
-          'The AI service encountered an error while communicating with Google Gemini. Your message has been preserved. Please retry your request.',
-        answer:
-          'The AI service encountered an error while communicating with Google Gemini. Your message has been preserved. Please retry your request.',
+        explanation: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
+        answer: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
         toolAction: {
           type: 'general_knowledge' as const,
-          title: 'Gemini Request Failed',
+          title: 'AI Engine Temporarily Unavailable',
           status: 'informational' as const,
-          details: { error: cleanError },
+          details: {
+            code: transientCheck.statusCode === 503 ? 'GEMINI_UNAVAILABLE' : 'GEMINI_REQUEST_FAILED',
+            reason: transientCheck.reason,
+            retriesAttempted,
+          },
         },
         suggestedNextPrompts: ['Retry request'],
         astropodsOrchestration: null,
