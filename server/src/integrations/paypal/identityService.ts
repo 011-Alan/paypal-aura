@@ -25,7 +25,8 @@ export interface PayPalUserInfo {
 export interface PayPalTokenResponse {
   access_token: string;
   token_type: string;
-  expires_in: number;
+  expires_in: number | string;
+  expires_at?: number;
   refresh_token?: string;
   id_token?: string;
   scope?: string;
@@ -222,22 +223,26 @@ export class PayPalIdentityService {
         grant_type: 'authorization_code',
         code,
         redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
       });
 
       if (codeVerifier) {
         bodyParams.append('code_verifier', codeVerifier);
       }
 
-      const tokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
+      // OpenID Connect Log In with PayPal token endpoint
+      const primaryTokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
+      const fallbackTokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
 
-      logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OAuth 2.0 token endpoint', {
-        tokenUrl,
+      logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal token endpoint', {
+        primaryTokenUrl,
         redirectUri,
         mode: env.PAYPAL_MODE,
         hasCodeVerifier: Boolean(codeVerifier),
       });
 
-      const response = await fetch(tokenUrl, {
+      let response = await fetch(primaryTokenUrl, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${credentials}`,
@@ -246,6 +251,22 @@ export class PayPalIdentityService {
         },
         body: bodyParams.toString(),
       });
+
+      // If primary returns 404 (endpoint not supported), try fallback
+      if (response.status === 404) {
+        logger.warn('PayPalIdentityService', 'Primary tokenservice returned 404, falling back to oauth2/token', {
+          fallbackTokenUrl,
+        });
+        response = await fetch(fallbackTokenUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+          },
+          body: bodyParams.toString(),
+        });
+      }
 
       if (!response.ok) {
         const errText = await response.text();
@@ -262,9 +283,15 @@ export class PayPalIdentityService {
         throw new Error('PayPal token exchange succeeded but response is missing a valid access_token');
       }
 
-      logger.info('PayPalIdentityService', 'PayPal OAuth token exchange successful', {
+      const expiresInSec = typeof data.expires_in === 'number' ? data.expires_in : parseInt(String(data.expires_in || 28800), 10);
+      const tokenExpiresAt = Date.now() + (isNaN(expiresInSec) ? 28800 : expiresInSec) * 1000;
+      data.expires_at = tokenExpiresAt;
+
+      logger.info('PayPalIdentityService', 'PayPal user authorization token exchange successful', {
+        httpStatus: response.status,
         tokenType: data.token_type,
         expiresIn: data.expires_in,
+        tokenExpiresAt: new Date(tokenExpiresAt).toISOString(),
         hasAccessToken: Boolean(data.access_token),
         hasIdToken: Boolean(data.id_token),
         hasRefreshToken: Boolean(data.refresh_token),
@@ -287,6 +314,56 @@ export class PayPalIdentityService {
     }
 
     return exchangePromise;
+  }
+
+  /**
+   * Refreshes an expired user access token using the user's refresh token via tokenservice.
+   */
+  public async refreshUserAccessToken(refreshToken: string): Promise<PayPalTokenResponse> {
+    const clientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
+    const clientSecret = env.PAYPAL_IDENTITY_CLIENT_SECRET || env.PAYPAL_CLIENT_SECRET;
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+    const tokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
+    const bodyParams = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    logger.info('PayPalIdentityService', 'Refreshing user access token via OpenID Connect tokenservice', {
+      tokenUrl,
+      selectedEnvironment: env.PAYPAL_MODE,
+    });
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: bodyParams.toString(),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      logger.warn('PayPalIdentityService', 'User token refresh failed', {
+        status: response.status,
+        error: errText,
+      });
+      throw new Error(`PayPal user token refresh failed (${response.status}): ${errText}`);
+    }
+
+    const data = (await response.json()) as PayPalTokenResponse;
+    if (!data.access_token) {
+      throw new Error('PayPal user token refresh did not return an access_token');
+    }
+
+    const expiresInSec = typeof data.expires_in === 'number' ? data.expires_in : parseInt(String(data.expires_in || 28800), 10);
+    data.expires_at = Date.now() + (isNaN(expiresInSec) ? 28800 : expiresInSec) * 1000;
+    return data;
   }
 
   /**
@@ -396,7 +473,7 @@ export class PayPalIdentityService {
 
   /**
    * Fetches the user profile from PayPal's official Identity v1 OpenID Connect endpoint:
-   * GET /v1/identity/openidconnect/userinfo
+   * GET /v1/identity/openidconnect/userinfo?schema=openid
    * Reference: https://developer.paypal.com/api/identity/v1/userinfo-get
    */
   public async getUserInfo(
@@ -404,6 +481,9 @@ export class PayPalIdentityService {
     context?: {
       tokenType?: string;
       grantedScopes?: string;
+      tokenExpiresAt?: number;
+      refreshToken?: string;
+      hasRetried?: boolean;
     }
   ): Promise<{
     data: PayPalUserInfo;
@@ -416,10 +496,26 @@ export class PayPalIdentityService {
       throw new Error('Cannot fetch PayPal user information: access_token is missing or invalid');
     }
 
+    // Check if token has already expired before making request
+    if (context?.tokenExpiresAt && Date.now() >= context.tokenExpiresAt) {
+      if (context.refreshToken && !context.hasRetried) {
+        logger.info('PayPalIdentityService', 'User access token is expired; refreshing prior to UserInfo call');
+        const refreshed = await this.refreshUserAccessToken(context.refreshToken);
+        return this.getUserInfo(refreshed.access_token, {
+          ...context,
+          tokenType: refreshed.token_type,
+          tokenExpiresAt: refreshed.expires_at,
+          hasRetried: true,
+        });
+      }
+      throw new Error('PayPal user access token has expired. Please restart the PayPal authorization flow.');
+    }
+
     // Official documented OpenID Connect UserInfo endpoints
-    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`;
+    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`;
     const fallbackUrls = [
-      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
     ];
 
     const urlsToTry = [primaryUrl, ...fallbackUrls];
@@ -428,7 +524,6 @@ export class PayPalIdentityService {
     let lastEndpoint = primaryUrl;
     let lastDebugId: string | undefined;
     let lastCorrelationId: string | undefined;
-    let lastResponseJson: any = null;
 
     for (const url of urlsToTry) {
       lastEndpoint = url;
@@ -448,6 +543,7 @@ export class PayPalIdentityService {
           lastCorrelationId = debugIdHeader;
         }
 
+        const authHeader = response.headers.get('www-authenticate') || '';
         const rawText = await response.text();
 
         let parsedJson: any = null;
@@ -456,7 +552,6 @@ export class PayPalIdentityService {
         } catch {
           // non-json response
         }
-        lastResponseJson = parsedJson;
 
         if (parsedJson?.debug_id) {
           lastDebugId = parsedJson.debug_id;
@@ -465,6 +560,7 @@ export class PayPalIdentityService {
         if (response.ok && parsedJson && typeof parsedJson === 'object') {
           logger.info('PayPalIdentityService', 'PayPal UserInfo retrieved successfully', {
             requestUrl: url,
+            endpointHostname: new URL(url).hostname,
             httpMethod: 'GET',
             httpStatus: response.status,
             debugId: lastDebugId,
@@ -479,25 +575,55 @@ export class PayPalIdentityService {
           };
         }
 
-        lastError =
+        // Extract error description from json body, www-authenticate header, or rawText
+        let extractedError =
           parsedJson?.error_description ||
           parsedJson?.message ||
           parsedJson?.error ||
           (parsedJson?.details ? JSON.stringify(parsedJson.details) : '') ||
-          rawText;
+          rawText.trim();
 
-        // Section 4: Temporarily log safely (Redact all secrets, tokens, codes)
+        if (!extractedError && authHeader) {
+          const match = authHeader.match(/error_description="([^"]+)"/);
+          extractedError = match ? match[1] : authHeader;
+        }
+
+        lastError = extractedError || 'Unable to fetch details to serve the request';
+
+        // Section 5: Safe diagnostic logging (Redact all secrets, tokens, codes)
         logger.warn('PayPalIdentityService', 'PayPal UserInfo endpoint returned non-OK status', {
           requestUrl: url,
+          endpointHostname: new URL(url).hostname,
           httpMethod: 'GET',
           httpStatus: lastStatus,
-          responseJson: parsedJson || rawText,
           debugId: lastDebugId,
           correlationId: lastCorrelationId,
           grantedScopes: context?.grantedScopes,
           tokenType: context?.tokenType,
+          tokenExpiresAt: context?.tokenExpiresAt ? new Date(context.tokenExpiresAt).toISOString() : undefined,
           selectedEnvironment: env.PAYPAL_MODE,
+          redactedError: lastError,
         });
+
+        // Section 6: If 401 and refresh token exists, attempt refresh once
+        if (response.status === 401 && context?.refreshToken && !context.hasRetried) {
+          logger.info('PayPalIdentityService', 'UserInfo returned 401; attempting token refresh with refresh_token');
+          try {
+            const refreshed = await this.refreshUserAccessToken(context.refreshToken);
+            if (refreshed.access_token) {
+              return await this.getUserInfo(refreshed.access_token, {
+                ...context,
+                tokenType: refreshed.token_type,
+                tokenExpiresAt: refreshed.expires_at,
+                hasRetried: true,
+              });
+            }
+          } catch (refreshErr: any) {
+            logger.warn('PayPalIdentityService', 'Token refresh attempt failed; flow requires re-authorization', {
+              error: refreshErr?.message,
+            });
+          }
+        }
 
         if (response.status !== 404) {
           // Explicit failure (400, 401, 403, etc.) - break early so error is preserved
@@ -507,6 +633,7 @@ export class PayPalIdentityService {
         lastError = err?.message || 'Network error';
         logger.warn('PayPalIdentityService', 'PayPal UserInfo network call failed', {
           requestUrl: url,
+          endpointHostname: new URL(url).hostname,
           httpMethod: 'GET',
           error: lastError,
           selectedEnvironment: env.PAYPAL_MODE,
@@ -574,9 +701,9 @@ export class PayPalIdentityService {
     }
 
     // 4. Fetch verified UserInfo via documented Identity API:
-    // GET /v1/identity/openidconnect/userinfo
+    // GET /v1/identity/openidconnect/userinfo?schema=openid
     let userInfo: PayPalUserInfo | null = null;
-    let endpointUsed = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`;
+    let endpointUsed = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`;
     let userinfoStatus = 200;
     let userinfoDebugId: string | undefined;
 
@@ -584,6 +711,8 @@ export class PayPalIdentityService {
       const userInfoResult = await this.getUserInfo(tokens.access_token, {
         tokenType: tokens.token_type,
         grantedScopes,
+        tokenExpiresAt: tokens.expires_at,
+        refreshToken: tokens.refresh_token,
       });
       userInfo = userInfoResult.data;
       endpointUsed = userInfoResult.endpointUsed;
@@ -599,7 +728,7 @@ export class PayPalIdentityService {
       }
     }
 
-    // Section 4: Safe diagnostic logging (Never logs sensitive credentials)
+    // Section 5: Safe diagnostic logging (Never logs sensitive credentials)
     const returnedPropertyNames = [
       ...Object.keys(userInfo || {}),
       ...Object.keys(idTokenClaims || {}),
@@ -620,6 +749,7 @@ export class PayPalIdentityService {
 
     logger.info('PayPalIdentityService', 'PayPal Identity API verification diagnostics', {
       userinfoEndpointUsed: endpointUsed,
+      userinfoEndpointHostname: new URL(endpointUsed).hostname,
       userinfoHttpStatus: userinfoStatus,
       userinfoDebugId,
       returnedPropertyNames,
@@ -630,6 +760,7 @@ export class PayPalIdentityService {
       emailVerified: userInfo?.email_verified,
       grantedScope: grantedScopes,
       tokenType: tokens.token_type,
+      tokenExpiresAt: tokens.expires_at ? new Date(tokens.expires_at).toISOString() : undefined,
       selectedEnvironment: env.PAYPAL_MODE,
       allExpectedScopesGranted: missingScopes.length === 0,
       missingScopes: missingScopes.length > 0 ? missingScopes : undefined,

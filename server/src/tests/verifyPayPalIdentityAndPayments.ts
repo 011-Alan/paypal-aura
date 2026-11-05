@@ -83,7 +83,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-1',
@@ -146,7 +146,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-2',
@@ -200,7 +200,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-3',
@@ -250,7 +250,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-4',
@@ -303,7 +303,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-5',
@@ -351,7 +351,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-6',
@@ -410,7 +410,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-7',
@@ -469,7 +469,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({
             access_token: 'mock-access-token-8',
@@ -537,7 +537,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({ access_token: 'mock-conflict-token', token_type: 'Bearer', expires_in: 28800 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -594,7 +594,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({ access_token: 'mock-link-token', token_type: 'Bearer', expires_in: 28800 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -682,7 +682,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({ access_token: 'mock-orders-token', token_type: 'Bearer', expires_in: 32400 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -765,7 +765,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({ access_token: 'mock-orders-token', token_type: 'Bearer', expires_in: 32400 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -918,7 +918,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
           JSON.stringify({ access_token: 'mock-token-unreg', token_type: 'Bearer', expires_in: 28800 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
