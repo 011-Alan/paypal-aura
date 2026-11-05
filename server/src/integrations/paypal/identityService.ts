@@ -14,6 +14,8 @@ export interface PayPalUserInfo {
   given_name?: string;
   family_name?: string;
   email?: string;
+  email_verified?: boolean | string;
+  account_type?: string;
   emails?: Array<{ value: string; primary?: boolean }>;
   verified_account?: boolean | string;
   payer_id?: string;
@@ -255,6 +257,21 @@ export class PayPalIdentityService {
       }
 
       const data = (await response.json()) as PayPalTokenResponse;
+
+      if (!data || !data.access_token || typeof data.access_token !== 'string') {
+        throw new Error('PayPal token exchange succeeded but response is missing a valid access_token');
+      }
+
+      logger.info('PayPalIdentityService', 'PayPal OAuth token exchange successful', {
+        tokenType: data.token_type,
+        expiresIn: data.expires_in,
+        hasAccessToken: Boolean(data.access_token),
+        hasIdToken: Boolean(data.id_token),
+        hasRefreshToken: Boolean(data.refresh_token),
+        grantedScope: data.scope,
+        selectedEnvironment: env.PAYPAL_MODE,
+      });
+
       return data;
     })();
 
@@ -378,22 +395,40 @@ export class PayPalIdentityService {
   }
 
   /**
-   * Fetches the user profile from PayPal's official Identity API endpoint:
-   * GET /v1/identity/oauth2/userinfo?schema=paypalv1.1
-   * Reference: https://developer.paypal.com/api/identity/v1/
+   * Fetches the user profile from PayPal's official Identity v1 OpenID Connect endpoint:
+   * GET /v1/identity/openidconnect/userinfo
+   * Reference: https://developer.paypal.com/api/identity/v1/userinfo-get
    */
-  public async getUserInfo(accessToken: string): Promise<{ data: PayPalUserInfo; endpointUsed: string; status: number }> {
-    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`;
+  public async getUserInfo(
+    accessToken: string,
+    context?: {
+      tokenType?: string;
+      grantedScopes?: string;
+    }
+  ): Promise<{
+    data: PayPalUserInfo;
+    endpointUsed: string;
+    status: number;
+    debugId?: string;
+    correlationId?: string;
+  }> {
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('Cannot fetch PayPal user information: access_token is missing or invalid');
+    }
+
+    // Official documented OpenID Connect UserInfo endpoints
+    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`;
     const fallbackUrls = [
-      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=paypalv1.1`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
     ];
 
     const urlsToTry = [primaryUrl, ...fallbackUrls];
     let lastStatus = 0;
     let lastError = '';
     let lastEndpoint = primaryUrl;
+    let lastDebugId: string | undefined;
+    let lastCorrelationId: string | undefined;
+    let lastResponseJson: any = null;
 
     for (const url of urlsToTry) {
       lastEndpoint = url;
@@ -407,6 +442,12 @@ export class PayPalIdentityService {
         });
 
         lastStatus = response.status;
+        const debugIdHeader = response.headers.get('paypal-debug-id') || response.headers.get('correlation-id');
+        if (debugIdHeader) {
+          lastDebugId = debugIdHeader;
+          lastCorrelationId = debugIdHeader;
+        }
+
         const rawText = await response.text();
 
         let parsedJson: any = null;
@@ -415,34 +456,70 @@ export class PayPalIdentityService {
         } catch {
           // non-json response
         }
+        lastResponseJson = parsedJson;
 
-        if (response.ok && parsedJson && typeof parsedJson === 'object') {
-          return { data: parsedJson as PayPalUserInfo, endpointUsed: url, status: response.status };
+        if (parsedJson?.debug_id) {
+          lastDebugId = parsedJson.debug_id;
         }
 
-        lastError = parsedJson?.error_description || parsedJson?.error || parsedJson?.message || rawText;
+        if (response.ok && parsedJson && typeof parsedJson === 'object') {
+          logger.info('PayPalIdentityService', 'PayPal UserInfo retrieved successfully', {
+            requestUrl: url,
+            httpMethod: 'GET',
+            httpStatus: response.status,
+            debugId: lastDebugId,
+            selectedEnvironment: env.PAYPAL_MODE,
+          });
+          return {
+            data: parsedJson as PayPalUserInfo,
+            endpointUsed: url,
+            status: response.status,
+            debugId: lastDebugId,
+            correlationId: lastCorrelationId,
+          };
+        }
 
+        lastError =
+          parsedJson?.error_description ||
+          parsedJson?.message ||
+          parsedJson?.error ||
+          (parsedJson?.details ? JSON.stringify(parsedJson.details) : '') ||
+          rawText;
+
+        // Section 4: Temporarily log safely (Redact all secrets, tokens, codes)
         logger.warn('PayPalIdentityService', 'PayPal UserInfo endpoint returned non-OK status', {
-          url,
-          status: lastStatus,
-          error: lastError,
+          requestUrl: url,
+          httpMethod: 'GET',
+          httpStatus: lastStatus,
+          responseJson: parsedJson || rawText,
+          debugId: lastDebugId,
+          correlationId: lastCorrelationId,
+          grantedScopes: context?.grantedScopes,
+          tokenType: context?.tokenType,
+          selectedEnvironment: env.PAYPAL_MODE,
         });
 
         if (response.status !== 404) {
-          // Explicit failure (401, 403, etc.) - break early so error is preserved
+          // Explicit failure (400, 401, 403, etc.) - break early so error is preserved
           break;
         }
       } catch (err: any) {
         lastError = err?.message || 'Network error';
         logger.warn('PayPalIdentityService', 'PayPal UserInfo network call failed', {
-          url,
+          requestUrl: url,
+          httpMethod: 'GET',
           error: lastError,
+          selectedEnvironment: env.PAYPAL_MODE,
         });
       }
     }
 
-    // Do not silently continue if user-information request fails!
-    throw new Error(`PayPal user-information request failed (${lastStatus || 500}): ${lastError || 'Unknown error'}`);
+    // Do not replace the actual PayPal error with a generic error message during debugging!
+    throw new Error(
+      `PayPal user-information request failed (${lastStatus || 500})${
+        lastDebugId ? ` [debug_id: ${lastDebugId}]` : ''
+      }: ${lastError || 'Unable to fetch details to serve the request'}`
+    );
   }
 
   /**
@@ -497,16 +574,21 @@ export class PayPalIdentityService {
     }
 
     // 4. Fetch verified UserInfo via documented Identity API:
-    // GET /v1/identity/oauth2/userinfo?schema=paypalv1.1
+    // GET /v1/identity/openidconnect/userinfo
     let userInfo: PayPalUserInfo | null = null;
-    let endpointUsed = `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`;
+    let endpointUsed = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`;
     let userinfoStatus = 200;
+    let userinfoDebugId: string | undefined;
 
     try {
-      const userInfoResult = await this.getUserInfo(tokens.access_token);
+      const userInfoResult = await this.getUserInfo(tokens.access_token, {
+        tokenType: tokens.token_type,
+        grantedScopes,
+      });
       userInfo = userInfoResult.data;
       endpointUsed = userInfoResult.endpointUsed;
       userinfoStatus = userInfoResult.status;
+      userinfoDebugId = userInfoResult.debugId;
     } catch (userInfoErr: any) {
       logger.error('PayPalIdentityService', 'Failed to retrieve user information from PayPal', {
         error: userInfoErr?.message,
@@ -517,7 +599,7 @@ export class PayPalIdentityService {
       }
     }
 
-    // Section 4: Temporary, secure diagnostic logging (Never logs sensitive credentials)
+    // Section 4: Safe diagnostic logging (Never logs sensitive credentials)
     const returnedPropertyNames = [
       ...Object.keys(userInfo || {}),
       ...Object.keys(idTokenClaims || {}),
@@ -539,11 +621,16 @@ export class PayPalIdentityService {
     logger.info('PayPalIdentityService', 'PayPal Identity API verification diagnostics', {
       userinfoEndpointUsed: endpointUsed,
       userinfoHttpStatus: userinfoStatus,
+      userinfoDebugId,
       returnedPropertyNames,
       hasSub,
       hasUserId,
       hasPayPalAccountId: hasAccountId,
+      accountType: userInfo?.account_type,
+      emailVerified: userInfo?.email_verified,
       grantedScope: grantedScopes,
+      tokenType: tokens.token_type,
+      selectedEnvironment: env.PAYPAL_MODE,
       allExpectedScopesGranted: missingScopes.length === 0,
       missingScopes: missingScopes.length > 0 ? missingScopes : undefined,
     });
@@ -613,9 +700,12 @@ export class PayPalIdentityService {
       (paypalEmail ? paypalEmail.split('@')[0] : 'PayPal User');
 
     const isVerified = Boolean(
-      userInfo?.verified_account === true ||
+      userInfo?.email_verified === true ||
+        userInfo?.email_verified === 'true' ||
+        userInfo?.verified_account === true ||
         userInfo?.verified_account === 'true' ||
-        idTokenClaims.verified_account === true
+        idTokenClaims.verified_account === true ||
+        idTokenClaims.email_verified === true
     );
     const payerId =
       (typeof userInfo?.payer_id === 'string' && userInfo.payer_id.trim() ? userInfo.payer_id.trim() : undefined) ||
