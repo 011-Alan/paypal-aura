@@ -44,6 +44,7 @@ export interface OAuthStatePayload {
 export class PayPalIdentityService {
   private jwksCache: { keys: any[]; fetchedAt: number } | null = null;
   private readonly JWKS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+  private codeExchangeCache = new Map<string, { promise: Promise<PayPalTokenResponse>; expiresAt: number }>();
 
   /**
    * Generates a cryptographically signed OAuth 2.0 state parameter with embedded PKCE verifier.
@@ -202,33 +203,37 @@ export class PayPalIdentityService {
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const redirectUri = env.PAYPAL_IDENTITY_REDIRECT_URI;
 
-    const bodyParams = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-    });
-
-    if (codeVerifier) {
-      bodyParams.append('code_verifier', codeVerifier);
+    // De-duplicate in-flight or recent token exchange for the same authorization code.
+    // Prevents "invalid_authz_code: Authorization code not found in cache" if callbacks are hit concurrently.
+    const cacheKey = code.trim();
+    const now = Date.now();
+    const existing = this.codeExchangeCache.get(cacheKey);
+    if (existing && existing.expiresAt > now) {
+      logger.info('PayPalIdentityService', 'Reusing in-flight / recent token exchange for authorization code');
+      return existing.promise;
     }
 
-    const primaryTokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
-    const fallbackTokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
+    const exchangePromise = (async () => {
+      const bodyParams = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+      });
 
-    logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OpenID Connect token endpoint', {
-      primaryTokenUrl,
-      redirectUri,
-      mode: env.PAYPAL_MODE,
-      hasCodeVerifier: Boolean(codeVerifier),
-    });
+      if (codeVerifier) {
+        bodyParams.append('code_verifier', codeVerifier);
+      }
 
-    let data: PayPalTokenResponse | null = null;
-    let lastError = '';
-    let lastStatus = 0;
+      const tokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
 
-    // Primary: Dedicated OpenID Connect token service (returns id_token & identity-scoped access_token)
-    try {
-      const oidcResp = await fetch(primaryTokenUrl, {
+      logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OAuth 2.0 token endpoint', {
+        tokenUrl,
+        redirectUri,
+        mode: env.PAYPAL_MODE,
+        hasCodeVerifier: Boolean(codeVerifier),
+      });
+
+      const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${credentials}`,
@@ -238,57 +243,31 @@ export class PayPalIdentityService {
         body: bodyParams.toString(),
       });
 
-      if (oidcResp.ok) {
-        data = (await oidcResp.json()) as PayPalTokenResponse;
-      } else {
-        lastStatus = oidcResp.status;
-        lastError = await oidcResp.text();
-        logger.warn('PayPalIdentityService', 'Primary OpenID tokenservice returned non-OK status', {
-          status: lastStatus,
-          response: lastError,
+      if (!response.ok) {
+        const errText = await response.text();
+        logger.error('PayPalIdentityService', 'PayPal token exchange failed', {
+          status: response.status,
+          response: errText,
         });
+        throw new Error(`PayPal token exchange failed (${response.status}): ${errText}`);
       }
-    } catch (err: any) {
-      logger.warn('PayPalIdentityService', 'Failed to reach primary OpenID tokenservice', {
-        error: err?.message,
-      });
-    }
 
-    // Secondary: If tokenservice failed or is unsupported, try /v1/oauth2/token
-    if (!data) {
-      try {
-        const oauthResp = await fetch(fallbackTokenUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${credentials}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Accept: 'application/json',
-          },
-          body: bodyParams.toString(),
-        });
+      const data = (await response.json()) as PayPalTokenResponse;
+      return data;
+    })();
 
-        if (oauthResp.ok) {
-          data = (await oauthResp.json()) as PayPalTokenResponse;
-        } else {
-          lastStatus = oauthResp.status;
-          lastError = await oauthResp.text();
-          logger.error('PayPalIdentityService', 'Fallback OAuth2 token exchange also failed', {
-            status: lastStatus,
-            response: lastError,
-          });
-        }
-      } catch (err: any) {
-        logger.error('PayPalIdentityService', 'Failed to reach fallback OAuth2 token endpoint', {
-          error: err?.message,
-        });
+    this.codeExchangeCache.set(cacheKey, {
+      promise: exchangePromise,
+      expiresAt: now + 120000, // 2 minutes TTL
+    });
+
+    if (this.codeExchangeCache.size > 50) {
+      for (const [k, v] of this.codeExchangeCache.entries()) {
+        if (v.expiresAt <= now) this.codeExchangeCache.delete(k);
       }
     }
 
-    if (!data) {
-      throw new Error(`PayPal token exchange failed (${lastStatus || 500}): ${lastError || 'No response from PayPal'}`);
-    }
-
-    return data;
+    return exchangePromise;
   }
 
   /**
@@ -413,7 +392,6 @@ export class PayPalIdentityService {
         const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
             Accept: 'application/json',
           },
         });
@@ -485,6 +463,7 @@ export class PayPalIdentityService {
     const rawUserId =
       userInfo?.user_id ||
       userInfo?.sub ||
+      userInfo?.payer_id ||
       idTokenClaims.sub ||
       idTokenClaims.user_id ||
       idTokenClaims.payer_id ||
@@ -492,7 +471,11 @@ export class PayPalIdentityService {
       tokens.payer_id ||
       tokens.sub;
 
-    const paypalUserId = typeof rawUserId === 'string' ? rawUserId.trim() : (rawUserId ? String(rawUserId) : '');
+    let paypalUserId = typeof rawUserId === 'string' ? rawUserId.trim() : (rawUserId ? String(rawUserId) : '');
+    if (paypalUserId.includes('/user/')) {
+      const parts = paypalUserId.split('/user/');
+      paypalUserId = parts[parts.length - 1] || paypalUserId;
+    }
 
     if (!paypalUserId) {
       logger.error('PayPalIdentityService', 'PayPal returned no valid subject identifier', {
