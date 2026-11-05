@@ -212,33 +212,52 @@ export class PayPalIdentityService {
       bodyParams.append('code_verifier', codeVerifier);
     }
 
-    logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OAuth 2.0 token endpoint', {
-      tokenUrl: `${env.PAYPAL_BASE_URL}/v1/oauth2/token`,
+    const primaryTokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
+    const fallbackTokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
+
+    logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OpenID Connect token endpoint', {
+      primaryTokenUrl,
       redirectUri,
       mode: env.PAYPAL_MODE,
       hasCodeVerifier: Boolean(codeVerifier),
     });
 
-    const response = await fetch(`${env.PAYPAL_BASE_URL}/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: bodyParams.toString(),
-    });
-
     let data: PayPalTokenResponse | null = null;
-    if (response.ok) {
-      data = (await response.json()) as PayPalTokenResponse;
+    let lastError = '';
+    let lastStatus = 0;
+
+    // Primary: Dedicated OpenID Connect token service (returns id_token & identity-scoped access_token)
+    try {
+      const oidcResp = await fetch(primaryTokenUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: bodyParams.toString(),
+      });
+
+      if (oidcResp.ok) {
+        data = (await oidcResp.json()) as PayPalTokenResponse;
+      } else {
+        lastStatus = oidcResp.status;
+        lastError = await oidcResp.text();
+        logger.warn('PayPalIdentityService', 'Primary OpenID tokenservice returned non-OK status', {
+          status: lastStatus,
+          response: lastError,
+        });
+      }
+    } catch (err: any) {
+      logger.warn('PayPalIdentityService', 'Failed to reach primary OpenID tokenservice', {
+        error: err?.message,
+      });
     }
 
-    // Fallback: If /v1/oauth2/token didn't provide an id_token or identity identifier, try OpenID tokenservice
-    if (!data || (!data.id_token && !data.user_id && !data.payer_id)) {
-      const oidcUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
+    // Secondary: If tokenservice failed or is unsupported, try /v1/oauth2/token
+    if (!data) {
       try {
-        const oidcResp = await fetch(oidcUrl, {
+        const oauthResp = await fetch(fallbackTokenUrl, {
           method: 'POST',
           headers: {
             Authorization: `Basic ${credentials}`,
@@ -247,24 +266,26 @@ export class PayPalIdentityService {
           },
           body: bodyParams.toString(),
         });
-        if (oidcResp.ok) {
-          const oidcData = (await oidcResp.json()) as PayPalTokenResponse;
-          data = { ...(data || {}), ...oidcData };
+
+        if (oauthResp.ok) {
+          data = (await oauthResp.json()) as PayPalTokenResponse;
+        } else {
+          lastStatus = oauthResp.status;
+          lastError = await oauthResp.text();
+          logger.error('PayPalIdentityService', 'Fallback OAuth2 token exchange also failed', {
+            status: lastStatus,
+            response: lastError,
+          });
         }
       } catch (err: any) {
-        logger.warn('PayPalIdentityService', 'Fallback to tokenservice encountered network error', {
+        logger.error('PayPalIdentityService', 'Failed to reach fallback OAuth2 token endpoint', {
           error: err?.message,
         });
       }
     }
 
     if (!data) {
-      const errText = await response.text();
-      logger.error('PayPalIdentityService', 'PayPal token exchange failed', {
-        status: response.status,
-        response: errText,
-      });
-      throw new Error(`PayPal token exchange failed (${response.status}): ${errText}`);
+      throw new Error(`PayPal token exchange failed (${lastStatus || 500}): ${lastError || 'No response from PayPal'}`);
     }
 
     return data;
@@ -381,10 +402,10 @@ export class PayPalIdentityService {
    */
   public async getUserInfo(accessToken: string): Promise<PayPalUserInfo | null> {
     const candidateUrls = [
-      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
     ];
 
     for (const url of candidateUrls) {
