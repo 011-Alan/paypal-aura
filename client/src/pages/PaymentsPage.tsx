@@ -161,7 +161,11 @@ export const PaymentsPage: React.FC = () => {
     try {
       const res = await apiRequest(`/payments/${activePayment._id}/paypal-order`, {
         method: 'POST',
-        body: JSON.stringify({ approvalToken }),
+        body: JSON.stringify({
+          approvalToken,
+          customReturnUrl: `${window.location.origin}/payments?status=approved`,
+          customCancelUrl: `${window.location.origin}/payments?status=cancelled`,
+        }),
       });
       if (res.paypalOrder?.approvalUrl) {
         setStatusMessage(

@@ -34,6 +34,7 @@ export interface OAuthStatePayload {
   linkUserId?: string;
   action?: 'login' | 'register';
   codeVerifier?: string;
+  clientOrigin?: string;
 }
 
 export class PayPalIdentityService {
@@ -48,6 +49,7 @@ export class PayPalIdentityService {
     linkUserId?: string;
     action?: 'login' | 'register';
     codeVerifier?: string;
+    clientOrigin?: string;
   }): { state: string; nonce: string; codeVerifier: string; codeChallenge: string } {
     const nonce = crypto.randomBytes(16).toString('hex');
     const codeVerifier = options?.codeVerifier || crypto.randomBytes(32).toString('base64url');
@@ -59,6 +61,7 @@ export class PayPalIdentityService {
       linkUserId: options?.linkUserId,
       action: options?.action || 'login',
       codeVerifier,
+      clientOrigin: options?.clientOrigin,
     };
 
     const payloadJson = JSON.stringify(payload);
@@ -121,6 +124,7 @@ export class PayPalIdentityService {
     linkUserId?: string;
     prompt?: string;
     action?: 'login' | 'register';
+    clientOrigin?: string;
   }): {
     url: string;
     state: string;
@@ -137,6 +141,7 @@ export class PayPalIdentityService {
     const { state, nonce, codeVerifier, codeChallenge } = this.generateOAuthState({
       linkUserId: options?.linkUserId,
       action: options?.action || 'login',
+      clientOrigin: options?.clientOrigin,
     });
     const redirectUri = env.PAYPAL_IDENTITY_REDIRECT_URI;
 

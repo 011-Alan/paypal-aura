@@ -22,6 +22,10 @@ services:
         value: 4000
       - key: ENABLE_BACKGROUND_WORKERS
         value: "true"
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: PUBLIC_API_URL
+        sync: false
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET

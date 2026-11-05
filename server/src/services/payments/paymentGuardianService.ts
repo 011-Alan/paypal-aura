@@ -264,6 +264,8 @@ export class PaymentGuardianService {
     userId: string;
     paymentRequestId: string;
     approvalToken: string;
+    customReturnUrl?: string;
+    customCancelUrl?: string;
   }) {
     const userObjId = new mongoose.Types.ObjectId(params.userId);
     const paymentReq = await PaymentRequestModel.findOne({
@@ -304,6 +306,8 @@ export class PaymentGuardianService {
       amountInr: paymentReq.amountInr,
       description: paymentReq.description,
       recipientName: paymentReq.recipientName,
+      customReturnUrl: params.customReturnUrl,
+      customCancelUrl: params.customCancelUrl,
     });
 
     paymentReq.paypalOrderId = orderResult.orderId;

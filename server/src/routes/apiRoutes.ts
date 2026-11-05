@@ -446,10 +446,23 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
     }
 
     const action = req.query.action === 'register' ? 'register' : 'login';
+    let clientOrigin = (req.query.client_origin as string) || (req.headers.origin as string);
+    if (!clientOrigin && req.headers.referer) {
+      try {
+        clientOrigin = new URL(req.headers.referer).origin;
+      } catch {
+        // ignore invalid referer
+      }
+    }
+    if ((!clientOrigin || clientOrigin.includes('localhost') || clientOrigin.includes('127.0.0.1')) && req.headers.host?.includes('.onrender.com')) {
+      clientOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+    }
+
     const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl({
       linkUserId,
       prompt: req.query.prompt as string | undefined,
       action,
+      clientOrigin,
     });
 
     res.json({
@@ -471,14 +484,28 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
 apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
   const { code, state, error, error_description } = req.query;
 
+  // Dynamically resolve target frontend origin from verified state payload
+  let targetOrigin = env.CLIENT_ORIGIN;
+  if (state && typeof state === 'string') {
+    const verifiedState = paypalIdentityService.verifyOAuthState(state);
+    if (verifiedState.payload?.clientOrigin) {
+      targetOrigin = verifiedState.payload.clientOrigin;
+    }
+  }
+
+  // Fallback safeguard: on Render, never redirect browser back to localhost
+  if ((!targetOrigin || targetOrigin.includes('localhost') || targetOrigin.includes('127.0.0.1')) && req.headers.host?.includes('.onrender.com')) {
+    targetOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+  }
+
   if (error) {
     const errorMsg = String(error_description || error || 'Authentication cancelled by user');
     logger.warn('PayPalAuth', 'PayPal returned authentication error', { error, error_description });
-    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent(errorMsg)}`);
+    return res.redirect(`${targetOrigin}/?auth=paypal_error&message=${encodeURIComponent(errorMsg)}`);
   }
 
   if (!code || !state) {
-    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent('Missing authorization code or state from PayPal')}`);
+    return res.redirect(`${targetOrigin}/?auth=paypal_error&message=${encodeURIComponent('Missing authorization code or state from PayPal')}`);
   }
 
   try {
@@ -489,17 +516,17 @@ apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
 
     setSessionCookie(res, result.token);
 
-    const redirectUrl = `${env.CLIENT_ORIGIN}/?auth=paypal_success&token=${encodeURIComponent(result.token)}&isNewUser=${result.isNewUser}&isLinked=${result.isLinked}`;
+    const redirectUrl = `${targetOrigin}/?auth=paypal_success&token=${encodeURIComponent(result.token)}&isNewUser=${result.isNewUser}&isLinked=${result.isLinked}`;
     return res.redirect(redirectUrl);
   } catch (err: any) {
     logger.error('PayPalAuth', 'Failed to process PayPal authentication callback', { error: err?.message });
     const rawMsg = String(err?.message || '');
     if (rawMsg.includes('PAYPAL_NOT_REGISTERED')) {
       const cleanMsg = 'No AURA account is linked to this PayPal identity. Please click "Sign up with PayPal" to register.';
-      return res.redirect(`${env.CLIENT_ORIGIN}/?auth=not_registered&message=${encodeURIComponent(cleanMsg)}`);
+      return res.redirect(`${targetOrigin}/?auth=not_registered&message=${encodeURIComponent(cleanMsg)}`);
     }
     const clientMsg = err?.message || 'PayPal authentication failed. Please try again.';
-    return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent(clientMsg)}`);
+    return res.redirect(`${targetOrigin}/?auth=paypal_error&message=${encodeURIComponent(clientMsg)}`);
   }
 });
 
@@ -2098,10 +2125,20 @@ apiRouter.post('/payments/:id/paypal-order', requireAuth, async (req: Authentica
       return;
     }
 
+    let customReturnUrl = req.body?.customReturnUrl as string | undefined;
+    let customCancelUrl = req.body?.customCancelUrl as string | undefined;
+    if (!customReturnUrl && req.headers.host?.includes('.onrender.com')) {
+      const frontendOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+      customReturnUrl = `${frontendOrigin}/payments?status=approved`;
+      customCancelUrl = `${frontendOrigin}/payments?status=cancelled`;
+    }
+
     const result = await paymentGuardianService.createPayPalOrderForApprovedRequest({
       userId: req.userId!,
       paymentRequestId: req.params.id,
       approvalToken: String(approvalToken),
+      customReturnUrl,
+      customCancelUrl,
     });
 
     res.status(201).json({

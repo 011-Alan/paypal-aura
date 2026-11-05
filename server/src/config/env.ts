@@ -8,8 +8,23 @@ dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '4000', 10),
-  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
-  PUBLIC_API_URL: process.env.PUBLIC_API_URL || 'http://localhost:4000/api',
+  get CLIENT_ORIGIN(): string {
+    if (process.env.CLIENT_ORIGIN) return process.env.CLIENT_ORIGIN;
+    if (process.env.RENDER_EXTERNAL_URL) {
+      return process.env.RENDER_EXTERNAL_URL
+        .replace('aura-backend-api', 'aura-frontend')
+        .replace('-backend-api', '-frontend')
+        .replace('-backend', '-frontend');
+    }
+    return 'http://localhost:5173';
+  },
+  get PUBLIC_API_URL(): string {
+    if (process.env.PUBLIC_API_URL) return process.env.PUBLIC_API_URL;
+    if (process.env.RENDER_EXTERNAL_URL) {
+      return `${process.env.RENDER_EXTERNAL_URL}/api`;
+    }
+    return `http://localhost:${process.env.PORT || '4000'}/api`;
+  },
   ENABLE_BACKGROUND_WORKERS: process.env.ENABLE_BACKGROUND_WORKERS !== 'false',
 
   // Primary Database

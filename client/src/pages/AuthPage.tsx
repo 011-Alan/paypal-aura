@@ -74,7 +74,11 @@ export const AuthPage: React.FC = () => {
     setPaypalBusy(true);
     try {
       const action = mode === 'register' ? 'register' : 'login';
-      const res = await apiRequest(`/auth/paypal/authorize?action=${action}`);
+      const clientOriginParam =
+        typeof window !== 'undefined' && window.location.origin
+          ? `&client_origin=${encodeURIComponent(window.location.origin)}`
+          : '';
+      const res = await apiRequest(`/auth/paypal/authorize?action=${action}${clientOriginParam}`);
       if (res.url) {
         window.location.href = res.url;
       } else {
