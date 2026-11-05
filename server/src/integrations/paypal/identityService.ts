@@ -8,12 +8,13 @@ import { hashSecretArgon2id, signSessionToken, recordAuditLog } from '../../midd
 import { zapierIntegration } from '../zapier';
 
 export interface PayPalUserInfo {
-  user_id: string;
-  sub: string;
-  name: string;
+  user_id?: string;
+  sub?: string;
+  name?: string;
   given_name?: string;
   family_name?: string;
   email?: string;
+  emails?: Array<{ value: string; primary?: boolean }>;
   verified_account?: boolean | string;
   payer_id?: string;
   address?: Record<string, string>;
@@ -377,42 +378,71 @@ export class PayPalIdentityService {
   }
 
   /**
-   * Fetches the user profile from PayPal's official UserInfo endpoint.
-   * Tries canonical /v1/identity/oauth2/userinfo first, then /v1/identity/openidconnect/userinfo.
+   * Fetches the user profile from PayPal's official Identity API endpoint:
+   * GET /v1/identity/oauth2/userinfo?schema=paypalv1.1
+   * Reference: https://developer.paypal.com/api/identity/v1/
    */
-  public async getUserInfo(accessToken: string): Promise<PayPalUserInfo | null> {
-    const candidateUrls = [
+  public async getUserInfo(accessToken: string): Promise<{ data: PayPalUserInfo; endpointUsed: string; status: number }> {
+    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`;
+    const fallbackUrls = [
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=paypalv1.1`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
       `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
-      `https://api.sandbox.paypal.com/v1/identity/openidconnect/userinfo?schema=paypalv1.1`,
-      `https://api.sandbox.paypal.com/v1/identity/openidconnect/userinfo?schema=openid`,
     ];
 
-    for (const url of candidateUrls) {
+    const urlsToTry = [primaryUrl, ...fallbackUrls];
+    let lastStatus = 0;
+    let lastError = '';
+    let lastEndpoint = primaryUrl;
+
+    for (const url of urlsToTry) {
+      lastEndpoint = url;
       try {
         const response = await fetch(url, {
+          method: 'GET',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Accept: 'application/json',
           },
         });
 
-        if (response.ok) {
-          const userInfo = (await response.json()) as PayPalUserInfo;
-          return userInfo;
-        } else {
-          logger.warn('PayPalIdentityService', `UserInfo endpoint ${url} returned status ${response.status}`);
+        lastStatus = response.status;
+        const rawText = await response.text();
+
+        let parsedJson: any = null;
+        try {
+          parsedJson = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          // non-json response
+        }
+
+        if (response.ok && parsedJson && typeof parsedJson === 'object') {
+          return { data: parsedJson as PayPalUserInfo, endpointUsed: url, status: response.status };
+        }
+
+        lastError = parsedJson?.error_description || parsedJson?.error || parsedJson?.message || rawText;
+
+        logger.warn('PayPalIdentityService', 'PayPal UserInfo endpoint returned non-OK status', {
+          url,
+          status: lastStatus,
+          error: lastError,
+        });
+
+        if (response.status !== 404) {
+          // Explicit failure (401, 403, etc.) - break early so error is preserved
+          break;
         }
       } catch (err: any) {
-        logger.warn('PayPalIdentityService', `UserInfo call to ${url} encountered network error: ${err?.message}`);
+        lastError = err?.message || 'Network error';
+        logger.warn('PayPalIdentityService', 'PayPal UserInfo network call failed', {
+          url,
+          error: lastError,
+        });
       }
     }
 
-    return null;
+    // Do not silently continue if user-information request fails!
+    throw new Error(`PayPal user-information request failed (${lastStatus || 500}): ${lastError || 'Unknown error'}`);
   }
 
   /**
@@ -445,6 +475,11 @@ export class PayPalIdentityService {
     // 2. Exchange code for tokens (with PKCE verifier)
     const tokens = await this.exchangeCodeForTokens(code, codeVerifier);
 
+    // Inspect returned scopes
+    const grantedScopes = String(tokens.scope || '');
+    const expectedScopes = ['openid', 'profile', 'email', 'https://uri.paypal.com/services/paypalattributes'];
+    const missingScopes = expectedScopes.filter((s) => !grantedScopes.includes(s));
+
     // 3. Validate ID token claims and signature
     let idTokenClaims: Record<string, any> = {};
     if (tokens.id_token) {
@@ -461,60 +496,119 @@ export class PayPalIdentityService {
       }
     }
 
-    // 4. Fetch verified UserInfo or fallback to cryptographically verified ID token claims
-    const userInfo = await this.getUserInfo(tokens.access_token);
+    // 4. Fetch verified UserInfo via documented Identity API:
+    // GET /v1/identity/oauth2/userinfo?schema=paypalv1.1
+    let userInfo: PayPalUserInfo | null = null;
+    let endpointUsed = `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`;
+    let userinfoStatus = 200;
 
-    // Derive stable identity checking all official PayPal identity properties
-    const rawUserId =
-      userInfo?.user_id ||
-      userInfo?.sub ||
-      userInfo?.payer_id ||
-      idTokenClaims.sub ||
-      idTokenClaims.user_id ||
-      idTokenClaims.payer_id ||
-      tokens.user_id ||
-      tokens.payer_id ||
-      tokens.sub;
-
-    let paypalUserId = typeof rawUserId === 'string' ? rawUserId.trim() : (rawUserId ? String(rawUserId) : '');
-    if (paypalUserId.includes('/user/')) {
-      const parts = paypalUserId.split('/user/');
-      paypalUserId = parts[parts.length - 1] || paypalUserId;
-    }
-
-    const paypalEmail = (
-      userInfo?.email ||
-      idTokenClaims.email ||
-      idTokenClaims.preferred_username ||
-      (tokens as any).email ||
-      ''
-    ).toLowerCase().trim();
-
-    // Fallback: If PayPal Sandbox omitted sub/user_id but provided a verified paypalEmail,
-    // derive a stable, deterministic, unique account identifier bound to this verified PayPal account.
-    if (!paypalUserId && paypalEmail) {
-      paypalUserId = `paypal_user_${crypto.createHash('sha256').update(paypalEmail).digest('hex').slice(0, 16)}`;
-      logger.info('PayPalIdentityService', 'Derived deterministic PayPal identity identifier from verified email', {
-        paypalUserId,
-        paypalEmail,
+    try {
+      const userInfoResult = await this.getUserInfo(tokens.access_token);
+      userInfo = userInfoResult.data;
+      endpointUsed = userInfoResult.endpointUsed;
+      userinfoStatus = userInfoResult.status;
+    } catch (userInfoErr: any) {
+      logger.error('PayPalIdentityService', 'Failed to retrieve user information from PayPal', {
+        error: userInfoErr?.message,
       });
+      // If no id_token claims were returned either, re-throw the explicit API failure!
+      if (!idTokenClaims || (!idTokenClaims.sub && !idTokenClaims.user_id)) {
+        throw userInfoErr;
+      }
     }
 
-    if (!paypalUserId) {
-      logger.error('PayPalIdentityService', 'PayPal returned no valid subject identifier', {
-        tokenKeys: Object.keys(tokens || {}),
-        hasUserInfo: Boolean(userInfo),
-        idTokenClaimsKeys: Object.keys(idTokenClaims || {}),
-        scope: tokens?.scope,
+    // Section 4: Temporary, secure diagnostic logging (Never logs sensitive credentials)
+    const returnedPropertyNames = [
+      ...Object.keys(userInfo || {}),
+      ...Object.keys(idTokenClaims || {}),
+    ];
+    const hasSub = Boolean(
+      (typeof userInfo?.sub === 'string' && userInfo.sub.trim()) ||
+      (typeof idTokenClaims?.sub === 'string' && idTokenClaims.sub.trim())
+    );
+    const hasUserId = Boolean(
+      (typeof userInfo?.user_id === 'string' && userInfo.user_id.trim()) ||
+      (typeof idTokenClaims?.user_id === 'string' && idTokenClaims.user_id.trim())
+    );
+    const hasAccountId = Boolean(
+      (typeof userInfo?.payer_id === 'string' && userInfo.payer_id.trim()) ||
+      (typeof (userInfo as any)?.account_id === 'string' && (userInfo as any).account_id.trim()) ||
+      (typeof idTokenClaims?.payer_id === 'string' && idTokenClaims.payer_id.trim())
+    );
+
+    logger.info('PayPalIdentityService', 'PayPal Identity API verification diagnostics', {
+      userinfoEndpointUsed: endpointUsed,
+      userinfoHttpStatus: userinfoStatus,
+      returnedPropertyNames,
+      hasSub,
+      hasUserId,
+      hasPayPalAccountId: hasAccountId,
+      grantedScope: grantedScopes,
+      allExpectedScopesGranted: missingScopes.length === 0,
+      missingScopes: missingScopes.length > 0 ? missingScopes : undefined,
+    });
+
+    // Section 3: Subject identifier extraction
+    // Prefer non-empty sub; if absent, accept non-empty user_id
+    const rawSub =
+      typeof userInfo?.sub === 'string' && userInfo.sub.trim()
+        ? userInfo.sub.trim()
+        : typeof idTokenClaims?.sub === 'string' && idTokenClaims.sub.trim()
+        ? idTokenClaims.sub.trim()
+        : undefined;
+
+    const rawUserId =
+      typeof userInfo?.user_id === 'string' && userInfo.user_id.trim()
+        ? userInfo.user_id.trim()
+        : typeof idTokenClaims?.user_id === 'string' && idTokenClaims.user_id.trim()
+        ? idTokenClaims.user_id.trim()
+        : undefined;
+
+    let paypalSubjectId: string | undefined;
+
+    if (rawSub && rawUserId) {
+      // Both exist: verify they refer to the same identity according to PayPal's documented response
+      if (rawSub === rawUserId || rawSub.includes(rawUserId) || rawUserId.includes(rawSub)) {
+        paypalSubjectId = rawSub; // Prefer valid non-empty sub
+      } else {
+        logger.warn('PayPalIdentityService', 'sub and user_id values differ in response; preferring sub', {
+          sub: rawSub,
+          userId: rawUserId,
+        });
+        paypalSubjectId = rawSub;
+      }
+    } else if (rawSub) {
+      paypalSubjectId = rawSub;
+    } else if (rawUserId) {
+      paypalSubjectId = rawUserId;
+    }
+
+    if (!paypalSubjectId) {
+      logger.error('PayPalIdentityService', 'PayPal returned no valid subject identifier (sub or user_id)', {
+        returnedPropertyNames,
+        grantedScope: grantedScopes,
       });
       throw new Error(
-        'PayPal did not return a valid unique subject identifier (sub/user_id). In PayPal Developer Dashboard, ensure "Log in with PayPal" is toggled ON under your App settings with "Full name", "Email", and "PayPal account ID" scopes enabled.'
+        `PayPal did not return a valid unique subject identifier (sub/user_id). In PayPal Developer Dashboard, ensure "Log in with PayPal" is toggled ON under your App settings with "Full name", "Email", and "PayPal account ID" scopes enabled. Returned fields: [${returnedPropertyNames.join(', ')}]. Granted scopes: "${grantedScopes || 'none'}".`
       );
     }
+
+    // Extract email from email string or emails array (schema=paypalv1.1)
+    let paypalEmail = '';
+    if (typeof userInfo?.email === 'string' && userInfo.email.trim()) {
+      paypalEmail = userInfo.email.trim();
+    } else if (Array.isArray(userInfo?.emails) && userInfo.emails.length > 0) {
+      const primary = userInfo.emails.find((e: any) => e.primary)?.value || userInfo.emails[0]?.value;
+      if (typeof primary === 'string') paypalEmail = primary.trim();
+    } else if (typeof idTokenClaims?.email === 'string' && idTokenClaims.email.trim()) {
+      paypalEmail = idTokenClaims.email.trim();
+    }
+    paypalEmail = paypalEmail.toLowerCase();
 
     const name =
       userInfo?.name ||
       idTokenClaims.name ||
+      (userInfo?.given_name ? `${userInfo.given_name} ${userInfo.family_name || ''}`.trim() : '') ||
       (idTokenClaims.given_name ? `${idTokenClaims.given_name} ${idTokenClaims.family_name || ''}`.trim() : '') ||
       (paypalEmail ? paypalEmail.split('@')[0] : 'PayPal User');
 
@@ -523,7 +617,10 @@ export class PayPalIdentityService {
         userInfo?.verified_account === 'true' ||
         idTokenClaims.verified_account === true
     );
-    const payerId = userInfo?.payer_id || idTokenClaims.payer_id || tokens.payer_id;
+    const payerId =
+      (typeof userInfo?.payer_id === 'string' && userInfo.payer_id.trim() ? userInfo.payer_id.trim() : undefined) ||
+      (typeof idTokenClaims?.payer_id === 'string' && idTokenClaims.payer_id.trim() ? idTokenClaims.payer_id.trim() : undefined) ||
+      (typeof (tokens as any)?.payer_id === 'string' && (tokens as any).payer_id.trim() ? (tokens as any).payer_id.trim() : undefined);
 
     // -------------------------------------------------------------------------
     // CASE A: Explicit Account Linking for currently authenticated user
@@ -535,12 +632,12 @@ export class PayPalIdentityService {
       }
 
       // Check if this PayPal identity is already linked to another AURA account
-      const conflictingUser = await UserModel.findOne({ paypalUserId });
+      const conflictingUser = await UserModel.findOne({ paypalUserId: paypalSubjectId });
       if (conflictingUser && String(conflictingUser._id) !== String(existingUser._id)) {
         throw new Error('This PayPal account is already linked to another AURA account.');
       }
 
-      existingUser.paypalUserId = paypalUserId;
+      existingUser.paypalUserId = paypalSubjectId;
       existingUser.paypalPayerId = payerId || existingUser.paypalPayerId;
       existingUser.paypalEmail = paypalEmail || existingUser.paypalEmail;
       existingUser.paypalAccountLinked = true;
@@ -555,7 +652,7 @@ export class PayPalIdentityService {
         resourceType: 'user',
         resourceId: String(existingUser._id),
         status: 'success',
-        details: { paypalUserId, paypalEmail },
+        details: { paypalUserId: paypalSubjectId, paypalEmail },
       });
 
       const token = signSessionToken(existingUser);
@@ -565,9 +662,8 @@ export class PayPalIdentityService {
     // -------------------------------------------------------------------------
     // CASE B: Returning User Login via verified PayPal Identity
     // -------------------------------------------------------------------------
-    const existingPayPalUser = await UserModel.findOne({ paypalUserId });
+    const existingPayPalUser = await UserModel.findOne({ paypalUserId: paypalSubjectId });
     if (existingPayPalUser) {
-      // Update fresh details from PayPal
       if (paypalEmail && !existingPayPalUser.paypalEmail) {
         existingPayPalUser.paypalEmail = paypalEmail;
       }
@@ -583,7 +679,7 @@ export class PayPalIdentityService {
         resourceType: 'user',
         resourceId: String(existingPayPalUser._id),
         status: 'success',
-        details: { paypalUserId },
+        details: { paypalUserId: paypalSubjectId },
       });
 
       const token = signSessionToken(existingPayPalUser);
@@ -596,7 +692,6 @@ export class PayPalIdentityService {
     if (paypalEmail) {
       const emailConflict = await UserModel.findOne({ email: paypalEmail });
       if (emailConflict) {
-        // Prevent Account Takeover: Never silently merge unverified accounts
         logger.warn('PayPalIdentityService', 'Login with PayPal matched existing email without prior link', {
           email: paypalEmail,
           userId: emailConflict._id,
@@ -612,10 +707,9 @@ export class PayPalIdentityService {
     // -------------------------------------------------------------------------
     if (action === 'login') {
       logger.info('PayPalIdentityService', 'Unregistered PayPal identity attempted Login with PayPal', {
-        paypalUserId,
+        paypalUserId: paypalSubjectId,
         paypalEmail,
       });
-      // Phase 2 / Phase 3 Requirement: Never assign a demo account! Guide user to register.
       throw new Error(
         'PAYPAL_NOT_REGISTERED: No AURA account is linked to this PayPal identity. Please choose "Sign up with PayPal" to create your account.'
       );
@@ -632,14 +726,14 @@ export class PayPalIdentityService {
 
     const newUser = await UserModel.create({
       name,
-      email: paypalEmail || `paypal-${paypalUserId.slice(-8)}@user.aura`,
+      email: paypalEmail || `paypal-${crypto.randomBytes(4).toString('hex')}@user.aura`,
       passwordHash,
       pinHash,
       role: 'user',
       currency: 'INR',
       monthlyIncome: 85000,
       familyGroupId: `aura-family-${Date.now()}`,
-      paypalUserId,
+      paypalUserId: paypalSubjectId,
       paypalPayerId: payerId,
       paypalEmail,
       paypalAccountLinked: true,
@@ -653,7 +747,7 @@ export class PayPalIdentityService {
       name: 'Primary PayPal Linked Account',
       institution: `PayPal ${env.PAYPAL_MODE === 'live' ? 'Live' : 'Sandbox'} Checking`,
       type: 'checking',
-      accountNumberMasked: `PP-${paypalUserId.slice(-4)}`,
+      accountNumberMasked: `PP-${paypalSubjectId.slice(-4)}`,
       balance: 85000,
       currency: 'INR',
       isSharedWithFamily: false,
@@ -669,7 +763,7 @@ export class PayPalIdentityService {
       resourceType: 'user',
       resourceId: String(newUser._id),
       status: 'success',
-      details: { paypalUserId, paypalEmail, mode: env.PAYPAL_MODE },
+      details: { paypalUserId: paypalSubjectId, paypalEmail, mode: env.PAYPAL_MODE },
     });
 
     const token = signSessionToken(newUser);
