@@ -32,6 +32,8 @@ export interface OAuthStatePayload {
   nonce: string;
   timestamp: number;
   linkUserId?: string;
+  action?: 'login' | 'register';
+  codeVerifier?: string;
 }
 
 export class PayPalIdentityService {
@@ -39,15 +41,24 @@ export class PayPalIdentityService {
   private readonly JWKS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
   /**
-   * Generates a cryptographically signed OAuth 2.0 state parameter.
+   * Generates a cryptographically signed OAuth 2.0 state parameter with embedded PKCE verifier.
    * Defends against CSRF, parameter tampering, and replay attacks.
    */
-  public generateOAuthState(options?: { linkUserId?: string }): { state: string; nonce: string } {
+  public generateOAuthState(options?: {
+    linkUserId?: string;
+    action?: 'login' | 'register';
+    codeVerifier?: string;
+  }): { state: string; nonce: string; codeVerifier: string; codeChallenge: string } {
     const nonce = crypto.randomBytes(16).toString('hex');
+    const codeVerifier = options?.codeVerifier || crypto.randomBytes(32).toString('base64url');
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
     const payload: OAuthStatePayload = {
       nonce,
       timestamp: Date.now(),
       linkUserId: options?.linkUserId,
+      action: options?.action || 'login',
+      codeVerifier,
     };
 
     const payloadJson = JSON.stringify(payload);
@@ -60,6 +71,8 @@ export class PayPalIdentityService {
     return {
       state: `${payloadB64}.${signature}`,
       nonce,
+      codeVerifier,
+      codeChallenge,
     };
   }
 
@@ -102,54 +115,79 @@ export class PayPalIdentityService {
 
   /**
    * Constructs the official Log in with PayPal authorization redirect URL.
+   * Uses PayPal's official OpenID Connect /connect endpoint with flowEntry=static.
    */
-  public getAuthorizationUrl(options?: { linkUserId?: string; prompt?: string }): {
+  public getAuthorizationUrl(options?: {
+    linkUserId?: string;
+    prompt?: string;
+    action?: 'login' | 'register';
+  }): {
     url: string;
     state: string;
     nonce: string;
+    codeVerifier: string;
   } {
-    const clientId = env.PAYPAL_IDENTITY_CLIENT_ID;
-    if (!clientId || clientId === 'your_paypal_sandbox_client_id') {
-      throw new Error('PAYPAL_IDENTITY_CLIENT_ID_NOT_CONFIGURED');
+    const clientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
+    if (!clientId || clientId.includes('your_paypal') || clientId.includes('client_id_here')) {
+      throw new Error(
+        `PAYPAL_CLIENT_ID_NOT_CONFIGURED: A valid PayPal Client ID is required for ${env.PAYPAL_MODE} mode.`
+      );
     }
 
-    const { state, nonce } = this.generateOAuthState({ linkUserId: options?.linkUserId });
+    const { state, nonce, codeVerifier, codeChallenge } = this.generateOAuthState({
+      linkUserId: options?.linkUserId,
+      action: options?.action || 'login',
+    });
     const redirectUri = env.PAYPAL_IDENTITY_REDIRECT_URI;
 
+    // Official Log in with PayPal OpenID Connect parameters
     const params = new URLSearchParams({
+      flowEntry: 'static',
       client_id: clientId,
       response_type: 'code',
       scope: 'openid profile email',
       redirect_uri: redirectUri,
       state,
       nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
     });
 
     if (options?.prompt) {
       params.append('prompt', options.prompt);
     }
 
-    const authBase = `${env.PAYPAL_WEB_URL}/signin/authorize`;
+    // PayPal OIDC /connect/ endpoint with trailing slash (canonical destination)
+    const authBase = `${env.PAYPAL_WEB_URL}/connect/`;
     const url = `${authBase}?${params.toString()}`;
 
+    const clientIdMasked =
+      clientId.length > 10 ? `${clientId.slice(0, 6)}...${clientId.slice(-4)}` : '***';
+
     logger.info('PayPalIdentityService', 'Constructed official Log in with PayPal authorization URL', {
+      authEndpoint: authBase,
       redirectUri,
       mode: env.PAYPAL_MODE,
+      clientId: clientIdMasked,
+      action: options?.action || 'login',
       hasLinkUserId: Boolean(options?.linkUserId),
+      hasPkce: true,
     });
 
-    return { url, state, nonce };
+    return { url, state, nonce, codeVerifier };
   }
 
   /**
-   * Exchanges an authorization code for access and ID tokens using Basic Authentication.
+   * Exchanges an authorization code for access and ID tokens using Basic Authentication and PKCE.
    */
-  public async exchangeCodeForTokens(code: string): Promise<PayPalTokenResponse> {
-    const clientId = env.PAYPAL_IDENTITY_CLIENT_ID;
-    const clientSecret = env.PAYPAL_IDENTITY_CLIENT_SECRET;
+  public async exchangeCodeForTokens(code: string, codeVerifier?: string): Promise<PayPalTokenResponse> {
+    const clientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
+    const clientSecret = env.PAYPAL_IDENTITY_CLIENT_SECRET || env.PAYPAL_CLIENT_SECRET;
 
-    if (!clientId || !clientSecret || clientId === 'your_paypal_sandbox_client_id') {
-      throw new Error('PAYPAL_IDENTITY_CREDENTIALS_MISSING');
+    if (!clientId || !clientSecret || clientId.includes('your_paypal') || clientSecret.includes('secret_here')) {
+      throw new Error(
+        `PAYPAL_CREDENTIALS_MISSING: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required for ${env.PAYPAL_MODE}`
+      );
     }
 
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
@@ -161,10 +199,15 @@ export class PayPalIdentityService {
       redirect_uri: redirectUri,
     });
 
+    if (codeVerifier) {
+      bodyParams.append('code_verifier', codeVerifier);
+    }
+
     logger.info('PayPalIdentityService', 'Exchanging authorization code with PayPal OAuth 2.0 token endpoint', {
       tokenUrl: `${env.PAYPAL_BASE_URL}/v1/oauth2/token`,
       redirectUri,
       mode: env.PAYPAL_MODE,
+      hasCodeVerifier: Boolean(codeVerifier),
     });
 
     const response = await fetch(`${env.PAYPAL_BASE_URL}/v1/oauth2/token`, {
@@ -263,6 +306,8 @@ export class PayPalIdentityService {
       'https://www.paypal.com',
       'https://api.sandbox.paypal.com',
       'https://www.sandbox.paypal.com',
+      'https://api-m.paypal.com',
+      'https://api-m.sandbox.paypal.com',
       env.PAYPAL_BASE_URL,
       env.PAYPAL_WEB_URL,
     ];
@@ -274,8 +319,9 @@ export class PayPalIdentityService {
 
     // Validate claims: Audience
     const aud = String(payload.aud || '');
-    if (aud !== env.PAYPAL_IDENTITY_CLIENT_ID) {
-      throw new Error(`ID token audience mismatch: expected ${env.PAYPAL_IDENTITY_CLIENT_ID}, got ${aud}`);
+    const activeClientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
+    if (aud !== activeClientId && aud !== env.PAYPAL_CLIENT_ID) {
+      throw new Error(`ID token audience mismatch: expected ${activeClientId}, got ${aud}`);
     }
 
     // Validate claims: Expiration
@@ -319,7 +365,10 @@ export class PayPalIdentityService {
 
   /**
    * Processes the full Log in with PayPal callback.
-   * Handles both new account registration and existing account login / explicit linking.
+   * Strictly respects:
+   * - action: 'login' -> Must find existing AURA account or guide user to register (never demo fallback!)
+   * - action: 'register' -> Creates verified AURA account
+   * - Explicit linking if linkUserId is provided
    */
   public async handleCallback(params: {
     code: string;
@@ -329,6 +378,7 @@ export class PayPalIdentityService {
     token: string;
     isNewUser: boolean;
     isLinked: boolean;
+    notRegistered?: boolean;
   }> {
     const { code, state } = params;
 
@@ -338,10 +388,10 @@ export class PayPalIdentityService {
       throw new Error(`Invalid OAuth state: ${stateCheck.reason}`);
     }
 
-    const { nonce, linkUserId } = stateCheck.payload;
+    const { nonce, linkUserId, action, codeVerifier } = stateCheck.payload;
 
-    // 2. Exchange code for tokens
-    const tokens = await this.exchangeCodeForTokens(code);
+    // 2. Exchange code for tokens (with PKCE verifier)
+    const tokens = await this.exchangeCodeForTokens(code, codeVerifier);
 
     // 3. Validate ID token claims and signature
     let idTokenClaims: Record<string, any> = {};
@@ -450,7 +500,21 @@ export class PayPalIdentityService {
     }
 
     // -------------------------------------------------------------------------
-    // CASE D: New User Registration via PayPal
+    // CASE D: User selected "Login with PayPal" but has never registered with AURA
+    // -------------------------------------------------------------------------
+    if (action === 'login') {
+      logger.info('PayPalIdentityService', 'Unregistered PayPal identity attempted Login with PayPal', {
+        paypalUserId,
+        paypalEmail,
+      });
+      // Phase 2 / Phase 3 Requirement: Never assign a demo account! Guide user to register.
+      throw new Error(
+        'PAYPAL_NOT_REGISTERED: No AURA account is linked to this PayPal identity. Please choose "Sign up with PayPal" to create your account.'
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // CASE E: New User Registration via PayPal
     // -------------------------------------------------------------------------
     const secureRandomPassword = crypto.randomBytes(32).toString('hex');
     const secureRandomPin = (Math.floor(1000 + Math.random() * 9000)).toString();
@@ -479,7 +543,7 @@ export class PayPalIdentityService {
     await AccountModel.create({
       userId: newUser._id,
       name: 'Primary PayPal Linked Account',
-      institution: 'PayPal Sandbox Checking',
+      institution: `PayPal ${env.PAYPAL_MODE === 'live' ? 'Live' : 'Sandbox'} Checking`,
       type: 'checking',
       accountNumberMasked: `PP-${paypalUserId.slice(-4)}`,
       balance: 85000,
@@ -497,7 +561,7 @@ export class PayPalIdentityService {
       resourceType: 'user',
       resourceId: String(newUser._id),
       status: 'success',
-      details: { paypalUserId, paypalEmail },
+      details: { paypalUserId, paypalEmail, mode: env.PAYPAL_MODE },
     });
 
     const token = signSessionToken(newUser);

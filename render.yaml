@@ -34,17 +34,15 @@ services:
         sync: false
       - key: PAYPAL_MODE
         value: sandbox
-      - key: PAYPAL_ENVIRONMENT
-        value: sandbox
-      - key: PAYPAL_BASE_URL
-        value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: PAYPAL_IDENTITY_CLIENT_ID
+      - key: PAYPAL_IDENTITY_REDIRECT_URI
         sync: false
-      - key: PAYPAL_IDENTITY_CLIENT_SECRET
+      - key: PAYPAL_RETURN_URL
+        sync: false
+      - key: PAYPAL_CANCEL_URL
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false

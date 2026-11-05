@@ -61,7 +61,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     // Mock fetch for token and userinfo
     const originalFetch = global.fetch;
-    const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl();
+    const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl({ action: 'register' });
 
     const mockIdToken = jwt.sign(
       {
@@ -718,6 +718,76 @@ async function runPayPalIdentityAndPaymentTests() {
     console.log('[PASS] Scenario 10: Webhook processing and duplicate event handling verified.\n');
   }
 
+  // --------------------------------------------------------------------------
+  // Scenario 11: Unregistered PayPal user attempting Login flow (no demo fallback)
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 11: Unregistered PayPal user attempting Login flow (no demo fallback) ---');
+  {
+    const unregisteredSub = `UNREGISTERED-SUB-${Date.now()}`;
+    const unregisteredEmail = `unregistered-${Date.now()}@paypal-test.finance`;
+    const originalFetch = global.fetch;
+    const { state, nonce } = paypalIdentityService.getAuthorizationUrl({ action: 'login' });
+
+    const mockIdToken = jwt.sign(
+      {
+        iss: 'https://api.sandbox.paypal.com',
+        aud: env.PAYPAL_IDENTITY_CLIENT_ID,
+        sub: unregisteredSub,
+        email: unregisteredEmail,
+        nonce,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      privateKey,
+      { algorithm: 'RS256', keyid: testKid }
+    );
+
+    global.fetch = async (input: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'mock-token-unreg',
+            token_type: 'Bearer',
+            expires_in: 28800,
+            id_token: mockIdToken,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (urlStr.includes('/v1/identity/openidconnect/userinfo')) {
+        return new Response(
+          JSON.stringify({
+            user_id: unregisteredSub,
+            sub: unregisteredSub,
+            email: unregisteredEmail,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input);
+    };
+
+    try {
+      let threw = false;
+      try {
+        await paypalIdentityService.handleCallback({
+          code: 'unregistered-code',
+          state,
+        });
+      } catch (err: any) {
+        threw = true;
+        assert.ok(
+          err.message.includes('PAYPAL_NOT_REGISTERED'),
+          '11a. Must guide unregistered user to register rather than assigning a demo account'
+        );
+      }
+      assert.strictEqual(threw, true, '11b. Must reject login when user has not registered');
+      console.log('[PASS] Scenario 11: Unregistered user Login flow guidance verified (no demo fallback).\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
   // Cleanup test users
   await UserModel.deleteMany({ email: /@paypal-test\.finance$/ });
   await PaymentRequestModel.deleteMany({ recipientEmail: /paypal-test/ });
@@ -725,7 +795,7 @@ async function runPayPalIdentityAndPaymentTests() {
   await disconnectDatabase();
 
   console.log('================================================================');
-  console.log('ALL 10 PAYPAL IDENTITY & PAYMENT TEST SCENARIOS PASSED (100%)');
+  console.log('ALL 11 PAYPAL IDENTITY & PAYMENT TEST SCENARIOS PASSED (100%)');
   console.log('================================================================');
 }
 

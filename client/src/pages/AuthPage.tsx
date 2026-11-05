@@ -45,7 +45,20 @@ export const AuthPage: React.FC = () => {
       const params = new URLSearchParams(window.location.search);
       const authStatus = params.get('auth');
       const errorMsg = params.get('message');
-      if (authStatus === 'paypal_error' && errorMsg) {
+      if (authStatus === 'not_registered') {
+        setMode('register');
+        setError(
+          decodeURIComponent(
+            errorMsg ||
+              'Your PayPal account was verified, but no AURA account was found for this identity. Click "Sign up with PayPal" below to complete registration.'
+          )
+        );
+        params.delete('auth');
+        params.delete('message');
+        const remaining = params.toString();
+        const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      } else if (authStatus === 'paypal_error' && errorMsg) {
         setError(decodeURIComponent(errorMsg));
         params.delete('auth');
         params.delete('message');
@@ -60,7 +73,8 @@ export const AuthPage: React.FC = () => {
     setError('');
     setPaypalBusy(true);
     try {
-      const res = await apiRequest('/auth/paypal/authorize');
+      const action = mode === 'register' ? 'register' : 'login';
+      const res = await apiRequest(`/auth/paypal/authorize?action=${action}`);
       if (res.url) {
         window.location.href = res.url;
       } else {

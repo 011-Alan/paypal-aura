@@ -53,6 +53,7 @@ import { elasticIntegration } from '../integrations/elastic';
 import { kernelIntegration } from '../integrations/kernel';
 import { paypalIntegration } from '../integrations/paypal';
 import { paypalIdentityService } from '../integrations/paypal/identityService';
+import { validatePayPalConfig } from '../integrations/paypal/validator';
 import { zapierIntegration } from '../integrations/zapier';
 import { renderWorkerManager } from '../workers/backgroundWorkflows';
 import { getDatabaseHealth } from '../config/database';
@@ -306,11 +307,6 @@ apiRouter.post('/auth/login', strictAuthRateLimiter, async (req: Request, res: R
       return;
     }
 
-    // Ensure demo user Alex exists if logging in as Alex
-    if (String(email).toLowerCase().trim() === DEMO_ALEX_CREDENTIALS.email) {
-      await ensureDemoUserAlexSeeded(false);
-    }
-
     const user = await UserModel.findOne({ email: String(email).toLowerCase().trim() });
     if (!user) {
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
@@ -428,6 +424,14 @@ apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
 // ============================================================================
 // 1b. Log in with PayPal (Identity API / OpenID Connect)
 // ============================================================================
+apiRouter.get('/auth/paypal/diagnostics', (_req: Request, res: Response) => {
+  const result = validatePayPalConfig();
+  res.json({
+    success: true,
+    ...result,
+  });
+});
+
 apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
   try {
     let linkUserId: string | undefined;
@@ -441,9 +445,11 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
       }
     }
 
+    const action = req.query.action === 'register' ? 'register' : 'login';
     const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl({
       linkUserId,
       prompt: req.query.prompt as string | undefined,
+      action,
     });
 
     res.json({
@@ -451,6 +457,7 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
       url,
       state,
       mode: env.PAYPAL_MODE,
+      action,
     });
   } catch (err: any) {
     logger.error('PayPalAuth', 'Failed to generate PayPal authorization URL', { error: err?.message });
@@ -486,6 +493,11 @@ apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
     return res.redirect(redirectUrl);
   } catch (err: any) {
     logger.error('PayPalAuth', 'Failed to process PayPal authentication callback', { error: err?.message });
+    const rawMsg = String(err?.message || '');
+    if (rawMsg.includes('PAYPAL_NOT_REGISTERED')) {
+      const cleanMsg = 'No AURA account is linked to this PayPal identity. Please click "Sign up with PayPal" to register.';
+      return res.redirect(`${env.CLIENT_ORIGIN}/?auth=not_registered&message=${encodeURIComponent(cleanMsg)}`);
+    }
     const clientMsg = err?.message || 'PayPal authentication failed. Please try again.';
     return res.redirect(`${env.CLIENT_ORIGIN}/?auth=paypal_error&message=${encodeURIComponent(clientMsg)}`);
   }
@@ -2119,6 +2131,33 @@ apiRouter.post('/payments/:id/paypal-capture', requireAuth, async (req: Authenti
       userId: req.userId!,
       paymentRequestId: req.params.id,
       paypalOrderId: req.body?.paypalOrderId,
+    });
+
+    res.json({
+      success: true,
+      ...captureRes,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// Direct capture endpoint for return from PayPal Checkout
+apiRouter.post('/payments/capture-paypal-order', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId, paymentRequestId } = req.body || {};
+    if (!orderId && !paymentRequestId) {
+      res.status(400).json({
+        success: false,
+        error: 'Either orderId or paymentRequestId is required to capture PayPal payment.',
+      });
+      return;
+    }
+
+    const captureRes = await paymentGuardianService.capturePayPalOrder({
+      userId: req.userId!,
+      paymentRequestId,
+      paypalOrderId: orderId,
     });
 
     res.json({

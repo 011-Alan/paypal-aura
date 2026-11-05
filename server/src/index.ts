@@ -7,8 +7,8 @@ import { logger } from './config/logger';
 import { connectDatabase } from './config/database';
 import { apiRateLimiter } from './middleware/security';
 import { apiRouter } from './routes/apiRoutes';
-import { ensureDemoUserAlexSeeded } from './seed/seedService';
 import { renderWorkerManager } from './workers/backgroundWorkflows';
+import { logPayPalStartupDiagnostics } from './integrations/paypal/validator';
 
 export const app = express();
 
@@ -57,7 +57,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 export async function startServer() {
   await connectDatabase();
-  await ensureDemoUserAlexSeeded(false);
+  logPayPalStartupDiagnostics();
 
   const server = app.listen(env.PORT, () => {
     logger.info('Server', `PROJECT AURA Backend API listening on http://localhost:${env.PORT}`);

@@ -54,15 +54,35 @@ export const PaymentsPage: React.FC = () => {
       const checkoutStatus = params.get('status');
       const orderToken = params.get('token');
       if (checkoutStatus === 'approved') {
-        setStatusMessage(
-          `PayPal Checkout Approved for order ${orderToken || ''}! Click "Capture Approved PayPal Order" below to complete settlement.`
-        );
         params.delete('status');
         params.delete('token');
         params.delete('PayerID');
         const remaining = params.toString();
         const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
         window.history.replaceState({}, document.title, cleanUrl);
+
+        if (orderToken) {
+          setStatusMessage(`PayPal payment approved by buyer for order ${orderToken}. Capturing and settling payment with PayPal...`);
+          setBusy(true);
+          apiRequest('/payments/capture-paypal-order', {
+            method: 'POST',
+            body: JSON.stringify({ orderId: orderToken }),
+          })
+            .then((res: any) => {
+              const capId = res.captureResult?.captureId || res.paymentRequest?.paypalCaptureId;
+              setStatusMessage(
+                `Payment verified and captured by PayPal! Capture ID: ${capId}. AURA balance and audit log updated.`
+              );
+              loadPayments();
+              window.dispatchEvent(new CustomEvent('aura-state-changed'));
+            })
+            .catch((err: any) => {
+              setErrorMsg(`PayPal capture failed: ${err?.message}`);
+            })
+            .finally(() => {
+              setBusy(false);
+            });
+        }
       } else if (checkoutStatus === 'cancelled') {
         setErrorMsg('PayPal Checkout was cancelled by the user.');
         params.delete('status');
@@ -143,8 +163,15 @@ export const PaymentsPage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ approvalToken }),
       });
+      if (res.paypalOrder?.approvalUrl) {
+        setStatusMessage(
+          `Step 3: PayPal Order v2 (${res.paypalOrder.orderId}) created! Redirecting to PayPal for buyer approval...`
+        );
+        window.location.href = res.paypalOrder.approvalUrl;
+        return;
+      }
       setStatusMessage(
-        `Step 3 Complete: PayPal Order v2 (${res.paypalOrder.orderId}) created and validated against APIMatic contract. Click "Capture Approved PayPal Order" to settle.`
+        `Step 3 Complete: PayPal Order v2 (${res.paypalOrder?.orderId}) created. Click "Approve on PayPal" to review and authorize.`
       );
       await loadPayments();
     } catch (err: any) {
@@ -406,9 +433,10 @@ export const PaymentsPage: React.FC = () => {
                   type="button"
                   onClick={handleCreatePayPalOrder}
                   disabled={busy || (!approvalToken && activePayment.status === 'guardian_approved')}
-                  className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs"
+                  className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs inline-flex items-center gap-1.5"
                 >
-                  3. Create PayPal Order v2
+                  <span>3. Create &amp; Pay with PayPal</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
 
                 {activePayment.paypalApprovalUrl && activePayment.status === 'paypal_order_created' && (
