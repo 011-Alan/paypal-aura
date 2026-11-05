@@ -340,27 +340,38 @@ export class PayPalIdentityService {
 
   /**
    * Fetches the user profile from PayPal's official UserInfo endpoint.
+   * Tries canonical /v1/identity/oauth2/userinfo first, then /v1/identity/openidconnect/userinfo.
    */
-  public async getUserInfo(accessToken: string): Promise<PayPalUserInfo> {
-    const userInfoUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`;
-    const response = await fetch(userInfoUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-      },
-    });
+  public async getUserInfo(accessToken: string): Promise<PayPalUserInfo | null> {
+    const candidateUrls = [
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
+    ];
 
-    if (!response.ok) {
-      const errText = await response.text();
-      logger.error('PayPalIdentityService', 'Failed to fetch PayPal UserInfo', {
-        status: response.status,
-        response: errText,
-      });
-      throw new Error(`Failed to retrieve PayPal UserInfo (${response.status})`);
+    for (const url of candidateUrls) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const userInfo = (await response.json()) as PayPalUserInfo;
+          return userInfo;
+        } else {
+          logger.warn('PayPalIdentityService', `UserInfo endpoint ${url} returned status ${response.status}`);
+        }
+      } catch (err: any) {
+        logger.warn('PayPalIdentityService', `UserInfo call to ${url} encountered network error: ${err?.message}`);
+      }
     }
 
-    const userInfo = (await response.json()) as PayPalUserInfo;
-    return userInfo;
+    return null;
   }
 
   /**
@@ -399,23 +410,23 @@ export class PayPalIdentityService {
       idTokenClaims = await this.validateIdToken(tokens.id_token, nonce);
     }
 
-    // 4. Fetch verified UserInfo
+    // 4. Fetch verified UserInfo or fallback to cryptographically verified ID token claims
     const userInfo = await this.getUserInfo(tokens.access_token);
 
     // Derive stable identity
-    const paypalUserId = userInfo.user_id || userInfo.sub || idTokenClaims.sub;
+    const paypalUserId = userInfo?.user_id || userInfo?.sub || idTokenClaims.sub;
     if (!paypalUserId) {
       throw new Error('PayPal did not return a valid unique subject identifier (sub/user_id).');
     }
 
-    const paypalEmail = (userInfo.email || idTokenClaims.email || '').toLowerCase().trim();
-    const name = userInfo.name || idTokenClaims.name || (paypalEmail ? paypalEmail.split('@')[0] : 'PayPal User');
+    const paypalEmail = (userInfo?.email || idTokenClaims.email || '').toLowerCase().trim();
+    const name = userInfo?.name || idTokenClaims.name || (paypalEmail ? paypalEmail.split('@')[0] : 'PayPal User');
     const isVerified = Boolean(
-      userInfo.verified_account === true ||
-        userInfo.verified_account === 'true' ||
+      userInfo?.verified_account === true ||
+        userInfo?.verified_account === 'true' ||
         idTokenClaims.verified_account === true
     );
-    const payerId = userInfo.payer_id || idTokenClaims.payer_id;
+    const payerId = userInfo?.payer_id || idTokenClaims.payer_id;
 
     // -------------------------------------------------------------------------
     // CASE A: Explicit Account Linking for currently authenticated user
