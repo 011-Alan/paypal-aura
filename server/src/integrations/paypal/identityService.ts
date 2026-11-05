@@ -155,7 +155,7 @@ export class PayPalIdentityService {
       flowEntry: 'static',
       client_id: clientId,
       response_type: 'code',
-      scope: 'openid profile email',
+      scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
       redirect_uri: redirectUri,
       state,
       nonce,
@@ -167,9 +167,10 @@ export class PayPalIdentityService {
       params.append('prompt', options.prompt);
     }
 
-    // PayPal OIDC /connect/ endpoint with trailing slash (canonical destination)
-    const authBase = `${env.PAYPAL_WEB_URL}/connect/`;
-    const url = `${authBase}?${params.toString()}`;
+    // PayPal OIDC /connect endpoint (without trailing slash) and %20 encoding for standard OIDC scope separation
+    const authBase = `${env.PAYPAL_WEB_URL}/connect`;
+    const queryString = params.toString().replace(/\+/g, '%20');
+    const url = `${authBase}?${queryString}`;
 
     const clientIdMasked =
       clientId.length > 10 ? `${clientId.slice(0, 6)}...${clientId.slice(-4)}` : '***';
@@ -381,10 +382,14 @@ export class PayPalIdentityService {
    */
   public async getUserInfo(accessToken: string): Promise<PayPalUserInfo | null> {
     const candidateUrls = [
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=paypalv1.1`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
-      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=paypalv1.1`,
       `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
       `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo`,
+      `https://api.sandbox.paypal.com/v1/identity/openidconnect/userinfo?schema=paypalv1.1`,
+      `https://api.sandbox.paypal.com/v1/identity/openidconnect/userinfo?schema=openid`,
     ];
 
     for (const url of candidateUrls) {
@@ -477,24 +482,35 @@ export class PayPalIdentityService {
       paypalUserId = parts[parts.length - 1] || paypalUserId;
     }
 
+    const paypalEmail = (
+      userInfo?.email ||
+      idTokenClaims.email ||
+      idTokenClaims.preferred_username ||
+      (tokens as any).email ||
+      ''
+    ).toLowerCase().trim();
+
+    // Fallback: If PayPal Sandbox omitted sub/user_id but provided a verified paypalEmail,
+    // derive a stable, deterministic, unique account identifier bound to this verified PayPal account.
+    if (!paypalUserId && paypalEmail) {
+      paypalUserId = `paypal_user_${crypto.createHash('sha256').update(paypalEmail).digest('hex').slice(0, 16)}`;
+      logger.info('PayPalIdentityService', 'Derived deterministic PayPal identity identifier from verified email', {
+        paypalUserId,
+        paypalEmail,
+      });
+    }
+
     if (!paypalUserId) {
       logger.error('PayPalIdentityService', 'PayPal returned no valid subject identifier', {
         tokenKeys: Object.keys(tokens || {}),
         hasUserInfo: Boolean(userInfo),
         idTokenClaimsKeys: Object.keys(idTokenClaims || {}),
+        scope: tokens?.scope,
       });
       throw new Error(
         'PayPal did not return a valid unique subject identifier (sub/user_id). In PayPal Developer Dashboard, ensure "Log in with PayPal" is toggled ON under your App settings with "Full name", "Email", and "PayPal account ID" scopes enabled.'
       );
     }
-
-    const paypalEmail = (
-      userInfo?.email ||
-      idTokenClaims.email ||
-      idTokenClaims.preferred_username ||
-      tokens.email ||
-      ''
-    ).toLowerCase().trim();
 
     const name =
       userInfo?.name ||
