@@ -951,6 +951,279 @@ async function runPayPalIdentityAndPaymentTests() {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Scenario 18: Atomic Single-Use Callback Lock (Concurrent Requests)
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 18: Atomic Single-Use Callback Lock (Concurrent Requests) ---');
+  {
+    const originalFetch = global.fetch;
+    const { state, nonce } = paypalIdentityService.getAuthorizationUrl({ action: 'register' });
+    const singleUseCode = `single-use-code-concurrent-${Date.now()}`;
+    const payerId18 = `PAYER18${Date.now()}`;
+    const testSub18 = `https://www.paypal.com/webapps/auth/identity/user/${payerId18}`;
+    const testEmail18 = `concurrent-${Date.now()}@paypal-test.finance`;
+    const mockIdToken = signIdToken({ sub: testSub18, user_id: testSub18, email: testEmail18, name: 'Concurrent User', nonce });
+
+    let tokenExchangeCallCount = 0;
+    global.fetch = async (input: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        tokenExchangeCallCount++;
+        // Add small artificial delay to test concurrency race
+        await new Promise((r) => setTimeout(r, 50));
+        return new Response(
+          JSON.stringify({
+            access_token: 'mock-concurrent-token',
+            token_type: 'Bearer',
+            expires_in: 28800,
+            scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
+            id_token: mockIdToken,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (urlStr.includes('/userinfo')) {
+        return new Response(
+          JSON.stringify({
+            sub: testSub18,
+            user_id: testSub18,
+            name: 'Concurrent User',
+            email: testEmail18,
+            payer_id: payerId18,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input);
+    };
+
+    try {
+      // Fire two concurrent callbacks with the identical code
+      const [result1, result2] = await Promise.all([
+        paypalIdentityService.handleCallback({ code: singleUseCode, state }),
+        paypalIdentityService.handleCallback({ code: singleUseCode, state }),
+      ]);
+
+      assert.strictEqual(tokenExchangeCallCount, 1, '18a. Token exchange endpoint must be invoked exactly ONCE for concurrent callbacks');
+      assert.strictEqual(result1.token, result2.token, '18b. Both concurrent callbacks must resolve with identical JWT session tokens');
+      assert.strictEqual(String(result1.user._id), String(result2.user._id), '18c. Both must resolve to the identical user record');
+      console.log('[PASS] Scenario 18: Atomic single-use lock prevents duplicate token exchange on concurrent requests.\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Scenario 19: Browser Reload Deduplication (Completed Exchange Reuse)
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 19: Browser Reload Deduplication (Completed Exchange Reuse) ---');
+  {
+    const originalFetch = global.fetch;
+    const { state, nonce } = paypalIdentityService.getAuthorizationUrl({ action: 'register' });
+    const reloadCode = `single-use-code-reload-${Date.now()}`;
+    const payerId19 = `PAYER19${Date.now()}`;
+    const testSub19 = `https://www.paypal.com/webapps/auth/identity/user/${payerId19}`;
+    const testEmail19 = `reload-${Date.now()}@paypal-test.finance`;
+    const mockIdToken = signIdToken({ sub: testSub19, user_id: testSub19, email: testEmail19, name: 'Reload User', nonce });
+
+    let tokenExchangeCallCount = 0;
+    global.fetch = async (input: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        tokenExchangeCallCount++;
+        return new Response(
+          JSON.stringify({
+            access_token: 'mock-reload-token',
+            token_type: 'Bearer',
+            expires_in: 28800,
+            scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
+            id_token: mockIdToken,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (urlStr.includes('/userinfo')) {
+        return new Response(
+          JSON.stringify({
+            sub: testSub19,
+            user_id: testSub19,
+            name: 'Reload User',
+            email: testEmail19,
+            payer_id: payerId19,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input);
+    };
+
+    try {
+      // First request completes
+      const result1 = await paypalIdentityService.handleCallback({ code: reloadCode, state });
+      assert.strictEqual(tokenExchangeCallCount, 1, '19a. First callback exchanges code');
+
+      // Second request simulating page reload or browser forward/back
+      const result2 = await paypalIdentityService.handleCallback({ code: reloadCode, state });
+      assert.strictEqual(tokenExchangeCallCount, 1, '19b. Duplicate reload does NOT call PayPal token endpoint again');
+      assert.strictEqual(result1.token, result2.token, '19c. Reload returns existing session token');
+      console.log('[PASS] Scenario 19: Browser reload deduplication safely reuses existing session without re-exchange.\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Scenario 20: Rejected Code Prevention (No Blind Retry against PayPal)
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 20: Rejected Code Prevention (No Blind Retry against PayPal) ---');
+  {
+    const originalFetch = global.fetch;
+    const { state } = paypalIdentityService.getAuthorizationUrl({ action: 'register' });
+    const rejectedCode = `rejected-code-${Date.now()}`;
+
+    let tokenExchangeCallCount = 0;
+    global.fetch = async (input: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        tokenExchangeCallCount++;
+        return new Response(
+          JSON.stringify({
+            error: 'access_denied',
+            error_description: 'Invalid authorization code',
+            correlation_id: 'test-correlation-20',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input);
+    };
+
+    try {
+      // First attempt fails at PayPal with 400
+      await assert.rejects(
+        async () => {
+          await paypalIdentityService.handleCallback({ code: rejectedCode, state });
+        },
+        /Invalid authorization code/i,
+        '20a. First attempt fails with PayPal error'
+      );
+      assert.strictEqual(tokenExchangeCallCount, 1, '20b. First attempt contacted PayPal');
+
+      // Second attempt with the same rejected code must fail immediately WITHOUT retrying PayPal
+      await assert.rejects(
+        async () => {
+          await paypalIdentityService.handleCallback({ code: rejectedCode, state });
+        },
+        /rejected by PayPal|Invalid authorization code/i,
+        '20c. Second attempt fails without hitting PayPal'
+      );
+      assert.strictEqual(tokenExchangeCallCount, 1, '20d. Token exchange endpoint must NOT be retried for rejected code');
+      console.log('[PASS] Scenario 20: Rejected code is permanently blocked from duplicate retries against PayPal.\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Scenario 21: Strict Token Request Formatting (Section 5 Compliance)
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 21: Strict Token Request Formatting (Section 5 Compliance) ---');
+  {
+    const originalFetch = global.fetch;
+    const testCode21 = `test-code-strict-format-${Date.now()}`;
+    let capturedRequest: { url: string; method: string; headers: Record<string, string>; body: string } | null = null;
+
+    global.fetch = async (input: any, init?: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        capturedRequest = {
+          url: urlStr,
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+        };
+        return new Response(
+          JSON.stringify({
+            access_token: 'mock-strict-token-21',
+            token_type: 'Bearer',
+            expires_in: 28800,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input, init);
+    };
+
+    try {
+      await paypalIdentityService.exchangeCodeForTokens(testCode21);
+
+      assert.ok(capturedRequest, '21a. Token exchange request must be executed');
+      assert.strictEqual(capturedRequest!.method, 'POST', '21b. Method must be POST');
+      assert.ok(capturedRequest!.url.endsWith('/v1/oauth2/token'), '21c. Must target documented /v1/oauth2/token');
+      assert.ok(capturedRequest!.headers.Authorization?.startsWith('Basic '), '21d. Must use Basic Authentication header');
+      assert.strictEqual(capturedRequest!.headers['Content-Type'], 'application/x-www-form-urlencoded', '21e. Content-Type must be application/x-www-form-urlencoded');
+      assert.strictEqual(capturedRequest!.headers.Accept, 'application/json', '21f. Accept must be application/json');
+
+      const parsedBody = new URLSearchParams(capturedRequest!.body);
+      assert.strictEqual(parsedBody.get('grant_type'), 'authorization_code', '21g. grant_type must be authorization_code');
+      assert.strictEqual(parsedBody.get('code'), testCode21, '21h. code must match provided code');
+      assert.strictEqual(parsedBody.get('redirect_uri'), env.PAYPAL_IDENTITY_REDIRECT_URI, '21i. redirect_uri must match configured canonical URI');
+      assert.strictEqual(parsedBody.get('client_id'), null, '21j. client_id must NOT be passed in body (Basic auth header only)');
+      assert.strictEqual(parsedBody.get('client_secret'), null, '21k. client_secret must NOT be passed in body (Basic auth header only)');
+      assert.strictEqual(parsedBody.get('code_verifier'), null, '21l. Unsupported code_verifier must NOT be passed in body');
+
+      console.log('[PASS] Scenario 21: Token request payload conforms strictly to documented Identity OAuth 2.0 specifications.\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Scenario 22: Canonical Redirect URI Consistency Check
+  // --------------------------------------------------------------------------
+  console.log('--- Scenario 22: Canonical Redirect URI Consistency Check ---');
+  {
+    const originalFetch = global.fetch;
+    const { url } = paypalIdentityService.getAuthorizationUrl();
+    const authUrlObj = new URL(url);
+    const authRedirectUri = authUrlObj.searchParams.get('redirect_uri');
+
+    let tokenExchangeRedirectUri: string | null = null;
+    global.fetch = async (input: any, init?: any) => {
+      const urlStr = String(input);
+      if (urlStr.includes('/v1/oauth2/token')) {
+        const bodyParams = new URLSearchParams(init?.body);
+        tokenExchangeRedirectUri = bodyParams.get('redirect_uri');
+        return new Response(
+          JSON.stringify({ access_token: 'mock-uri-token', token_type: 'Bearer', expires_in: 28800 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return originalFetch(input, init);
+    };
+
+    try {
+      await paypalIdentityService.exchangeCodeForTokens(`test-uri-code-${Date.now()}`);
+
+      assert.ok(authRedirectUri, '22a. Authorization URL must contain redirect_uri');
+      assert.ok(tokenExchangeRedirectUri, '22b. Token exchange request must contain redirect_uri');
+      assert.strictEqual(
+        authRedirectUri,
+        tokenExchangeRedirectUri,
+        '22c. redirect_uri used in authorization MUST be byte-for-byte identical to redirect_uri in token exchange'
+      );
+      assert.strictEqual(
+        authRedirectUri,
+        env.PAYPAL_IDENTITY_REDIRECT_URI,
+        '22d. Both must match canonical env.PAYPAL_IDENTITY_REDIRECT_URI'
+      );
+
+      console.log('[PASS] Scenario 22: Redirect URI is byte-for-byte consistent across authorization and token exchange.\n');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  }
+
   // Cleanup test users
   await UserModel.deleteMany({ email: /@paypal-test\.finance$/ });
   await PaymentRequestModel.deleteMany({ recipientEmail: /paypal-test/ });
@@ -958,7 +1231,7 @@ async function runPayPalIdentityAndPaymentTests() {
   await disconnectDatabase();
 
   console.log('================================================================');
-  console.log('ALL 17 PAYPAL IDENTITY & PAYMENT TEST SCENARIOS PASSED (100%)');
+  console.log('ALL 22 PAYPAL IDENTITY & PAYMENT TEST SCENARIOS PASSED (100%)');
   console.log('================================================================');
 }
 

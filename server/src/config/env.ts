@@ -71,8 +71,8 @@ export const env = {
   PAYPAL_IDENTITY_CLIENT_ID: process.env.PAYPAL_IDENTITY_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || '',
   PAYPAL_IDENTITY_CLIENT_SECRET: process.env.PAYPAL_IDENTITY_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET || '',
   get PAYPAL_IDENTITY_REDIRECT_URI(): string {
-    if (process.env.PAYPAL_IDENTITY_REDIRECT_URI) return process.env.PAYPAL_IDENTITY_REDIRECT_URI;
-    return `${this.PUBLIC_API_URL}/auth/paypal/callback`;
+    const raw = process.env.PAYPAL_IDENTITY_REDIRECT_URI || `${this.PUBLIC_API_URL}/auth/paypal/callback`;
+    return raw.trim().replace(/\/+$/, '');
   },
   get PAYPAL_RETURN_URL(): string {
     if (process.env.PAYPAL_RETURN_URL) return process.env.PAYPAL_RETURN_URL;
