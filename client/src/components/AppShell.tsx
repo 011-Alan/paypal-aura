@@ -348,12 +348,12 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
                 activeTab === 'ask-aura'
                   ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                  : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                  : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 dark:text-blue-300 dark:border-blue-800'
               }`}
               title="Chat with AURA AI"
               aria-label="Open Ask AURA AI assistant"
             >
-              <Sparkles className="w-4 h-4 text-blue-500" />
+              <Sparkles className={`w-4 h-4 ${activeTab === 'ask-aura' ? 'text-white' : 'text-blue-500 dark:text-blue-400'}`} />
               <span className="hidden sm:inline">Ask AURA</span>
             </button>
 
@@ -361,7 +361,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
             <div className="relative">
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
-                className="relative p-2.5 rounded-xl text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+                className="relative p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700"
                 aria-label="View notifications"
                 title="Notifications"
               >
@@ -375,31 +375,31 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
               {/* Notifications Dropdown */}
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                       Notifications &amp; Reminders
                     </span>
                     <button
                       onClick={markAllRead}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold flex items-center gap-1"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Mark read
                     </button>
                   </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                     {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-xs text-slate-500">No new notifications.</div>
+                      <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">No new notifications.</div>
                     ) : (
                       notifications.map((n) => (
                         <div
                           key={n._id}
-                          className={`p-3.5 text-xs ${n.isRead ? 'bg-white' : 'bg-blue-50/40'}`}
+                          className={`p-3.5 text-xs ${n.isRead ? 'bg-white dark:bg-slate-900' : 'bg-blue-50/40 dark:bg-blue-950/40'}`}
                         >
-                          <div className="font-semibold text-navy-900">{n.title}</div>
-                          <div className="text-slate-600 mt-0.5 leading-relaxed">{n.message}</div>
-                          <div className="text-[11px] text-slate-400 mt-1">
+                          <div className="font-semibold text-navy-900 dark:text-white">{n.title}</div>
+                          <div className="text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{n.message}</div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                             {new Date(n.createdAt).toLocaleString('en-IN', {
                               day: 'numeric',
                               month: 'short',
@@ -436,7 +436,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               aria-label="Toggle theme appearance"
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
             </button>
 
             {/* Clearly Visible Logout Action (Immediately next to Settings) */}
@@ -454,10 +454,10 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
         {/* Mobile Slide-Over Menu (When Menu Button Clicked) */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-b border-slate-200 px-4 py-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
+          <div className="lg:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
             {NAVIGATION_GROUPS.map((group) => (
               <div key={group.group}>
-                <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400">
+                <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   {group.group}
                 </div>
                 <div className="space-y-1">
@@ -472,15 +472,17 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                           setMobileMenuOpen(false);
                         }}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-base font-medium transition ${
-                          active ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-100' : 'text-slate-700 hover:bg-slate-50'
+                          active
+                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-100 dark:border-blue-900'
+                            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <Icon className={`w-5 h-5 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                          <Icon className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
                           <span>{item.label}</span>
                         </div>
                         {item.badge && (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                             {item.badge}
                           </span>
                         )}
@@ -491,14 +493,16 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               </div>
             ))}
 
-            <div className="pt-3 border-t border-slate-100">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => {
                   onSelectTab('demo-lab');
                   setMobileMenuOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-semibold transition ${
-                  isDemoLabActive ? 'bg-navy-900 text-white' : 'bg-slate-100 text-slate-800'
+                  isDemoLabActive
+                    ? 'bg-navy-900 dark:bg-blue-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 <FlaskConical className="w-5 h-5 text-blue-500" />
@@ -507,14 +511,14 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
             </div>
 
             {user && (
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div>
-                  <div className="font-bold text-sm text-navy-900">{user.name}</div>
-                  <div className="text-xs text-slate-500">{user.email}</div>
+                  <div className="font-bold text-sm text-navy-900 dark:text-white">{user.name}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{user.email}</div>
                 </div>
                 <button
                   onClick={() => logout()}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
                 >
                   Log Out
                 </button>
@@ -527,11 +531,11 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
 
         {/* Mobile Bottom Navigation Bar (Fixed for comfortable one-thumb reach) */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-40 px-2 flex items-center justify-around shadow-lg">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-40 px-2 flex items-center justify-around shadow-lg transition-colors">
           <button
             onClick={() => onSelectTab('overview')}
             className={`flex flex-col items-center justify-center w-16 h-full text-xs font-medium ${
-              isTabActive('overview') ? 'text-blue-600 font-bold' : 'text-slate-500'
+              isTabActive('overview') ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             <Home className="w-5 h-5" />
@@ -541,7 +545,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           <button
             onClick={() => onSelectTab('ask-aura')}
             className={`flex flex-col items-center justify-center w-16 h-full text-xs font-medium ${
-              isTabActive('ask-aura') ? 'text-blue-600 font-bold' : 'text-slate-500'
+              isTabActive('ask-aura') ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             <Sparkles className="w-5 h-5 text-blue-500" />
@@ -551,7 +555,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           <button
             onClick={() => onSelectTab('transactions')}
             className={`flex flex-col items-center justify-center w-16 h-full text-xs font-medium ${
-              isTabActive('transactions') ? 'text-blue-600 font-bold' : 'text-slate-500'
+              isTabActive('transactions') ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             <Receipt className="w-5 h-5" />
@@ -561,7 +565,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           <button
             onClick={() => onSelectTab('payments')}
             className={`flex flex-col items-center justify-center w-16 h-full text-xs font-medium ${
-              isTabActive('payments') ? 'text-blue-600 font-bold' : 'text-slate-500'
+              isTabActive('payments') ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             <CreditCard className="w-5 h-5" />
@@ -571,7 +575,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className={`flex flex-col items-center justify-center w-16 h-full text-xs font-medium ${
-              mobileMenuOpen ? 'text-blue-600 font-bold' : 'text-slate-500'
+              mobileMenuOpen ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             <Menu className="w-5 h-5" />

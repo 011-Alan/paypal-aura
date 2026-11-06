@@ -91,7 +91,7 @@ export const ConversationalResponseRenderer: React.FC<ConversationalResponseRend
             data: {
               subject: emailMatch[1]?.trim(),
               body: emailMatch[2]?.trim(),
-              senderName: emailMatch[3]?.trim() || 'Alex Sharma',
+              senderName: emailMatch[3]?.trim() || 'AURA User',
             },
           });
         } else {

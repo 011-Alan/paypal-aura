@@ -115,24 +115,24 @@ export const MyMoneyPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header & Combined Balance */}
-      <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-navy-900 tracking-tight">Connected Accounts &amp; Liquidity</h2>
+            <h2 className="text-xl font-bold text-navy-900 dark:text-white tracking-tight">Connected Accounts &amp; Liquidity</h2>
             <Tooltip content="Your aggregated checking, high-yield savings, and digital wallet repositories." />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Maintain bank linkages, statement imports, and privacy-shielded liquidity cushions.
           </p>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="bg-blue-50 px-5 py-3 rounded-2xl border border-blue-100 text-right">
-            <div className="text-[11px] text-blue-700 font-semibold uppercase flex items-center gap-1 justify-end">
+          <div className="bg-blue-50 dark:bg-blue-950/60 px-5 py-3 rounded-2xl border border-blue-100 dark:border-blue-900/60 text-right transition-colors">
+            <div className="text-[11px] text-blue-700 dark:text-blue-300 font-semibold uppercase flex items-center gap-1 justify-end">
               Combined Liquidity
               <Tooltip content="Sum of all active non-credit balances available for discretionary spending and commitments." />
             </div>
-            <div className="text-2xl font-bold text-navy-900">
+            <div className="text-2xl font-bold text-navy-900 dark:text-white">
               {formatInr(totalBalance, !balancesVisible)}
             </div>
           </div>
@@ -147,9 +147,9 @@ export const MyMoneyPage: React.FC = () => {
             </button>
             <button
               onClick={() => setShowImportModal(true)}
-              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold transition flex items-center gap-1.5"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
               Import Statement
             </button>
           </div>
@@ -158,39 +158,53 @@ export const MyMoneyPage: React.FC = () => {
 
       {/* Account Cards Grid */}
       {loading ? (
-        <div className="p-12 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+        <div className="p-12 text-center text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
           <RefreshCw className="w-4 h-4 animate-spin text-blue-600" /> Loading account portfolios...
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+          <Wallet className="w-10 h-10 text-slate-400 dark:text-slate-500 mx-auto" />
+          <h3 className="text-sm font-bold text-navy-900 dark:text-white">No Financial Accounts Connected Yet</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            Add a checking, savings, or digital wallet account to track balances and settle transactions.
+          </p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Your First Account
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {accounts.map((acc) => (
             <div
               key={acc._id}
-              className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition"
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition"
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-100">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-800">
                     {acc.type}
                   </span>
-                  <span className="text-xs font-mono text-slate-400">{acc.accountNumberMasked}</span>
+                  <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{acc.accountNumberMasked}</span>
                 </div>
-                <h3 className="text-base font-bold text-navy-900">{acc.name}</h3>
-                <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                <h3 className="text-base font-bold text-navy-900 dark:text-white">{acc.name}</h3>
+                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                   {acc.institution}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex items-end justify-between">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
                 <div>
-                  <span className="text-[11px] text-slate-400 block font-medium">Available Balance</span>
-                  <div className="text-xl font-bold text-navy-900 mt-0.5">
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block font-medium">Available Balance</span>
+                  <div className="text-xl font-bold text-navy-900 dark:text-white mt-0.5">
                     {formatInr(acc.balance, !balancesVisible)}
                   </div>
                 </div>
                 {acc.isSharedWithFamily && (
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                     Shared with Family
                   </span>
                 )}
@@ -203,42 +217,42 @@ export const MyMoneyPage: React.FC = () => {
       {/* Add Account Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h3 className="text-base font-bold text-navy-900 mb-1">Link New Financial Account</h3>
-            <p className="text-xs text-slate-500 mb-4">Add a verified bank, high-yield savings, or digital wallet.</p>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-200 dark:border-slate-800 transition-colors">
+            <h3 className="text-base font-bold text-navy-900 dark:text-white mb-1">Link New Financial Account</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Add a verified bank, high-yield savings, or digital wallet.</p>
 
             <form onSubmit={handleAddAccount} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Account Name</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Account Name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Axis Prime Salary Checking"
                   required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Institution</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Institution</label>
                 <input
                   type="text"
                   value={institution}
                   onChange={(e) => setInstitution(e.target.value)}
                   placeholder="e.g. Axis Bank"
                   required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Account Type</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Account Type</label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="checking">Checking</option>
                     <option value="savings">Savings</option>
@@ -248,14 +262,14 @@ export const MyMoneyPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Initial Balance (INR)</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Initial Balance (INR)</label>
                   <input
                     type="number"
                     value={balance}
                     onChange={(e) => setBalance(e.target.value)}
                     placeholder="50000"
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -266,9 +280,9 @@ export const MyMoneyPage: React.FC = () => {
                   id="modalIsShared"
                   checked={isShared}
                   onChange={(e) => setIsShared(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-slate-800"
                 />
-                <label htmlFor="modalIsShared" className="text-xs text-slate-700 font-medium">
+                <label htmlFor="modalIsShared" className="text-xs text-slate-700 dark:text-slate-300 font-medium">
                   Share summary balance with household members
                 </label>
               </div>
@@ -277,7 +291,7 @@ export const MyMoneyPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                 >
                   Cancel
                 </button>
@@ -296,26 +310,26 @@ export const MyMoneyPage: React.FC = () => {
       {/* CSV Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-xl border border-slate-200 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-xl border border-slate-200 dark:border-slate-800 space-y-4 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-navy-900">Import Bank Statement (CSV)</h3>
-                <p className="text-xs text-slate-500">
+                <h3 className="text-base font-bold text-navy-900 dark:text-white">Import Bank Statement (CSV)</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Upload or paste CSV transactions. Triggers automated anomaly screening &amp; mandate detection.
                 </p>
               </div>
               <button
                 onClick={() => setShowImportModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
               >
                 ✕
               </button>
             </div>
 
             {importResult && (
-              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-medium space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-800">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 font-medium space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   Import Pipeline Complete
                 </div>
                 <div>Imported {importResult.importedCount} transactions.</div>
@@ -325,11 +339,11 @@ export const MyMoneyPage: React.FC = () => {
 
             <form onSubmit={handleCsvImport} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Target Account</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Account</label>
                 <select
                   value={selectedAccountId}
                   onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {accounts.map((a) => (
                     <option key={a._id} value={a._id}>
@@ -341,8 +355,8 @@ export const MyMoneyPage: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700">CSV Statement Data</label>
-                  <label className="text-xs text-blue-600 hover:underline cursor-pointer font-medium flex items-center gap-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">CSV Statement Data</label>
+                  <label className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer font-medium flex items-center gap-1">
                     <Upload className="w-3.5 h-3.5" />
                     Upload File
                     <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
@@ -352,7 +366,7 @@ export const MyMoneyPage: React.FC = () => {
                   rows={5}
                   value={csvContent}
                   onChange={(e) => setCsvContent(e.target.value)}
-                  className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white"
                 />
               </div>
 
@@ -360,14 +374,14 @@ export const MyMoneyPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowImportModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                 >
                   Close
                 </button>
                 <button
                   type="submit"
                   disabled={importing}
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   {importing ? 'Processing Statement...' : 'Import Statement'}

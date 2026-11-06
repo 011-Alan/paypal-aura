@@ -296,16 +296,58 @@ export class CoreFinancialService {
    * Retrieves Family Finance data while enforcing strict privacy boundaries:
    * - Never exposes another family member's private accounts, private balances, or private transactions.
    * - Only exposes shared family budgets, shared goals, shared commitments, and aggregate member contributions.
+   * - Strictly returns the authenticated user's actual family group, or null if no household exists.
    */
   async getPrivacyPreservingFamilyOverview(userId: string) {
     const userObjId = new mongoose.Types.ObjectId(userId);
     const user = await UserModel.findById(userObjId);
     if (!user) throw new Error('User not found');
 
-    const familyGroupId = user.familyGroupId || 'aura-family-alex';
-    const familyGroup = await FamilyGroupModel.findOne({ familyGroupId });
+    const familyGroupId = user.familyGroupId;
+    if (!familyGroupId) {
+      return {
+        hasHousehold: false,
+        privacyBoundaryPolicy: {
+          enforced: true,
+          rule: 'Individual bank balances, personal accounts, and non-shared transactions of other family members are strictly private and never returned.',
+        },
+        familyGroup: null,
+        sharedSummary: {
+          sharedMonthlyBudget: 0,
+          sharedSpentThisMonth: 0,
+          remainingSharedBudget: 0,
+          sharedGoalsCount: 0,
+          sharedCommitmentsCount: 0,
+        },
+        sharedGoals: [],
+        sharedCommitments: [],
+        sharedTransactions: [],
+      };
+    }
 
-    // Only fetch explicitly shared goals, shared mandates, and shared transactions
+    const familyGroup = await FamilyGroupModel.findOne({ familyGroupId });
+    if (!familyGroup) {
+      return {
+        hasHousehold: false,
+        privacyBoundaryPolicy: {
+          enforced: true,
+          rule: 'Individual bank balances, personal accounts, and non-shared transactions of other family members are strictly private and never returned.',
+        },
+        familyGroup: null,
+        sharedSummary: {
+          sharedMonthlyBudget: 0,
+          sharedSpentThisMonth: 0,
+          remainingSharedBudget: 0,
+          sharedGoalsCount: 0,
+          sharedCommitmentsCount: 0,
+        },
+        sharedGoals: [],
+        sharedCommitments: [],
+        sharedTransactions: [],
+      };
+    }
+
+    // Only fetch explicitly shared goals, shared mandates, and shared transactions belonging to this exact family group
     const sharedGoals = await GoalModel.find({
       familyGroupId,
       isSharedWithFamily: true,
@@ -325,32 +367,16 @@ export class CoreFinancialService {
     const totalSharedSpent = sharedTransactions.reduce((sum, t) => sum + t.amount, 0);
 
     return {
+      hasHousehold: true,
       privacyBoundaryPolicy: {
         enforced: true,
         rule: 'Individual bank balances, personal accounts, and non-shared transactions of other family members are strictly private and never returned by this endpoint.',
       },
-      familyGroup: familyGroup || {
-        familyGroupId,
-        name: 'The Sharma-Verma Household',
-        sharedMonthlyBudget: 40000,
-        sharedSpentThisMonth: totalSharedSpent,
-        sharedCategories: ['Housing', 'Groceries', 'Utilities', 'Family Education'],
-        members: [
-          {
-            userId: user._id,
-            name: user.name,
-            email: user.email,
-            relationship: 'Household Lead',
-            role: 'admin',
-            privacyLevel: 'shared_summary_only',
-            monthlySharedContribution: 24000,
-          },
-        ],
-      },
+      familyGroup,
       sharedSummary: {
-        sharedMonthlyBudget: familyGroup?.sharedMonthlyBudget || 40000,
+        sharedMonthlyBudget: familyGroup.sharedMonthlyBudget || 0,
         sharedSpentThisMonth: totalSharedSpent,
-        remainingSharedBudget: Math.max(0, (familyGroup?.sharedMonthlyBudget || 40000) - totalSharedSpent),
+        remainingSharedBudget: Math.max(0, (familyGroup.sharedMonthlyBudget || 0) - totalSharedSpent),
         sharedGoalsCount: sharedGoals.length,
         sharedCommitmentsCount: sharedMandates.length,
       },

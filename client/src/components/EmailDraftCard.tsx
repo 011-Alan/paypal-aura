@@ -13,7 +13,7 @@ export const EmailDraftCard: React.FC<EmailDraftProps> = ({
   recipient = 'recipient@example.com',
   subject = 'Financial Update',
   body,
-  senderName = 'Alex Sharma',
+  senderName = 'AURA User',
   className = '',
 }) => {
   const [copied, setCopied] = useState(false);

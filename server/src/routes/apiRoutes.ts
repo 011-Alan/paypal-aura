@@ -1515,10 +1515,15 @@ apiRouter.get('/family', requireAuth, async (req: AuthenticatedRequest, res: Res
 
 apiRouter.post('/family/shared-budget', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const familyGroupId = req.user?.familyGroupId || 'aura-family-sharma';
+    const user = await UserModel.findById(req.userId);
+    const familyGroupId = user?.familyGroupId;
+    if (!familyGroupId) {
+      res.status(404).json({ success: false, error: 'No family group associated with this user.' });
+      return;
+    }
     const group = await FamilyGroupModel.findOne({ familyGroupId });
     if (!group) {
-      res.status(404).json({ success: false, error: 'Family group not found.' });
+      res.status(404).json({ success: false, error: 'Family group not found for this user.' });
       return;
     }
     if (typeof req.body?.sharedMonthlyBudget === 'number' && req.body.sharedMonthlyBudget > 0) {
@@ -1526,6 +1531,59 @@ apiRouter.post('/family/shared-budget', requireAuth, async (req: AuthenticatedRe
       await group.save();
     }
     res.json({ success: true, familyGroup: group });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/family/setup', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await UserModel.findById(req.userId);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    const { name, sharedMonthlyBudget } = req.body || {};
+    const householdName = typeof name === 'string' && name.trim() ? name.trim() : `${user.name}'s Household`;
+    const budget = typeof sharedMonthlyBudget === 'number' && sharedMonthlyBudget > 0 ? sharedMonthlyBudget : 30000;
+
+    let familyGroupId = user.familyGroupId;
+    let group: any = null;
+
+    if (familyGroupId) {
+      group = await FamilyGroupModel.findOne({ familyGroupId });
+    }
+
+    if (!group) {
+      familyGroupId = `aura-family-${user._id}`;
+      group = await FamilyGroupModel.create({
+        familyGroupId,
+        name: householdName,
+        sharedMonthlyBudget: budget,
+        sharedCategories: ['Housing', 'Groceries', 'Utilities', 'Healthcare'],
+        members: [
+          {
+            userId: user._id,
+            name: user.name,
+            email: user.email,
+            relationship: 'Household Lead',
+            role: 'admin',
+            privacyLevel: 'shared_summary_only',
+            monthlySharedContribution: Math.round(budget * 0.6),
+          },
+        ],
+      });
+      user.familyGroupId = familyGroupId;
+      await user.save();
+    } else {
+      group.name = householdName;
+      group.sharedMonthlyBudget = budget;
+      await group.save();
+    }
+
+    const overview = await coreFinancialService.getPrivacyPreservingFamilyOverview(String(user._id));
+    res.json({ success: true, familyGroup: group, overview });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });
   }
