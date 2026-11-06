@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
 import { Tooltip } from '../components/Tooltip';
 import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
+import { PayPalSandboxBusinessReporting } from '../components/PayPalSandboxBusinessReporting';
 
 export const SettingsPage: React.FC = () => {
   const { user, refreshUser, logout, theme, setTheme } = useAuth();
@@ -614,6 +615,7 @@ export const SettingsPage: React.FC = () => {
 
       {/* 4. PayPal Identity & Connected Account Section */}
       <ConnectedPayPalAccount />
+      <PayPalSandboxBusinessReporting />
 
       {/* 5. Session Sign Out Card (Prominent & Clear) */}
       <div className="bg-rose-50/60 dark:bg-rose-950/40 rounded-3xl p-6 border border-rose-200 dark:border-rose-900/60 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">

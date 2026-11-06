@@ -56,6 +56,7 @@ import { paypalIdentityService } from '../integrations/paypal/identityService';
 import { paypalProfileService } from '../integrations/paypal/paypalProfileService';
 import { paypalBalanceService } from '../integrations/paypal/paypalBalanceService';
 import { paypalTransactionService } from '../integrations/paypal/paypalTransactionService';
+import { paypalReportingService } from '../integrations/paypal/paypalReportingService';
 import { validatePayPalConfig } from '../integrations/paypal/validator';
 import { zapierIntegration } from '../integrations/zapier';
 import { renderWorkerManager } from '../workers/backgroundWorkflows';
@@ -624,10 +625,12 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       return;
     }
 
-    const [profile, balance, transactions] = await Promise.all([
+    const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
       paypalProfileService.getProfile(userId),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
+      paypalReportingService.getMerchantBalances(),
+      paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
     ]);
 
     res.json({
@@ -636,6 +639,8 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       profile,
       balance,
       transactions,
+      merchantBalances,
+      merchantTransactions,
       lastSynchronized: user.paypalLastSyncAt || new Date().toISOString(),
       mode: env.PAYPAL_MODE,
     });
@@ -668,10 +673,12 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
       return;
     }
 
-    const [profile, balance, transactions] = await Promise.all([
+    const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
       paypalProfileService.getProfile(userId),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
+      paypalReportingService.getMerchantBalances(),
+      paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
     ]);
 
     user.paypalLastSyncAt = new Date();
@@ -683,6 +690,8 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
       profile,
       balance,
       transactions,
+      merchantBalances,
+      merchantTransactions,
       lastSynchronized: user.paypalLastSyncAt,
       mode: env.PAYPAL_MODE,
     });
@@ -694,6 +703,61 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
     res.status(500).json({
       success: false,
       error: err?.message || 'PayPal synchronization failed.',
+    });
+  }
+});
+
+/**
+ * Dedicated endpoint for PayPal Sandbox Business Account Balances
+ * Scope: https://uri.paypal.com/services/reporting/balances/read
+ */
+apiRouter.get('/paypal/merchant-reporting/balances', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const balanceResult = await paypalReportingService.getMerchantBalances();
+    res.json({
+      success: true,
+      ...balanceResult,
+    });
+  } catch (err: any) {
+    logger.error('PayPalMerchantReporting', 'Failed to retrieve merchant balances', { error: err?.message });
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to retrieve PayPal Sandbox Business Account balances.',
+    });
+  }
+});
+
+/**
+ * Dedicated endpoint for PayPal Sandbox Business Account Transaction History
+ * Scope: https://uri.paypal.com/services/reporting/search/read
+ */
+apiRouter.get('/paypal/merchant-reporting/transactions', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { startDate, endDate, page, pageSize, transactionStatus } = req.query as {
+      startDate?: string;
+      endDate?: string;
+      page?: string;
+      pageSize?: string;
+      transactionStatus?: string;
+    };
+
+    const transactionsResult = await paypalReportingService.getMerchantTransactions({
+      startDate,
+      endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      transactionStatus,
+    });
+
+    res.json({
+      success: true,
+      ...transactionsResult,
+    });
+  } catch (err: any) {
+    logger.error('PayPalMerchantReporting', 'Failed to retrieve merchant transactions', { error: err?.message });
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to retrieve PayPal Sandbox Business Account transactions.',
     });
   }
 });
