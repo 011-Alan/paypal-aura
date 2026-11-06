@@ -40,7 +40,7 @@ export interface OAuthStatePayload {
   nonce: string;
   timestamp: number;
   linkUserId?: string;
-  action?: 'login' | 'register';
+  action?: 'login' | 'register' | 'continue';
   codeVerifier?: string;
   clientOrigin?: string;
 }
@@ -118,7 +118,7 @@ export class PayPalIdentityService {
    */
   public generateOAuthState(options?: {
     linkUserId?: string;
-    action?: 'login' | 'register';
+    action?: 'login' | 'register' | 'continue';
     codeVerifier?: string;
     clientOrigin?: string;
   }): { state: string; nonce: string; codeVerifier?: string } {
@@ -128,7 +128,7 @@ export class PayPalIdentityService {
       nonce,
       timestamp: Date.now(),
       linkUserId: options?.linkUserId,
-      action: options?.action || 'login',
+      action: options?.action || 'continue',
       clientOrigin: options?.clientOrigin,
     };
 
@@ -190,7 +190,7 @@ export class PayPalIdentityService {
   public getAuthorizationUrl(options?: {
     linkUserId?: string;
     prompt?: string;
-    action?: 'login' | 'register';
+    action?: 'login' | 'register' | 'continue';
     clientOrigin?: string;
   }): {
     url: string;
@@ -207,7 +207,7 @@ export class PayPalIdentityService {
 
     const { state, nonce } = this.generateOAuthState({
       linkUserId: options?.linkUserId,
-      action: options?.action || 'login',
+      action: options?.action || 'continue',
       clientOrigin: options?.clientOrigin,
     });
     const redirectUri = env.PAYPAL_IDENTITY_REDIRECT_URI;
@@ -1147,26 +1147,16 @@ export class PayPalIdentityService {
           // -------------------------------------------------------------------------
           // CASE C: Account Conflict Check (Email exists without PayPal linkage)
           // -------------------------------------------------------------------------
-          logger.warn('PayPalIdentityService', 'Login with PayPal matched existing email without prior link', {
+          logger.warn('PayPalIdentityService', 'PayPal authentication matched existing email without prior link', {
             email: paypalEmail,
           });
           throw new Error(
             'An account with this email already exists in AURA. To secure your account, please sign in with your password and connect PayPal in Settings.'
           );
-        } else if (action === 'login') {
-          // -------------------------------------------------------------------------
-          // CASE D: User selected "Login with PayPal" but has never registered with AURA
-          // -------------------------------------------------------------------------
-          logger.info('PayPalIdentityService', 'Unregistered PayPal identity attempted Login with PayPal', {
-            paypalUserId: paypalSubjectId,
-            paypalEmail,
-          });
-          throw new Error(
-            'PAYPAL_NOT_REGISTERED: No AURA account is linked to this PayPal identity. Please choose "Sign up with PayPal" to create your account.'
-          );
         } else {
           // -------------------------------------------------------------------------
-          // CASE E: New User Registration via PayPal
+          // CASE D: Just-In-Time (JIT) Provisioning for New AURA User
+          // Automatically creates AURA profile and initializes checking account.
           // -------------------------------------------------------------------------
           const secureRandomPassword = crypto.randomBytes(32).toString('hex');
           const secureRandomPin = (Math.floor(1000 + Math.random() * 9000)).toString();
@@ -1208,7 +1198,7 @@ export class PayPalIdentityService {
           await recordAuditLog({
             userId: String(newUser._id),
             actor: 'user',
-            action: 'paypal_identity_registered',
+            action: 'paypal_jit_registered',
             resourceType: 'user',
             resourceId: String(newUser._id),
             status: 'success',

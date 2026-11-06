@@ -445,7 +445,7 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
       }
     }
 
-    const action = req.query.action === 'register' ? 'register' : 'login';
+    const action = (req.query.action as any) || 'continue';
     let clientOrigin = (req.query.client_origin as string) || (req.headers.origin as string);
     if (!clientOrigin && req.headers.referer) {
       try {
@@ -520,11 +520,6 @@ apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
     return res.redirect(redirectUrl);
   } catch (err: any) {
     logger.error('PayPalAuth', 'Failed to process PayPal authentication callback', { error: err?.message });
-    const rawMsg = String(err?.message || '');
-    if (rawMsg.includes('PAYPAL_NOT_REGISTERED')) {
-      const cleanMsg = 'No AURA account is linked to this PayPal identity. Please click "Sign up with PayPal" to register.';
-      return res.redirect(`${targetOrigin}/?auth=not_registered&message=${encodeURIComponent(cleanMsg)}`);
-    }
     const clientMsg = err?.message || 'PayPal authentication failed. Please try again.';
     return res.redirect(`${targetOrigin}/?auth=paypal_error&message=${encodeURIComponent(clientMsg)}`);
   }

@@ -908,19 +908,20 @@ async function runPayPalIdentityAndPaymentTests() {
   }
 
   // --------------------------------------------------------------------------
-  // Scenario 17: Unregistered user login guidance (rejects, no demo fallback)
+  // Scenario 17: Just-In-Time (JIT) Provisioning & Returning User via Continue with PayPal
   // --------------------------------------------------------------------------
-  console.log('--- Scenario 17: Unregistered PayPal user login guidance (no demo fallback) ---');
+  console.log('--- Scenario 17: Just-In-Time (JIT) Provisioning & Returning User via Continue with PayPal ---');
   {
-    const unregisteredSub = `https://www.paypal.com/webapps/auth/identity/user/UNREG-${Date.now()}`;
+    const unregisteredSub = `https://www.paypal.com/webapps/auth/identity/user/JIT-${Date.now()}`;
+    const unregisteredEmail = `jit-${Date.now()}@paypal-test.finance`;
     const originalFetch = global.fetch;
-    const { state } = paypalIdentityService.getAuthorizationUrl({ action: 'login' });
+    const { state: state1 } = paypalIdentityService.getAuthorizationUrl({ action: 'continue' });
 
     global.fetch = async (input: any) => {
       const urlStr = String(input);
       if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         return new Response(
-          JSON.stringify({ access_token: 'mock-token-unreg', token_type: 'Bearer', expires_in: 28800 }),
+          JSON.stringify({ access_token: 'mock-token-jit', token_type: 'Bearer', expires_in: 28800 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
@@ -929,7 +930,8 @@ async function runPayPalIdentityAndPaymentTests() {
           JSON.stringify({
             sub: unregisteredSub,
             user_id: unregisteredSub,
-            email: `unregistered-${Date.now()}@paypal-test.finance`,
+            email: unregisteredEmail,
+            name: 'JIT Provisioned User',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
@@ -938,14 +940,26 @@ async function runPayPalIdentityAndPaymentTests() {
     };
 
     try {
-      await assert.rejects(
-        async () => {
-          await paypalIdentityService.handleCallback({ code: `unreg-code-${Date.now()}`, state });
-        },
-        /PAYPAL_NOT_REGISTERED/i,
-        '17a. Must guide unregistered user to register instead of assigning demo account'
-      );
-      console.log('[PASS] Scenario 17: Unregistered user Login flow guidance verified (no demo fallback).\n');
+      // 1. First-time login: JIT provision new user
+      const res1 = await paypalIdentityService.handleCallback({ code: `jit-code-1-${Date.now()}`, state: state1 });
+      assert.strictEqual(res1.isNewUser, true, '17a. First-time PayPal authentication must be marked as isNewUser: true');
+      assert.strictEqual(res1.user.paypalUserId, unregisteredSub, '17b. Provisioned user must have matching paypalUserId');
+      assert.ok(res1.token, '17c. Must issue valid JWT session token');
+
+      const createdAccount = await AccountModel.findOne({ userId: res1.user._id });
+      assert.ok(createdAccount, '17d. Must automatically initialize primary checking account for JIT user');
+      assert.strictEqual(createdAccount.type, 'checking', '17e. Primary account must be a checking account');
+
+      // 2. Returning login: Existing user seamlessly signs in without duplication
+      const { state: state2 } = paypalIdentityService.getAuthorizationUrl({ action: 'continue' });
+      const res2 = await paypalIdentityService.handleCallback({ code: `jit-code-2-${Date.now()}`, state: state2 });
+      assert.strictEqual(res2.isNewUser, false, '17f. Returning user must have isNewUser: false');
+      assert.strictEqual(String(res2.user._id), String(res1.user._id), '17g. Returning user must resolve to identical user ID');
+
+      const userCount = await UserModel.countDocuments({ paypalUserId: unregisteredSub });
+      assert.strictEqual(userCount, 1, '17h. Exactly one user record must exist in MongoDB for this PayPal identity');
+
+      console.log('[PASS] Scenario 17: JIT Provisioning on first login and returning login verified with zero account duplication.\n');
     } finally {
       global.fetch = originalFetch;
     }
