@@ -70,6 +70,24 @@ export const env = {
   // PayPal Identity API (Log in with PayPal)
   PAYPAL_IDENTITY_CLIENT_ID: process.env.PAYPAL_IDENTITY_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || '',
   PAYPAL_IDENTITY_CLIENT_SECRET: process.env.PAYPAL_IDENTITY_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET || '',
+  get PAYPAL_IDENTITY_AUTH_URL(): string {
+    if (process.env.PAYPAL_IDENTITY_AUTH_URL) return process.env.PAYPAL_IDENTITY_AUTH_URL;
+    return this.PAYPAL_MODE === 'live'
+      ? 'https://www.paypal.com/webapps/auth/protocol/openidconnect/v1/authorize'
+      : 'https://www.sandbox.paypal.com/webapps/auth/protocol/openidconnect/v1/authorize';
+  },
+  get PAYPAL_IDENTITY_TOKEN_URL(): string {
+    if (process.env.PAYPAL_IDENTITY_TOKEN_URL) return process.env.PAYPAL_IDENTITY_TOKEN_URL;
+    return this.PAYPAL_MODE === 'live'
+      ? 'https://api.paypal.com/v1/identity/openidconnect/tokenservice'
+      : 'https://api.sandbox.paypal.com/v1/identity/openidconnect/tokenservice';
+  },
+  get PAYPAL_IDENTITY_USERINFO_URL(): string {
+    if (process.env.PAYPAL_IDENTITY_USERINFO_URL) return process.env.PAYPAL_IDENTITY_USERINFO_URL;
+    return this.PAYPAL_MODE === 'live'
+      ? 'https://api-m.paypal.com/v1/identity/openidconnect/userinfo'
+      : 'https://api-m.sandbox.paypal.com/v1/identity/openidconnect/userinfo';
+  },
   get PAYPAL_IDENTITY_REDIRECT_URI(): string {
     const raw = process.env.PAYPAL_IDENTITY_REDIRECT_URI || `${this.PUBLIC_API_URL}/auth/paypal/callback`;
     return raw.trim().replace(/\/+$/, '');

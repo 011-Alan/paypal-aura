@@ -967,7 +967,7 @@ async function runPayPalIdentityAndPaymentTests() {
     let tokenExchangeCallCount = 0;
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         tokenExchangeCallCount++;
         // Add small artificial delay to test concurrency race
         await new Promise((r) => setTimeout(r, 50));
@@ -1029,7 +1029,7 @@ async function runPayPalIdentityAndPaymentTests() {
     let tokenExchangeCallCount = 0;
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         tokenExchangeCallCount++;
         return new Response(
           JSON.stringify({
@@ -1084,7 +1084,7 @@ async function runPayPalIdentityAndPaymentTests() {
     let tokenExchangeCallCount = 0;
     global.fetch = async (input: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         tokenExchangeCallCount++;
         return new Response(
           JSON.stringify({
@@ -1135,7 +1135,7 @@ async function runPayPalIdentityAndPaymentTests() {
 
     global.fetch = async (input: any, init?: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         capturedRequest = {
           url: urlStr,
           method: init?.method,
@@ -1157,19 +1157,23 @@ async function runPayPalIdentityAndPaymentTests() {
     try {
       await paypalIdentityService.exchangeCodeForTokens(testCode21);
 
-      assert.ok(capturedRequest, '21a. Token exchange request must be executed');
-      assert.strictEqual(capturedRequest!.method, 'POST', '21b. Method must be POST');
-      assert.ok(capturedRequest!.url.endsWith('/v1/oauth2/token'), '21c. Must target documented /v1/oauth2/token');
-      assert.ok(capturedRequest!.headers.Authorization?.startsWith('Basic '), '21d. Must use Basic Authentication header');
-      assert.strictEqual(capturedRequest!.headers['Content-Type'], 'application/x-www-form-urlencoded', '21e. Content-Type must be application/x-www-form-urlencoded');
-      assert.strictEqual(capturedRequest!.headers.Accept, 'application/json', '21f. Accept must be application/json');
+      if (!capturedRequest) {
+        throw new Error('21a. Token exchange request must be executed');
+      }
+      const req = capturedRequest as { url: string; method: string; headers: Record<string, string>; body: string };
 
-      const parsedBody = new URLSearchParams(capturedRequest!.body);
+      assert.strictEqual(req.method, 'POST', '21b. Method must be POST');
+      assert.ok(req.url.includes('/v1/identity/openidconnect/tokenservice'), '21c. Must target documented /v1/identity/openidconnect/tokenservice');
+      assert.ok(req.headers.Authorization?.startsWith('Basic '), '21d. Must use Basic Authentication header');
+      assert.strictEqual(req.headers['Content-Type'], 'application/x-www-form-urlencoded', '21e. Content-Type must be application/x-www-form-urlencoded');
+      assert.strictEqual(req.headers.Accept, 'application/json', '21f. Accept must be application/json');
+
+      const parsedBody = new URLSearchParams(req.body);
       assert.strictEqual(parsedBody.get('grant_type'), 'authorization_code', '21g. grant_type must be authorization_code');
       assert.strictEqual(parsedBody.get('code'), testCode21, '21h. code must match provided code');
       assert.strictEqual(parsedBody.get('redirect_uri'), env.PAYPAL_IDENTITY_REDIRECT_URI, '21i. redirect_uri must match configured canonical URI');
-      assert.strictEqual(parsedBody.get('client_id'), null, '21j. client_id must NOT be passed in body (Basic auth header only)');
-      assert.strictEqual(parsedBody.get('client_secret'), null, '21k. client_secret must NOT be passed in body (Basic auth header only)');
+      assert.strictEqual(parsedBody.get('client_id'), env.PAYPAL_IDENTITY_CLIENT_ID, '21j. client_id must match configured client ID');
+      assert.strictEqual(parsedBody.get('client_secret'), env.PAYPAL_IDENTITY_CLIENT_SECRET, '21k. client_secret must match configured client secret');
       assert.strictEqual(parsedBody.get('code_verifier'), null, '21l. Unsupported code_verifier must NOT be passed in body');
 
       console.log('[PASS] Scenario 21: Token request payload conforms strictly to documented Identity OAuth 2.0 specifications.\n');
@@ -1191,7 +1195,7 @@ async function runPayPalIdentityAndPaymentTests() {
     let tokenExchangeRedirectUri: string | null = null;
     global.fetch = async (input: any, init?: any) => {
       const urlStr = String(input);
-      if (urlStr.includes('/v1/oauth2/token')) {
+      if (urlStr.includes('/tokenservice') || urlStr.includes('/v1/oauth2/token')) {
         const bodyParams = new URLSearchParams(init?.body);
         tokenExchangeRedirectUri = bodyParams.get('redirect_uri');
         return new Response(

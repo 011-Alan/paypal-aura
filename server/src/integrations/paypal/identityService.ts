@@ -214,11 +214,10 @@ export class PayPalIdentityService {
 
     // Official Log in with PayPal OpenID Connect parameters
     const params = new URLSearchParams({
-      flowEntry: 'static',
-      client_id: clientId,
       response_type: 'code',
-      scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
+      client_id: clientId,
       redirect_uri: redirectUri,
+      scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
       state,
       nonce,
     });
@@ -227,8 +226,8 @@ export class PayPalIdentityService {
       params.append('prompt', options.prompt);
     }
 
-    // PayPal OIDC /connect endpoint with %20 encoding for standard OIDC scope separation
-    const authBase = `${env.PAYPAL_WEB_URL}/connect`;
+    // PayPal OIDC authorize endpoint with %20 encoding for standard OIDC scope separation
+    const authBase = env.PAYPAL_IDENTITY_AUTH_URL;
     const queryString = params.toString().replace(/\+/g, '%20');
     const url = `${authBase}?${queryString}`;
 
@@ -247,15 +246,15 @@ export class PayPalIdentityService {
   }
 
   /**
-   * Exchanges an authorization code for access and ID tokens using Basic Authentication.
-   * Conforms strictly to documented OAuth 2.0 authorization-code exchange:
-   * POST /v1/oauth2/token
+   * Exchanges an authorization code for access and ID tokens using Basic Authentication and Identity tokenservice.
+   * Conforms strictly to PayPal Identity OpenID Connect authorization-code exchange:
+   * POST /v1/identity/openidconnect/tokenservice
    * Headers:
    *   Authorization: Basic <base64(client_id:client_secret)>
    *   Content-Type: application/x-www-form-urlencoded
    *   Accept: application/json
    * Body:
-   *   grant_type=authorization_code&code=<code\>&redirect_uri=<redirect_uri\>
+   *   grant_type=authorization_code&code=<code\>&redirect_uri=<redirect_uri\>&client_id=<id\>&client_secret=<secret\>
    */
   public async exchangeCodeForTokens(code: string, _legacyCodeVerifier?: string): Promise<PayPalTokenResponse> {
     const clientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
@@ -328,31 +327,32 @@ export class PayPalIdentityService {
     this.codeExchangeCache.set(codeFingerprint, record);
 
     const exchangePromise = (async () => {
-      // Body parameters strictly conforming to Section 5:
-      // grant_type=authorization_code
-      // code=<authorization_code>
-      // redirect_uri=<redirect_uri>
+      // Body parameters for Identity tokenservice
       const bodyParams = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code.trim(),
         redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
       });
 
-      // Canonical OAuth 2.0 token endpoint for PayPal REST applications
-      const primaryTokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
+      // Identity tokenservice endpoint for OpenID Connect
+      const primaryTokenUrl = env.PAYPAL_IDENTITY_TOKEN_URL;
       const fallbackTokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
       const requestTimestamp = new Date().toISOString();
       const clientIdFingerprint = this.maskClientId(clientId);
 
-      logger.info('PayPalIdentityService', 'Initiating authorization code exchange with PayPal token endpoint', {
+      logger.info('PayPalIdentityService', 'Initiating authorization code exchange with PayPal Identity tokenservice', {
         tokenExchangeRequestTimestamp: requestTimestamp,
         tokenUrl: primaryTokenUrl,
+        httpMethod: 'POST',
+        grantType: 'authorization_code',
         redirectUriAuthorization: redirectUri,
         redirectUriTokenExchange: redirectUri,
         clientIdFingerprint,
         selectedEnvironment: env.PAYPAL_MODE,
         codeFingerprint,
-        callbackRequestCount: 1,
+        callbackRequestCount: record.requestCount,
         alreadyProcessed: false,
       });
 
@@ -366,9 +366,9 @@ export class PayPalIdentityService {
         body: bodyParams.toString(),
       });
 
-      // If primary returns 404, fallback to tokenservice
-      if (response.status === 404) {
-        logger.warn('PayPalIdentityService', 'Primary oauth2/token returned 404, falling back to tokenservice', {
+      // If primary returns 404, fallback to alternate tokenservice
+      if (response.status === 404 && fallbackTokenUrl !== primaryTokenUrl) {
+        logger.warn('PayPalIdentityService', 'Primary tokenservice returned 404, falling back to alternate tokenservice', {
           fallbackTokenUrl,
         });
         response = await fetch(fallbackTokenUrl, {
@@ -460,21 +460,23 @@ export class PayPalIdentityService {
   }
 
   /**
-   * Refreshes an expired user access token using the user's refresh token via PayPal OAuth 2.0 token endpoint.
+   * Refreshes an expired user access token using the user's refresh token via PayPal Identity tokenservice.
    */
   public async refreshUserAccessToken(refreshToken: string): Promise<PayPalTokenResponse> {
     const clientId = env.PAYPAL_IDENTITY_CLIENT_ID || env.PAYPAL_CLIENT_ID;
     const clientSecret = env.PAYPAL_IDENTITY_CLIENT_SECRET || env.PAYPAL_CLIENT_SECRET;
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-    const primaryTokenUrl = `${env.PAYPAL_BASE_URL}/v1/oauth2/token`;
+    const primaryTokenUrl = env.PAYPAL_IDENTITY_TOKEN_URL;
     const fallbackTokenUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/tokenservice`;
     const bodyParams = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
     });
 
-    logger.info('PayPalIdentityService', 'Refreshing user access token via PayPal OAuth 2.0 token endpoint', {
+    logger.info('PayPalIdentityService', 'Refreshing user access token via PayPal Identity tokenservice', {
       tokenUrl: primaryTokenUrl,
       selectedEnvironment: env.PAYPAL_MODE,
       clientIdFingerprint: this.maskClientId(clientId),
@@ -490,7 +492,7 @@ export class PayPalIdentityService {
       body: bodyParams.toString(),
     });
 
-    if (response.status === 404) {
+    if (response.status === 404 && fallbackTokenUrl !== primaryTokenUrl) {
       response = await fetch(fallbackTokenUrl, {
         method: 'POST',
         headers: {
@@ -667,8 +669,10 @@ export class PayPalIdentityService {
     }
 
     // Official documented OpenID Connect UserInfo endpoints
-    const primaryUrl = `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`;
+    const primaryUrl = `${env.PAYPAL_IDENTITY_USERINFO_URL}?schema=openid`;
     const fallbackUrls = [
+      env.PAYPAL_IDENTITY_USERINFO_URL,
+      `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo?schema=openid`,
       `${env.PAYPAL_BASE_URL}/v1/identity/openidconnect/userinfo`,
       `${env.PAYPAL_BASE_URL}/v1/identity/oauth2/userinfo?schema=openid`,
     ];
