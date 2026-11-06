@@ -40,6 +40,18 @@ export interface IUser extends Document {
   paypalAccountLinked?: boolean;
   paypalIdentityVerified?: boolean;
   authenticationProvider?: 'local' | 'paypal' | 'both';
+  paypalAccessToken?: string;
+  paypalRefreshToken?: string;
+  paypalTokenExpiresAt?: number;
+  paypalGrantedScopes?: string;
+  paypalAddress?: {
+    streetAddress?: string;
+    locality?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  paypalLastSyncAt?: Date;
   spendingPreferences: {
     riskTolerance: 'conservative' | 'balanced' | 'growth';
     priorityCategories: string[];
@@ -67,6 +79,18 @@ const UserSchema = new Schema<IUser>(
     paypalAccountLinked: { type: Boolean, default: false },
     paypalIdentityVerified: { type: Boolean, default: false },
     authenticationProvider: { type: String, enum: ['local', 'paypal', 'both'], default: 'local' },
+    paypalAccessToken: { type: String, select: false },
+    paypalRefreshToken: { type: String, select: false },
+    paypalTokenExpiresAt: { type: Number },
+    paypalGrantedScopes: { type: String },
+    paypalAddress: {
+      streetAddress: { type: String, trim: true },
+      locality: { type: String, trim: true },
+      region: { type: String, trim: true },
+      postalCode: { type: String, trim: true },
+      country: { type: String, trim: true },
+    },
+    paypalLastSyncAt: { type: Date },
     financialProfile: {
       monthlyIncome: { type: Number, default: 95000 },
       incomeType: { type: String, enum: ['salary', 'freelance', 'business', 'pension', 'other'], default: 'salary' },

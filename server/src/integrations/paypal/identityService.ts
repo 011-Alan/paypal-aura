@@ -217,7 +217,7 @@ export class PayPalIdentityService {
       response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri,
-      scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
+      scope: 'openid profile email address https://uri.paypal.com/services/paypalattributes',
       state,
       nonce,
     });
@@ -1074,6 +1074,16 @@ export class PayPalIdentityService {
         (typeof idTokenClaims?.payer_id === 'string' && idTokenClaims.payer_id.trim() ? idTokenClaims.payer_id.trim() : undefined) ||
         (typeof (tokens as any)?.payer_id === 'string' && (tokens as any).payer_id.trim() ? (tokens as any).payer_id.trim() : undefined);
 
+      const parsedAddress = userInfo?.address
+        ? {
+            streetAddress: userInfo.address.street_address || (userInfo.address as any).streetAddress,
+            locality: userInfo.address.locality,
+            region: userInfo.address.region,
+            postalCode: userInfo.address.postal_code || (userInfo.address as any).postalCode,
+            country: userInfo.address.country,
+          }
+        : undefined;
+
       let finalResult: {
         user: IUser;
         token: string;
@@ -1103,6 +1113,14 @@ export class PayPalIdentityService {
         existingUser.paypalAccountLinked = true;
         existingUser.paypalIdentityVerified = isVerified;
         existingUser.authenticationProvider = existingUser.passwordHash ? 'both' : 'paypal';
+        if (tokens.access_token) existingUser.paypalAccessToken = tokens.access_token;
+        if (tokens.refresh_token) existingUser.paypalRefreshToken = tokens.refresh_token;
+        if (tokens.expires_at) existingUser.paypalTokenExpiresAt = tokens.expires_at;
+        if (grantedScopes) existingUser.paypalGrantedScopes = grantedScopes;
+        existingUser.paypalLastSyncAt = new Date();
+        if (parsedAddress && Object.values(parsedAddress).some(Boolean)) {
+          existingUser.paypalAddress = parsedAddress;
+        }
         await existingUser.save();
 
         await recordAuditLog({
@@ -1129,6 +1147,14 @@ export class PayPalIdentityService {
           existingPayPalUser.paypalAccountLinked = true;
           existingPayPalUser.paypalIdentityVerified = isVerified;
           if (payerId) existingPayPalUser.paypalPayerId = payerId;
+          if (tokens.access_token) existingPayPalUser.paypalAccessToken = tokens.access_token;
+          if (tokens.refresh_token) existingPayPalUser.paypalRefreshToken = tokens.refresh_token;
+          if (tokens.expires_at) existingPayPalUser.paypalTokenExpiresAt = tokens.expires_at;
+          if (grantedScopes) existingPayPalUser.paypalGrantedScopes = grantedScopes;
+          existingPayPalUser.paypalLastSyncAt = new Date();
+          if (parsedAddress && Object.values(parsedAddress).some(Boolean)) {
+            existingPayPalUser.paypalAddress = parsedAddress;
+          }
           await existingPayPalUser.save();
 
           await recordAuditLog({
@@ -1179,6 +1205,12 @@ export class PayPalIdentityService {
             paypalAccountLinked: true,
             paypalIdentityVerified: isVerified,
             authenticationProvider: 'paypal',
+            paypalAccessToken: tokens.access_token,
+            paypalRefreshToken: tokens.refresh_token,
+            paypalTokenExpiresAt: tokens.expires_at,
+            paypalGrantedScopes: grantedScopes,
+            paypalLastSyncAt: new Date(),
+            paypalAddress: parsedAddress && Object.values(parsedAddress).some(Boolean) ? parsedAddress : undefined,
           });
 
           await AccountModel.create({

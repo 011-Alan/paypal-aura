@@ -53,6 +53,9 @@ import { elasticIntegration } from '../integrations/elastic';
 import { kernelIntegration } from '../integrations/kernel';
 import { paypalIntegration } from '../integrations/paypal';
 import { paypalIdentityService } from '../integrations/paypal/identityService';
+import { paypalProfileService } from '../integrations/paypal/paypalProfileService';
+import { paypalBalanceService } from '../integrations/paypal/paypalBalanceService';
+import { paypalTransactionService } from '../integrations/paypal/paypalTransactionService';
 import { validatePayPalConfig } from '../integrations/paypal/validator';
 import { zapierIntegration } from '../integrations/zapier';
 import { renderWorkerManager } from '../workers/backgroundWorkflows';
@@ -77,7 +80,10 @@ function sanitizeUser(u: any) {
     onboardingCompleted: u.onboardingCompleted,
     paypalAccountLinked: Boolean(u.paypalAccountLinked),
     paypalEmail: u.paypalEmail,
+    paypalPayerId: u.paypalPayerId,
     paypalIdentityVerified: Boolean(u.paypalIdentityVerified),
+    paypalAddress: u.paypalAddress,
+    paypalLastSyncAt: u.paypalLastSyncAt,
     authenticationProvider: u.authenticationProvider || 'local',
     createdAt: u.createdAt,
   };
@@ -574,6 +580,120 @@ apiRouter.post('/auth/paypal/link', requireAuth, async (req: AuthenticatedReques
     res.status(500).json({
       success: false,
       error: err?.message || 'Failed to initialize PayPal account linking.',
+    });
+  }
+});
+
+apiRouter.get('/paypal/connected-account', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized.' });
+      return;
+    }
+
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    if (!user.paypalAccountLinked || !user.paypalUserId) {
+      res.json({
+        success: true,
+        linked: false,
+        profile: null,
+        balance: {
+          available: false,
+          balance: null,
+          currency: null,
+          statusMessage: 'No PayPal account connected.',
+          details: 'Please connect a PayPal account to view account details.',
+          lastSyncAt: null,
+        },
+        transactions: {
+          available: false,
+          transactions: [],
+          totalCount: 0,
+          statusMessage: 'No PayPal account connected.',
+          details: 'Please connect a PayPal account to view transactions.',
+          lastSyncAt: null,
+        },
+        lastSynchronized: null,
+      });
+      return;
+    }
+
+    const [profile, balance, transactions] = await Promise.all([
+      paypalProfileService.getProfile(userId),
+      paypalBalanceService.getBalance(userId),
+      paypalTransactionService.getTransactions(userId),
+    ]);
+
+    res.json({
+      success: true,
+      linked: true,
+      profile,
+      balance,
+      transactions,
+      lastSynchronized: user.paypalLastSyncAt || new Date().toISOString(),
+      mode: env.PAYPAL_MODE,
+    });
+  } catch (err: any) {
+    logger.error('PayPalConnectedAccount', 'Failed to retrieve connected PayPal account data', {
+      userId: req.userId,
+      error: err?.message,
+    });
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to retrieve PayPal connected account details.',
+    });
+  }
+});
+
+apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized.' });
+      return;
+    }
+
+    const user = await UserModel.findById(userId);
+    if (!user || !user.paypalAccountLinked || !user.paypalUserId) {
+      res.status(400).json({
+        success: false,
+        error: 'No linked PayPal account found to synchronize.',
+      });
+      return;
+    }
+
+    const [profile, balance, transactions] = await Promise.all([
+      paypalProfileService.getProfile(userId),
+      paypalBalanceService.getBalance(userId),
+      paypalTransactionService.getTransactions(userId),
+    ]);
+
+    user.paypalLastSyncAt = new Date();
+    await user.save();
+
+    res.json({
+      success: true,
+      linked: true,
+      profile,
+      balance,
+      transactions,
+      lastSynchronized: user.paypalLastSyncAt,
+      mode: env.PAYPAL_MODE,
+    });
+  } catch (err: any) {
+    logger.error('PayPalSync', 'Failed to synchronize PayPal connected account data', {
+      userId: req.userId,
+      error: err?.message,
+    });
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'PayPal synchronization failed.',
     });
   }
 });

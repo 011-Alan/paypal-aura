@@ -14,6 +14,7 @@ import { apiRequest, formatDateShort } from '../lib/api';
 import { NavTabId } from '../components/AppShell';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
 
 /**
  * Custom hook to render typing text reveal animation with prefers-reduced-motion support
@@ -403,6 +404,9 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
           </div>
         </div>
       </div>
+
+      {/* 4. Section: Connected PayPal Account */}
+      <ConnectedPayPalAccount />
 
       {/* 5. Section 4: Prominent Ask AURA Quick Conversational Input */}
       <div className="bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40 rounded-3xl p-6 border border-blue-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
