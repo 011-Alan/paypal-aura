@@ -205,11 +205,32 @@ export class PayPalReportingService {
       };
     }
 
-    // Verify whether scope is granted in token
+    // Verify whether required balance reporting scope is granted in application token
     const hasBalanceScope =
-      tokenData.scopes.length === 0 || // If PayPal doesn't enumerate granular scopes or wildcard
+      tokenData.scopes.length === 0 || // If PayPal token omits granular scope listing
       tokenData.scopes.includes(PayPalReportingService.SCOPE_BALANCES) ||
       tokenData.scopes.some((s) => s.includes('reporting/balances'));
+
+    if (tokenData.scopes.length > 0 && !hasBalanceScope) {
+      logger.warn('PayPalReportingService', 'Application token lacks reporting/balances scope', {
+        grantedScopes: tokenData.scopes,
+      });
+      return {
+        available: false,
+        accountType,
+        mode,
+        primaryBalance: null,
+        primaryCurrency: null,
+        balances: [],
+        lastRefreshedAt: null,
+        statusMessage: 'Reporting permission missing on application token.',
+        missingScope: PayPalReportingService.SCOPE_BALANCES,
+        httpStatus: 403,
+        details:
+          'The application access token does not include the https://uri.paypal.com/services/reporting/balances/read scope. Please verify in PayPal Developer Dashboard that Balance reporting permissions are enabled for your REST App and refresh your token.',
+        grantedScopes: tokenData.scopes,
+      };
+    }
 
     const balanceUrl = `${env.PAYPAL_BASE_URL}/v1/reporting/balances?currency_code=ALL`;
 
@@ -413,6 +434,37 @@ export class PayPalReportingService {
         statusMessage: 'Unable to authenticate with PayPal API.',
         details: err?.message || 'Client Credentials token exchange failed.',
         reportingDelayNotice,
+      };
+    }
+
+    // Verify whether required transaction search reporting scope is granted in application token
+    const hasSearchScope =
+      tokenData.scopes.length === 0 || // If PayPal token omits granular scope listing
+      tokenData.scopes.includes(PayPalReportingService.SCOPE_SEARCH) ||
+      tokenData.scopes.some((s) => s.includes('reporting/search'));
+
+    if (tokenData.scopes.length > 0 && !hasSearchScope) {
+      logger.warn('PayPalReportingService', 'Application token lacks reporting/search scope', {
+        grantedScopes: tokenData.scopes,
+      });
+      return {
+        available: false,
+        accountType,
+        mode,
+        transactions: [],
+        totalItems: 0,
+        totalPages: 0,
+        page,
+        pageSize,
+        startDate,
+        endDate,
+        statusMessage: 'Transaction Search permission missing on application token.',
+        missingScope: PayPalReportingService.SCOPE_SEARCH,
+        httpStatus: 403,
+        details:
+          'The application access token does not include the https://uri.paypal.com/services/reporting/search/read scope. In PayPal Developer Dashboard, ensure "Transaction search" capability is checked for your REST App and refresh your token.',
+        reportingDelayNotice,
+        grantedScopes: tokenData.scopes,
       };
     }
 

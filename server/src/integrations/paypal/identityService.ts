@@ -217,7 +217,7 @@ export class PayPalIdentityService {
       response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri,
-      scope: 'openid profile email address https://uri.paypal.com/services/paypalattributes',
+      scope: 'openid profile email https://uri.paypal.com/services/paypalattributes',
       state,
       nonce,
     });

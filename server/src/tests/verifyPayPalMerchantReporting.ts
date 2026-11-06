@@ -262,6 +262,45 @@ async function runMerchantReportingTests() {
     }
 
     // --------------------------------------------------------------------------
+    // Test 4B: Token Scope Pre-flight Check (Token Returned Without Reporting Scopes)
+    // --------------------------------------------------------------------------
+    console.log('\n--- Test 4B: Application Token Scope Pre-flight Verification ---');
+    {
+      paypalReportingService.clearTokenCache();
+      (env as any).PAYPAL_CLIENT_ID = 'test-sandbox-client-id-12345';
+      (env as any).PAYPAL_CLIENT_SECRET = 'test-sandbox-client-secret-67890';
+
+      global.fetch = (async (url: any) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/v1/oauth2/token')) {
+          return new Response(
+            JSON.stringify({
+              scope: 'https://uri.paypal.com/services/invoicing', // Lacks balances/read and search/read
+              access_token: 'A21AA-test-app-token-restricted',
+              token_type: 'Bearer',
+              app_id: 'APP-TEST-RESTRICTED',
+              expires_in: 32400,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response('Not found', { status: 404 });
+      }) as any;
+
+      const balanceRes = await paypalReportingService.getMerchantBalances();
+      assert.strictEqual(balanceRes.available, false);
+      assert.strictEqual(balanceRes.missingScope, PayPalReportingService.SCOPE_BALANCES);
+      assert.ok(balanceRes.details?.includes('refresh your token') || balanceRes.details?.includes('Developer Dashboard'));
+
+      const txnRes = await paypalReportingService.getMerchantTransactions();
+      assert.strictEqual(txnRes.available, false);
+      assert.strictEqual(txnRes.missingScope, PayPalReportingService.SCOPE_SEARCH);
+      assert.ok(txnRes.details?.includes('Transaction search') || txnRes.details?.includes('refresh your token'));
+
+      console.log('✓ PASS: Application token without reporting scopes detected pre-flight without guessing.');
+    }
+
+    // --------------------------------------------------------------------------
     // Test 5: Missing Environment Credentials Handling
     // --------------------------------------------------------------------------
     console.log('\n--- Test 5: Missing Credentials Safe Failure ---');
