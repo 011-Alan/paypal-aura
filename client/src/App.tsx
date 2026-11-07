@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AskAuraProvider } from './context/AskAuraContext';
 import { AppShell, NavTabId } from './components/AppShell';
+import { FloatingAskAuraButton } from './components/FloatingAskAuraButton';
+import { FloatingChatPanel } from './components/FloatingChatPanel';
 import { AuthPage } from './pages/AuthPage';
 import { HomePage } from './pages/HomePage';
 import { MyMoneyPage } from './pages/MyMoneyPage';
@@ -37,25 +40,29 @@ const MainRouter: React.FC = () => {
   };
 
   return (
-    <AppShell activeTab={activeTab} onSelectTab={setActiveTab}>
-      {(activeTab === 'overview' || activeTab === 'home') && <HomePage onNavigate={handleNavigate} />}
-      {(activeTab === 'accounts' || activeTab === 'my-money') && <MyMoneyPage />}
-      {(activeTab === 'transactions' || activeTab === 'spending') && <SpendingPage />}
-      {activeTab === 'ask-aura' && <AskAuraPage onNavigate={handleNavigate} />}
-      {(activeTab === 'financial-planning' || activeTab === 'financial-plan') && <FinancialPlanPage />}
-      {activeTab === 'commitments' && <CommitmentsPage />}
-      {activeTab === 'calendar' && <FinancialCalendarPage />}
-      {activeTab === 'goals' && <GoalsPage />}
-      {(activeTab === 'smart-purchases' || activeTab === 'smart-purchase') && (
-        <SmartPurchasePage onNavigate={handleNavigate} />
-      )}
-      {activeTab === 'family' && <FamilyPage />}
-      {activeTab === 'payments' && <PaymentsPage />}
-      {activeTab === 'settings' && <SettingsPage />}
-      {(activeTab === 'demo-lab' || activeTab === 'automations') && (
-        <DemoLabPage onNavigateToProduct={handleNavigate} />
-      )}
-    </AppShell>
+    <AskAuraProvider activeTab={activeTab} onNavigate={setActiveTab}>
+      <AppShell activeTab={activeTab} onSelectTab={setActiveTab}>
+        {(activeTab === 'overview' || activeTab === 'home') && <HomePage onNavigate={handleNavigate} />}
+        {(activeTab === 'accounts' || activeTab === 'my-money') && <MyMoneyPage />}
+        {(activeTab === 'transactions' || activeTab === 'spending') && <SpendingPage />}
+        {activeTab === 'ask-aura' && <AskAuraPage onNavigate={handleNavigate} />}
+        {(activeTab === 'financial-planning' || activeTab === 'financial-plan') && <FinancialPlanPage />}
+        {activeTab === 'commitments' && <CommitmentsPage />}
+        {activeTab === 'calendar' && <FinancialCalendarPage />}
+        {activeTab === 'goals' && <GoalsPage />}
+        {(activeTab === 'smart-purchases' || activeTab === 'smart-purchase') && (
+          <SmartPurchasePage onNavigate={handleNavigate} />
+        )}
+        {activeTab === 'family' && <FamilyPage />}
+        {activeTab === 'payments' && <PaymentsPage />}
+        {activeTab === 'settings' && <SettingsPage />}
+        {(activeTab === 'demo-lab' || activeTab === 'automations') && (
+          <DemoLabPage onNavigateToProduct={handleNavigate} />
+        )}
+      </AppShell>
+      <FloatingAskAuraButton />
+      <FloatingChatPanel />
+    </AskAuraProvider>
   );
 };
 

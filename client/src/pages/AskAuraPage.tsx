@@ -1,19 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Sparkles,
-  Bot,
   User,
   Send,
   Calendar,
-  PieChart,
   ShoppingBag,
-  CreditCard,
   Target,
-  CheckCircle2,
-  AlertCircle,
   RotateCcw,
   ShieldCheck,
-  Clock,
   Mic,
   MicOff,
   Volume2,
@@ -30,39 +24,11 @@ import {
   Compass,
   ArrowRight,
   CheckCheck,
+  Minimize2,
 } from 'lucide-react';
-import { apiRequest, formatDateShort } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Tooltip } from '../components/Tooltip';
+import { useAskAura } from '../context/AskAuraContext';
 import { ConversationalResponseRenderer } from '../components/ConversationalResponseRenderer';
-
-interface Message {
-  _id?: string;
-  id?: string;
-  sender?: 'user' | 'aura';
-  role?: 'user' | 'assistant' | 'system';
-  content?: string;
-  text?: string;
-  createdAt?: string;
-  timestamp?: string;
-  toolAction?: {
-    type: string;
-    title: string;
-    status: string;
-    navTarget?: string;
-    requiresUserPaymentApproval?: boolean;
-    details?: any;
-  };
-  suggestedNextPrompts?: string[];
-  purchaseCompanion?: any;
-}
-
-interface ConversationSummary {
-  _id: string;
-  title: string;
-  lastMessageAt: string;
-  createdAt: string;
-}
 
 const STARTER_PROMPTS = [
   { label: 'Financial Health', prompt: 'How am I doing financially overall?' },
@@ -76,40 +42,38 @@ const STARTER_PROMPTS = [
 ];
 
 export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
-  const { user, formatMoney } = useAuth();
+  const { formatMoney } = useAuth();
+  const {
+    conversations,
+    activeConvId,
+    activeConvTitle,
+    messages,
+    input,
+    setInput,
+    busy,
+    copiedId,
+    searchQuery,
+    setSearchQuery,
+    voiceOutputEnabled,
+    setVoiceOutputEnabled,
+    isListening,
+    voiceNotice,
+    isSpeakingId,
+    loadConversations,
+    selectConversation,
+    handleCreateNewChat,
+    handleDeleteConversation,
+    handleRenameConversation,
+    handleSendMessage,
+    handleCopyText,
+    handleRegenerateLast,
+    toggleSpeechRecognition,
+    speakText,
+    popOutToFloatingChat,
+  } = useAskAura();
 
-  // Conversation list & active conversation
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [activeConvTitle, setActiveConvTitle] = useState('New Conversation');
-  const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Messages in active conversation
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // Voice Interaction state
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
-  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
-  const [isSpeakingId, setIsSpeakingId] = useState<string | null>(null);
-  const [voiceNotice, setVoiceNotice] = useState<string>('');
-
-  const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isSubmittingRef = useRef<boolean>(false);
-
-  // Check speech recognition support
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setSpeechSupported(false);
-    }
-  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -118,431 +82,6 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
   useEffect(() => {
     scrollToBottom();
   }, [messages, busy]);
-
-  // Load conversations on mount
-  const loadConversations = async (q?: string) => {
-    try {
-      const endpoint = q ? `/conversations?q=${encodeURIComponent(q)}` : '/conversations';
-      const res = await apiRequest(endpoint);
-      const convList: ConversationSummary[] = res.conversations || [];
-      setConversations(convList);
-
-      if (!activeConvId && convList.length > 0 && !q) {
-        selectConversation(convList[0]._id, convList[0].title);
-      } else if (convList.length === 0 && !activeConvId) {
-        initDefaultWelcome();
-      }
-    } catch {
-      initDefaultWelcome();
-    }
-  };
-
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  const initDefaultWelcome = () => {
-    setActiveConvId(null);
-    setActiveConvTitle('New Conversation');
-    setMessages([
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: `Hello ${
-          user?.name || 'there'
-        }! I am AURA, your intelligent financial companion. You can ask me general questions, explore financial ideas, plan budgets, schedule bill reminders, or discover products. You can also use the microphone to talk with me. What would you like to explore today?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        suggestedNextPrompts: [
-          'How am I doing financially overall?',
-          'I need to buy sneakers.',
-          'Schedule electricity bill reminder for 10th',
-          'Take me to my accounts',
-        ],
-      },
-    ]);
-  };
-
-  const selectConversation = async (id: string, title?: string) => {
-    try {
-      setBusy(true);
-      setActiveConvId(id);
-      if (title) setActiveConvTitle(title);
-      const res = await apiRequest(`/conversations/${id}`);
-      setActiveConvTitle(res.conversation?.title || 'Conversation');
-      const loaded: Message[] = (res.messages || []).map((m: any) => ({
-        _id: m._id,
-        id: m._id,
-        role: m.role,
-        content: m.content,
-        toolAction: m.toolAction,
-        suggestedNextPrompts: m.suggestedNextPrompts,
-        timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }));
-      setMessages(loaded);
-    } catch (err: any) {
-      setVoiceNotice(`Failed to load chat: ${err?.message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleCreateNewChat = async () => {
-    try {
-      setBusy(true);
-      const res = await apiRequest('/conversations', {
-        method: 'POST',
-        body: JSON.stringify({ title: 'New Conversation' }),
-      });
-      const newConv: ConversationSummary = res.conversation;
-      setConversations((prev) => [newConv, ...prev]);
-      setActiveConvId(newConv._id);
-      setActiveConvTitle(newConv.title);
-      setMessages([
-        {
-          id: 'welcome-new',
-          role: 'assistant',
-          content: `Started a new conversation. Ask me any question, request a financial calculation, explore products, or speak into the microphone.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          suggestedNextPrompts: [
-            'How am I doing financially overall?',
-            'I need to buy sneakers.',
-            'Help me plan my expenses for this month',
-            'Change my preferred currency to USD',
-          ],
-        },
-      ]);
-    } catch {
-      initDefaultWelcome();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDeleteConversation = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this conversation?')) return;
-    try {
-      await apiRequest(`/conversations/${id}`, { method: 'DELETE' });
-      setConversations((prev) => prev.filter((c) => c._id !== id));
-      if (activeConvId === id) {
-        initDefaultWelcome();
-      }
-    } catch (err: any) {
-      alert(`Could not delete conversation: ${err?.message}`);
-    }
-  };
-
-  const handleRenameConversation = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const current = conversations.find((c) => c._id === id);
-    const newTitle = window.prompt('Rename conversation:', current?.title || '');
-    if (!newTitle || !newTitle.trim()) return;
-    try {
-      const res = await apiRequest(`/conversations/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ title: newTitle.trim() }),
-      });
-      setConversations((prev) =>
-        prev.map((c) => (c._id === id ? { ...c, title: res.conversation.title } : c))
-      );
-      if (activeConvId === id) {
-        setActiveConvTitle(res.conversation.title);
-      }
-    } catch (err: any) {
-      alert(`Could not rename conversation: ${err?.message}`);
-    }
-  };
-
-  // Text-To-Speech
-  const speakText = (text: string, msgId: string) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-
-    if (isSpeakingId === msgId) {
-      setIsSpeakingId(null);
-      return;
-    }
-
-    const cleanText = text.replace(/[*#_`]/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    const englishVoice =
-      voices.find((v) => v.lang.includes('en-IN') || v.lang.includes('en-GB') || v.lang.includes('en-US')) ||
-      voices[0];
-    if (englishVoice) utterance.voice = englishVoice;
-
-    utterance.onend = () => setIsSpeakingId(null);
-    utterance.onerror = () => setIsSpeakingId(null);
-
-    setIsSpeakingId(msgId);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Speech-To-Text (Voice Recognition)
-  const toggleSpeechRecognition = () => {
-    if (!speechSupported) {
-      setVoiceNotice('Speech recognition is not supported in this browser. Please use text input.');
-      setTimeout(() => setVoiceNotice(''), 4000);
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-IN';
-      recognition.continuous = false;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setVoiceNotice('Listening... Speak naturally.');
-      };
-
-      recognition.onresult = (event: any) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        setInput(transcript);
-      };
-
-      recognition.onerror = (event: any) => {
-        setIsListening(false);
-        setVoiceNotice(`Voice recognition error: ${event.error || 'permission denied'}`);
-        setTimeout(() => setVoiceNotice(''), 4000);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        setVoiceNotice('');
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
-      setIsListening(false);
-      setVoiceNotice(`Could not start microphone: ${err?.message}`);
-      setTimeout(() => setVoiceNotice(''), 4000);
-    }
-  };
-
-  // Process Tool Action Effects
-  const triggerToolEffects = (action: any) => {
-    if (!action) return;
-
-    // 1. Navigation effect
-    const targetPage = action.navTarget || (action.type === 'navigation' ? action.details?.targetTab : null);
-    if (targetPage) {
-      // Auto-trigger navigation smoothly or allow user to click
-      window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
-    }
-
-    // 2. Application state changes (Currency, Income, Goals, Reminders)
-    if (
-      action.type === 'currency_updated' ||
-      action.type === 'profile_updated' ||
-      action.type === 'income_updated' ||
-      action.type === 'reminder_scheduled' ||
-      action.type === 'goal_created' ||
-      action.type === 'goal_updated' ||
-      action.type === 'payment_prepared'
-    ) {
-      window.dispatchEvent(new CustomEvent('aura-state-changed', { detail: action }));
-    }
-  };
-
-  // Send Message with SSE Token Streaming Support & Duplicate Request Protection
-  const handleSendMessage = async (textToSend?: string) => {
-    const query = (textToSend || input).trim();
-    if (!query || busy || isSubmittingRef.current) return;
-    isSubmittingRef.current = true;
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-    }
-
-    const tempUserMsg: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, tempUserMsg]);
-    if (!textToSend) setInput('');
-    setBusy(true);
-
-    try {
-      let targetConvId = activeConvId;
-      if (!targetConvId) {
-        const createRes = await apiRequest('/conversations', {
-          method: 'POST',
-          body: JSON.stringify({
-            title: query.length > 36 ? query.slice(0, 36).trim() + '...' : query,
-          }),
-        });
-        targetConvId = createRes.conversation._id;
-        setActiveConvId(targetConvId);
-        setActiveConvTitle(createRes.conversation.title);
-        setConversations((prev) => [createRes.conversation, ...prev]);
-      }
-
-      // Try SSE streaming for real-time token reveal
-      const token = localStorage.getItem('token');
-      const streamRes = await fetch(`/api/conversations/${targetConvId}/messages/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ content: query }),
-      });
-
-      if (streamRes.ok && streamRes.body) {
-        const assistantMsgId = `aura-stream-${Date.now()}`;
-        let streamedContent = '';
-        let finalAction: any = null;
-        let finalChips: string[] = [];
-
-        // Insert initial streaming message
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: assistantMsgId,
-            role: 'assistant',
-            content: '',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          },
-        ]);
-
-        const reader = streamRes.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split('\n\n');
-          buffer = parts.pop() || '';
-
-          for (const part of parts) {
-            const trimmed = part.trim();
-            if (trimmed.startsWith('data: ')) {
-              try {
-                const event = JSON.parse(trimmed.slice(6));
-                const chunkDelta = event.delta || event.token || event.text || '';
-                if (event.type === 'delta' || event.type === 'token' || (chunkDelta && event.type !== 'final')) {
-                  streamedContent += chunkDelta;
-                  setMessages((prev) =>
-                    prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamedContent } : m))
-                  );
-                } else if (event.type === 'final') {
-                  if (event.answer) streamedContent = event.answer;
-                  finalAction = event.toolAction;
-                  finalChips = event.suggestedNextPrompts || [];
-                }
-              } catch {
-                // Ignore parse errors on individual SSE frames
-              }
-            }
-          }
-        }
-
-        // Finalize message with toolAction & suggestedNextPrompts
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId
-              ? {
-                  ...m,
-                  content: streamedContent || 'Done.',
-                  toolAction: finalAction,
-                  suggestedNextPrompts: finalChips,
-                }
-              : m
-          )
-        );
-
-        if (finalAction) {
-          triggerToolEffects(finalAction);
-        }
-
-        if (voiceOutputEnabled && streamedContent) {
-          speakText(streamedContent, assistantMsgId);
-        }
-      } else {
-        // Fallback to standard request
-        const res = await apiRequest(`/conversations/${targetConvId}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ content: query, includeKernelResearch: true }),
-        });
-
-        const assistantMsg: Message = {
-          _id: res.assistantMessage?._id || `aura-${Date.now()}`,
-          id: res.assistantMessage?._id || `aura-${Date.now()}`,
-          role: 'assistant',
-          content: res.assistantMessage?.content || res.explanation || 'Processed your request.',
-          toolAction: res.toolAction,
-          suggestedNextPrompts: res.suggestedNextPrompts || [],
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        if (res.toolAction) {
-          triggerToolEffects(res.toolAction);
-        }
-
-        if (voiceOutputEnabled && assistantMsg.content) {
-          speakText(assistantMsg.content, assistantMsg.id || '');
-        }
-      }
-
-      // Update sidebar conversation list
-      setConversations((prev) =>
-        prev.map((c) =>
-          c._id === targetConvId
-            ? { ...c, lastMessageAt: new Date().toISOString() }
-            : c
-        )
-      );
-    } catch (err: any) {
-      const errorMsg: Message = {
-        id: `err-${Date.now()}`,
-        role: 'assistant',
-        content: `I encountered an issue processing your request: ${err?.message || 'Please try again.'}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      isSubmittingRef.current = false;
-      setBusy(false);
-    }
-  };
-
-  const handleCopyText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleRegenerateLast = () => {
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-    if (lastUserMsg && (lastUserMsg.content || lastUserMsg.text)) {
-      handleSendMessage(lastUserMsg.content || lastUserMsg.text);
-    }
-  };
 
   const filteredConversations = conversations.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -654,8 +193,19 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
             </div>
           </div>
 
-          {/* Action buttons: Clear, Voice Responses Toggle */}
+          {/* Action buttons: Pop out to floating chat, Voice Responses Toggle, New Chat */}
           <div className="flex items-center gap-2">
+            {/* Pop out to floating chat button (Requirement 5) */}
+            <button
+              onClick={() => popOutToFloatingChat('overview')}
+              className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition border border-slate-200 dark:border-slate-700 flex items-center gap-1.5"
+              title="Open in floating chat"
+              aria-label="Open in floating chat"
+            >
+              <Minimize2 className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs font-semibold">Pop out chat</span>
+            </button>
+
             <button
               onClick={() => setVoiceOutputEnabled(!voiceOutputEnabled)}
               className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border ${
@@ -732,7 +282,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                     )}
                   </div>
 
-                  {/* Assistant Actions: Audio, Copy, Regenerate — cleanly separated from message content */}
+                  {/* Assistant Actions: Audio, Copy, Regenerate */}
                   {!isUser && msgContent && (
                     <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pl-1 pt-1 border-t border-slate-100 dark:border-slate-800/60 mt-1" role="toolbar" aria-label="Message options">
                       <button
@@ -840,7 +390,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                             className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition flex items-center justify-center gap-2"
                           >
                             <span>Open Payments Workbench to Verify PIN &amp; Execute</span>
-                            <ArrowRight className="w-4 h-4" />
+                            <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       )}
@@ -1037,7 +587,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (!busy && !isSubmittingRef.current && input.trim()) {
+              if (!busy && input.trim()) {
                 handleSendMessage();
               }
             }}

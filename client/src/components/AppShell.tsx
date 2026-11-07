@@ -340,23 +340,8 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
             </div>
           </div>
 
-          {/* Right Area: Ask AURA, Notifications, Settings, and Logout */}
+          {/* Right Area: Notifications, Settings, and Logout */}
           <div className="flex items-center gap-2 sm:gap-2.5">
-            {/* Quick Ask AURA Entry Point */}
-            <button
-              onClick={() => onSelectTab('ask-aura')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
-                activeTab === 'ask-aura'
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                  : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 dark:text-blue-300 dark:border-blue-800'
-              }`}
-              title="Chat with AURA AI"
-              aria-label="Open Ask AURA AI assistant"
-            >
-              <Sparkles className={`w-4 h-4 ${activeTab === 'ask-aura' ? 'text-white' : 'text-blue-500 dark:text-blue-400'}`} />
-              <span className="hidden sm:inline">Ask AURA</span>
-            </button>
-
             {/* Notifications Icon Button */}
             <div className="relative">
               <button
