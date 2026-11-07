@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Sparkles,
   X,
@@ -8,10 +8,26 @@ import {
   User,
   Mic,
   MicOff,
-  RotateCcw,
+  GripHorizontal,
 } from 'lucide-react';
 import { useAskAura } from '../context/AskAuraContext';
 import { ConversationalResponseRenderer } from './ConversationalResponseRenderer';
+
+// Requirement 3: Strictly enforced minimum dimensions
+const MIN_WIDTH = 340;
+const MIN_HEIGHT = 420;
+const DEFAULT_WIDTH = 384;
+const DEFAULT_HEIGHT = 580;
+const STORAGE_KEY = 'aura_chat_panel_bounds';
+
+type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+interface PanelBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export const FloatingChatPanel: React.FC = () => {
   const {
@@ -24,7 +40,6 @@ export const FloatingChatPanel: React.FC = () => {
     setInput,
     busy,
     handleSendMessage,
-    handleRegenerateLast,
     activeConvTitle,
     activeTab,
     isListening,
@@ -34,6 +49,90 @@ export const FloatingChatPanel: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Dragging and Resizing State
+  const [isDragging, setIsDragging] = useState(false);
+  const [activeResizeDir, setActiveResizeDir] = useState<ResizeDirection | null>(null);
+
+  // Compute initial default bounds safely within viewport
+  const getInitialBounds = useCallback((): PanelBounds => {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+
+    // Try reading saved bounds from localStorage
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          typeof parsed.width === 'number' &&
+          typeof parsed.height === 'number' &&
+          typeof parsed.x === 'number' &&
+          typeof parsed.y === 'number'
+        ) {
+          const effMinWidth = Math.min(MIN_WIDTH, vw - 16);
+          const effMinHeight = Math.min(MIN_HEIGHT, vh - 16);
+          const width = Math.max(effMinWidth, Math.min(vw - 16, parsed.width));
+          const height = Math.max(effMinHeight, Math.min(vh - 16, parsed.height));
+          const x = Math.max(8, Math.min(vw - width - 8, parsed.x));
+          const y = Math.max(8, Math.min(vh - height - 8, parsed.y));
+          return { x, y, width, height };
+        }
+      }
+    } catch {
+      // localStorage may fail or be empty
+    }
+
+    // Default position: bottom-right (above bottom navigation bar)
+    const effMinWidth = Math.min(MIN_WIDTH, vw - 16);
+    const effMinHeight = Math.min(MIN_HEIGHT, vh - 16);
+    const width = Math.max(effMinWidth, Math.min(vw - 24, DEFAULT_WIDTH));
+    const height = Math.max(effMinHeight, Math.min(vh - 32, DEFAULT_HEIGHT));
+    const x = Math.max(8, vw - width - 24);
+    const y = Math.max(8, vh - height - 88);
+
+    return { x, y, width, height };
+  }, []);
+
+  const [bounds, setBounds] = useState<PanelBounds>(getInitialBounds);
+
+  // Keep ref to bounds for event handlers without re-attaching listeners
+  const boundsRef = useRef<PanelBounds>(bounds);
+  useEffect(() => {
+    boundsRef.current = bounds;
+  }, [bounds]);
+
+  // Save bounds to localStorage when modified
+  const saveBounds = useCallback((newBounds: PanelBounds) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newBounds));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Window resize handler: ensure panel stays within visible viewport
+  useEffect(() => {
+    const handleWindowResize = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setBounds((prev) => {
+        const effMinWidth = Math.min(MIN_WIDTH, vw - 16);
+        const effMinHeight = Math.min(MIN_HEIGHT, vh - 16);
+        const width = Math.max(effMinWidth, Math.min(vw - 16, prev.width));
+        const height = Math.max(effMinHeight, Math.min(vh - 16, prev.height));
+        const x = Math.max(8, Math.min(vw - width - 8, prev.x));
+        const y = Math.max(8, Math.min(vh - height - 8, prev.y));
+        const adjusted = { x, y, width, height };
+        saveBounds(adjusted);
+        return adjusted;
+      });
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [saveBounds]);
 
   // Auto-scroll on new messages or busy state
   useEffect(() => {
@@ -51,20 +150,320 @@ export const FloatingChatPanel: React.FC = () => {
     }
   }, [isFloatingOpen]);
 
+  // -------------------------------------------------------------
+  // Dragging Implementation (Header Pointer Events)
+  // -------------------------------------------------------------
+  const dragStartRef = useRef<{ startPointerX: number; startPointerY: number; startX: number; startY: number } | null>(null);
+
+  const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Requirement 1: Do not initiate dragging on buttons or interactive controls
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) {
+      return;
+    }
+    // Only primary button
+    if (e.button !== 0) return;
+
+    e.preventDefault();
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+
+    setIsDragging(true);
+    dragStartRef.current = {
+      startPointerX: e.clientX,
+      startPointerY: e.clientY,
+      startX: boundsRef.current.x,
+      startY: boundsRef.current.y,
+    };
+  };
+
+  const handleHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    e.preventDefault();
+
+    const deltaX = e.clientX - dragStartRef.current.startPointerX;
+    const deltaY = e.clientY - dragStartRef.current.startPointerY;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const currentW = boundsRef.current.width;
+    const currentH = boundsRef.current.height;
+
+    // Requirement 1 & 5: Keep panel within viewport & header accessible
+    const minX = 8;
+    const maxX = Math.max(minX, vw - currentW - 8);
+    const minY = 8;
+    const maxY = Math.max(minY, vh - currentH - 8);
+
+    const nextX = Math.max(minX, Math.min(maxX, dragStartRef.current.startX + deltaX));
+    const nextY = Math.max(minY, Math.min(maxY, dragStartRef.current.startY + deltaY));
+
+    setBounds((prev) => ({
+      ...prev,
+      x: nextX,
+      y: nextY,
+    }));
+  };
+
+  const handleHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    dragStartRef.current = null;
+    setIsDragging(false);
+    saveBounds(boundsRef.current);
+  };
+
+  // -------------------------------------------------------------
+  // Resizing Implementation (Edge & Corner Pointer Events)
+  // -------------------------------------------------------------
+  const resizeStartRef = useRef<{
+    startPointerX: number;
+    startPointerY: number;
+    startBounds: PanelBounds;
+    direction: ResizeDirection;
+  } | null>(null);
+
+  const startResize = (direction: ResizeDirection, e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+
+    setActiveResizeDir(direction);
+    resizeStartRef.current = {
+      startPointerX: e.clientX,
+      startPointerY: e.clientY,
+      startBounds: { ...boundsRef.current },
+      direction,
+    };
+
+    // Set cursor on document body during resize to avoid cursor flickering
+    const cursorMap: Record<ResizeDirection, string> = {
+      n: 'ns-resize',
+      s: 'ns-resize',
+      e: 'ew-resize',
+      w: 'ew-resize',
+      ne: 'nesw-resize',
+      sw: 'nesw-resize',
+      nw: 'nwse-resize',
+      se: 'nwse-resize',
+    };
+    document.body.style.cursor = cursorMap[direction];
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizeStartRef.current) return;
+    e.preventDefault();
+
+    const { startPointerX, startPointerY, startBounds, direction } = resizeStartRef.current;
+    const deltaX = e.clientX - startPointerX;
+    const deltaY = e.clientY - startPointerY;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Requirement 3: Enforce strict minimum dimensions
+    const effMinWidth = Math.min(MIN_WIDTH, vw - 16);
+    const effMinHeight = Math.min(MIN_HEIGHT, vh - 16);
+    const maxW = Math.max(effMinWidth, vw - 16);
+    const maxH = Math.max(effMinHeight, vh - 16);
+
+    let nextX = startBounds.x;
+    let nextY = startBounds.y;
+    let nextW = startBounds.width;
+    let nextH = startBounds.height;
+
+    // 1. Horizontal adjustments
+    if (direction.includes('e')) {
+      // Dragging right edge: expand width to the right
+      nextW = Math.max(effMinWidth, Math.min(maxW, startBounds.width + deltaX));
+      // Clamp so right edge doesn't push beyond viewport
+      if (nextX + nextW > vw - 8) {
+        nextW = Math.max(effMinWidth, vw - 8 - nextX);
+      }
+    } else if (direction.includes('w')) {
+      // Dragging left edge: expand width to the left
+      const potentialW = startBounds.width - deltaX;
+      nextW = Math.max(effMinWidth, Math.min(maxW, potentialW));
+      nextX = startBounds.x + (startBounds.width - nextW);
+      // Clamp left edge
+      if (nextX < 8) {
+        nextX = 8;
+        nextW = startBounds.x + startBounds.width - 8;
+      }
+    }
+
+    // 2. Vertical adjustments
+    if (direction.includes('s')) {
+      // Dragging bottom edge: expand height downward
+      nextH = Math.max(effMinHeight, Math.min(maxH, startBounds.height + deltaY));
+      // Clamp so bottom edge doesn't push beyond viewport
+      if (nextY + nextH > vh - 8) {
+        nextH = Math.max(effMinHeight, vh - 8 - nextY);
+      }
+    } else if (direction.includes('n')) {
+      // Dragging top edge: expand height upward
+      const potentialH = startBounds.height - deltaY;
+      nextH = Math.max(effMinHeight, Math.min(maxH, potentialH));
+      nextY = startBounds.y + (startBounds.height - nextH);
+      // Clamp top edge
+      if (nextY < 8) {
+        nextY = 8;
+        nextH = startBounds.y + startBounds.height - 8;
+      }
+    }
+
+    setBounds({
+      x: nextX,
+      y: nextY,
+      width: nextW,
+      height: nextH,
+    });
+  };
+
+  const handleResizePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizeStartRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    resizeStartRef.current = null;
+    setActiveResizeDir(null);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    saveBounds(boundsRef.current);
+  };
+
   // Only render if open and NOT on full Ask AURA page (Requirement 7 & 12)
   if (!isFloatingOpen || activeTab === 'ask-aura') {
     return null;
   }
 
+  const isInteracting = isDragging || activeResizeDir !== null;
+
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-label="Ask AURA floating assistant"
-      className="fixed inset-x-3 bottom-20 top-20 sm:inset-auto sm:bottom-24 sm:right-6 sm:w-96 sm:h-[580px] max-w-full z-50 flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl backdrop-blur-md overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-bottom-3"
+      style={{
+        position: 'fixed',
+        left: `${bounds.x}px`,
+        top: `${bounds.y}px`,
+        width: `${bounds.width}px`,
+        height: `${bounds.height}px`,
+        zIndex: 50,
+      }}
+      className={`flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl backdrop-blur-md overflow-hidden ${
+        isInteracting
+          ? 'select-none ring-2 ring-blue-500/50 shadow-blue-500/10'
+          : 'transition-[box-shadow] duration-200'
+      }`}
     >
-      {/* Compact Header with Actions */}
-      <div className="h-14 px-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+      {/* --------------------------------------------------------- */}
+      {/* 8 Resize Handles: Edges and Corners (Requirement 2 & 3)    */}
+      {/* --------------------------------------------------------- */}
+
+      {/* Top Edge */}
+      <div
+        onPointerDown={(e) => startResize('n', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute top-0 left-3 right-3 h-2 cursor-ns-resize z-20 hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors"
+        title="Resize vertically"
+      />
+
+      {/* Bottom Edge */}
+      <div
+        onPointerDown={(e) => startResize('s', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute bottom-0 left-3 right-3 h-2 cursor-ns-resize z-20 hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors"
+        title="Resize vertically"
+      />
+
+      {/* Left Edge */}
+      <div
+        onPointerDown={(e) => startResize('w', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute top-3 bottom-3 left-0 w-2 cursor-ew-resize z-20 hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors"
+        title="Resize horizontally"
+      />
+
+      {/* Right Edge */}
+      <div
+        onPointerDown={(e) => startResize('e', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute top-3 bottom-3 right-0 w-2 cursor-ew-resize z-20 hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors"
+        title="Resize horizontally"
+      />
+
+      {/* Top-Left Corner */}
+      <div
+        onPointerDown={(e) => startResize('nw', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute top-0 left-0 w-4 h-4 cursor-nwse-resize z-30 hover:bg-blue-500/30 active:bg-blue-500/40 rounded-tl-3xl transition-colors"
+        title="Resize diagonally"
+      />
+
+      {/* Top-Right Corner */}
+      <div
+        onPointerDown={(e) => startResize('ne', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute top-0 right-0 w-4 h-4 cursor-nesw-resize z-30 hover:bg-blue-500/30 active:bg-blue-500/40 rounded-tr-3xl transition-colors"
+        title="Resize diagonally"
+      />
+
+      {/* Bottom-Left Corner */}
+      <div
+        onPointerDown={(e) => startResize('sw', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize z-30 hover:bg-blue-500/30 active:bg-blue-500/40 rounded-bl-3xl transition-colors"
+        title="Resize diagonally"
+      />
+
+      {/* Bottom-Right Corner (with subtle visual grip affordance) */}
+      <div
+        onPointerDown={(e) => startResize('se', e)}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        className="group/grip absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-30 flex items-end justify-end p-1 hover:bg-blue-500/30 active:bg-blue-500/40 rounded-br-3xl transition-colors"
+        title="Resize diagonally"
+      >
+        <svg
+          className="w-2.5 h-2.5 text-slate-400 dark:text-slate-500 group-hover/grip:text-blue-500 transition-colors pointer-events-none"
+          viewBox="0 0 6 6"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M5 1L1 5M5 3.5L3.5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+        </svg>
+      </div>
+
+      {/* --------------------------------------------------------- */}
+      {/* Draggable Header (Requirement 1)                         */}
+      {/* --------------------------------------------------------- */}
+      <div
+        onPointerDown={handleHeaderPointerDown}
+        onPointerMove={handleHeaderPointerMove}
+        onPointerUp={handleHeaderPointerUp}
+        className={`h-14 px-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/90 flex items-center justify-between shrink-0 cursor-grab active:cursor-grabbing select-none ${
+          isDragging ? 'bg-blue-50/40 dark:bg-blue-950/40' : ''
+        }`}
+        title="Click and drag to reposition panel"
+      >
+        <div className="flex items-center gap-2.5 min-w-0 pr-2 pointer-events-none">
           <div className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
@@ -75,10 +474,15 @@ export const FloatingChatPanel: React.FC = () => {
                 AI
               </span>
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[140px]">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
               {activeConvTitle || 'Financial Companion'}
             </div>
           </div>
+        </div>
+
+        {/* Drag Handle Indicator */}
+        <div className="hidden sm:flex items-center justify-center text-slate-300 dark:text-slate-600 pointer-events-none">
+          <GripHorizontal className="w-4 h-4" />
         </div>
 
         {/* Action Buttons: New Chat, Open in Ask AURA, Close */}
@@ -121,14 +525,14 @@ export const FloatingChatPanel: React.FC = () => {
 
       {/* Voice notice if active */}
       {voiceNotice && (
-        <div className="bg-blue-50 dark:bg-blue-950 px-3 py-1.5 text-[11px] font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-1.5 border-b border-blue-100 dark:border-blue-900">
+        <div className="bg-blue-50 dark:bg-blue-950 px-3 py-1.5 text-[11px] font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-1.5 border-b border-blue-100 dark:border-blue-900 shrink-0">
           <Mic className="w-3 h-3 text-blue-600 dark:text-blue-400 animate-pulse" />
           <span className="truncate">{voiceNotice}</span>
         </div>
       )}
 
       {/* Scrollable Message Thread */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-4 text-xs">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-4 text-xs min-h-0">
         {messages.map((msg, idx) => {
           const isUser = msg.role === 'user' || msg.sender === 'user';
           const msgContent = msg.content || msg.text || '';
