@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAskAura } from '../context/AskAuraContext';
 
@@ -11,12 +11,25 @@ export const FloatingAskAuraButton: React.FC = () => {
   const [displayedText, setDisplayedText] = useState('');
   const typingTimerRef = useRef<any>(null);
 
-  // Requirement 7:
+  // Requirement:
   // - If on full Ask AURA page: HIDDEN
   // - If floating chat panel is OPEN: HIDDEN
   // - Normal page and panel CLOSED: VISIBLE
   const isVisible = activeTab !== 'ask-aura' && !isFloatingOpen;
 
+  // Whenever the panel opens or visibility is lost, strictly reset hover & text state
+  useEffect(() => {
+    if (!isVisible || isFloatingOpen) {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      setIsHovered(false);
+      setDisplayedText('');
+    }
+  }, [isVisible, isFloatingOpen]);
+
+  // Letter-by-letter reveal animation while hovered
   useEffect(() => {
     if (typingTimerRef.current) {
       clearInterval(typingTimerRef.current);
@@ -42,9 +55,41 @@ export const FloatingAskAuraButton: React.FC = () => {
     return () => {
       if (typingTimerRef.current) {
         clearInterval(typingTimerRef.current);
+        typingTimerRef.current = null;
       }
     };
   }, [isHovered, isVisible]);
+
+  const handleMouseEnter = useCallback(() => {
+    setIsHovered(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    setIsHovered(false);
+    setDisplayedText('');
+  }, []);
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      setIsHovered(false);
+      setDisplayedText('');
+      try {
+        e.currentTarget.blur();
+      } catch {
+        // ignore
+      }
+      openFloatingChat();
+    },
+    [openFloatingChat]
+  );
 
   if (!isVisible) {
     return null;
@@ -57,11 +102,11 @@ export const FloatingAskAuraButton: React.FC = () => {
     >
       <button
         type="button"
-        onClick={openFloatingChat}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onFocus={() => setIsHovered(true)}
-        onBlur={() => setIsHovered(false)}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onPointerLeave={handleMouseLeave}
+        onBlur={handleMouseLeave}
         aria-label="Ask AURA financial assistant"
         title="Ask AURA (AI Companion)"
         style={{ direction: 'ltr' }}
