@@ -68,12 +68,14 @@ export const apiRouter = Router();
 
 // Helper to sanitize user response (never expose passwordHash or pinHash)
 function sanitizeUser(u: any) {
+  const normCurrency = (u.currency && u.currency !== 'INR') ? u.currency : 'USD';
   return {
     id: String(u._id),
     name: u.name,
     email: u.email,
     role: u.role,
-    currency: u.currency,
+    currency: normCurrency,
+    preferredCurrency: normCurrency,
     monthlyIncome: u.monthlyIncome,
     familyGroupId: u.familyGroupId,
     spendingPreferences: u.spendingPreferences,

@@ -322,18 +322,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    if (user?.preferredCurrency || user?.currency) {
-      const c = user.preferredCurrency || user.currency;
-      localStorage.setItem('aura_currency', c);
-    } else if (!localStorage.getItem('aura_currency')) {
-      localStorage.setItem('aura_currency', 'USD');
-    }
+    const raw = user?.preferredCurrency || user?.currency;
+    const c = (raw && raw.toUpperCase() !== 'INR') ? raw.toUpperCase() : 'USD';
+    localStorage.setItem('aura_currency', c);
   }, [user?.currency, user?.preferredCurrency]);
 
   // User-configured currency formatter (Section 13)
   const formatMoney = useCallback(
     (amount: number | undefined | null): string => {
-      return formatCurrency(amount, !balancesVisible, user?.preferredCurrency || user?.currency);
+      const raw = user?.preferredCurrency || user?.currency;
+      const c = (raw && raw.toUpperCase() !== 'INR') ? raw.toUpperCase() : 'USD';
+      return formatCurrency(amount, !balancesVisible, c);
     },
     [user?.currency, user?.preferredCurrency, balancesVisible]
   );

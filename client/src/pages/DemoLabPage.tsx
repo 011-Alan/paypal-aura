@@ -73,7 +73,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
 
   // Workflow Simulator state
   const [selectedWorkflow, setSelectedWorkflow] = useState('Workflow A');
-  const [customPrompt, setCustomPrompt] = useState('Can I afford a laptop for ₹55,000?');
+  const [customPrompt, setCustomPrompt] = useState('Can I afford a laptop for $750?');
   const [wfBusy, setWfBusy] = useState(false);
   const [wfResult, setWfResult] = useState<any>(null);
 
@@ -180,7 +180,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
       code: 'Workflow A',
       title: 'Smart Purchase Affordability Evaluation',
       sponsors: 'Channel3 • KERNEL • Astropods • PayPal',
-      prompt: 'Can I afford a laptop for ₹55,000?',
+      prompt: 'Can I afford a laptop for $750?',
       desc: 'Evaluates product options against 7-factor financial guardrails with live discretionary buffer calculation.',
     },
     {
@@ -208,7 +208,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
       code: 'Workflow E',
       title: 'Controlled PayPal Sandbox Payment Preparation',
       sponsors: 'Financial Guardian • APIMatic • PayPal Orders v2',
-      prompt: 'Prepare a payment of ₹5,000 to Greenwood Residency Landlords.',
+      prompt: 'Prepare a payment of $50 to Greenwood Residency Landlords.',
       desc: 'Executes 4-rule Financial Guardian check, generates approval token, and presents user authorization card.',
     },
     {
@@ -479,7 +479,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                   <span className="text-xs font-bold text-rose-700 uppercase bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
                     Expenditure Anomaly
                   </span>
-                  <span className="text-xs font-bold text-slate-700">₹6,800 Spike</span>
+                  <span className="text-xs font-bold text-slate-700">$85 Spike</span>
                 </div>
                 <h4 className="text-sm font-bold text-navy-900">Fine-Dining Spike at Trishna</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
@@ -499,7 +499,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                   <span className="text-xs font-bold text-emerald-700 uppercase bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                     Income Boost
                   </span>
-                  <span className="text-xs font-bold text-slate-700">+₹25,000 Credit</span>
+                  <span className="text-xs font-bold text-slate-700">+$350 Credit</span>
                 </div>
                 <h4 className="text-sm font-bold text-navy-900">Quarterly Performance Bonus</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
@@ -519,7 +519,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                   <span className="text-xs font-bold text-amber-700 uppercase bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
                     Emergency Outflow
                   </span>
-                  <span className="text-xs font-bold text-slate-700">₹14,500 Diagnostic</span>
+                  <span className="text-xs font-bold text-slate-700">$180 Diagnostic</span>
                 </div>
                 <h4 className="text-sm font-bold text-navy-900">Unexpected Emergency Medical Expense</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
@@ -539,7 +539,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                   <span className="text-xs font-bold text-indigo-700 uppercase bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">
                     Recurring Commitment
                   </span>
-                  <span className="text-xs font-bold text-slate-700">₹2,200/Month</span>
+                  <span className="text-xs font-bold text-slate-700">$30/Month</span>
                 </div>
                 <h4 className="text-sm font-bold text-navy-900">New Software Subscription Surge</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
@@ -598,7 +598,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                 <h4 className="text-base font-bold text-navy-900">Alex Sharma</h4>
                 <div className="text-xs text-slate-500">Lead Tech Professional • Household Admin</div>
                 <div className="mt-3 space-y-1.5 text-xs text-slate-600">
-                  <div>• Monthly Income: <strong className="text-navy-900">₹95,000</strong></div>
+                  <div>• Monthly Income: <strong className="text-navy-900">$5,500</strong></div>
                   <div>• 3 Accounts (Checking, Savings, PayPal Sandbox)</div>
                   <div>• PayPal Security PIN: <code className="font-mono font-bold text-blue-700">4826</code></div>
                   <div>• Confirmed Rent, Insurance, ACT Internet mandates</div>
@@ -633,7 +633,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                 <h4 className="text-base font-bold text-navy-900">Priya Sharma</h4>
                 <div className="text-xs text-slate-500">Healthcare Professional • Family Member</div>
                 <div className="mt-3 space-y-1.5 text-xs text-slate-600">
-                  <div>• Monthly Income: <strong className="text-navy-900">₹78,000</strong></div>
+                  <div>• Monthly Income: <strong className="text-navy-900">$4,200</strong></div>
                   <div>• Private Axis Bank Account (Hidden from Alex)</div>
                   <div>• PayPal Security PIN: <code className="font-mono font-bold text-purple-700">7391</code></div>
                   <div>• Contributes to shared household budget</div>
@@ -668,7 +668,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                 <h4 className="text-base font-bold text-navy-900">Maya Patel</h4>
                 <div className="text-xs text-slate-500">UI Designer &amp; Graduate Student</div>
                 <div className="mt-3 space-y-1.5 text-xs text-slate-600">
-                  <div>• Monthly Income: <strong className="text-navy-900">₹42,000</strong></div>
+                  <div>• Monthly Income: <strong className="text-navy-900">$2,500</strong></div>
                   <div>• HDFC Student Account + Freelance PayPal</div>
                   <div>• PayPal Security PIN: <code className="font-mono font-bold text-emerald-700">1942</code></div>
                   <div>• Active Goal: Ergonomic Studio Desk</div>

@@ -65,9 +65,10 @@ export function getActiveCurrency(): string {
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem('aura_currency');
-      if (stored && typeof stored === 'string' && stored.trim()) {
+      if (stored && typeof stored === 'string' && stored.trim() && stored.toUpperCase() !== 'INR') {
         return stored.trim().toUpperCase();
       }
+      localStorage.setItem('aura_currency', 'USD');
     } catch {
       // localStorage may fail in private mode
     }
@@ -78,8 +79,9 @@ export function getActiveCurrency(): string {
 export function setActiveCurrency(currency: string): void {
   if (typeof window !== 'undefined' && currency) {
     try {
-      localStorage.setItem('aura_currency', currency.trim().toUpperCase());
-      window.dispatchEvent(new CustomEvent('aura-currency-changed', { detail: { currency } }));
+      const norm = currency.trim().toUpperCase() === 'INR' ? 'USD' : currency.trim().toUpperCase();
+      localStorage.setItem('aura_currency', norm);
+      window.dispatchEvent(new CustomEvent('aura-currency-changed', { detail: { currency: norm } }));
     } catch {
       // ignored
     }
@@ -93,7 +95,11 @@ export function formatCurrency(
 ): string {
   if (isMasked) return '••••••';
   const num = Number(amount || 0);
-  const curr = (currencyCode || getActiveCurrency() || 'USD').toUpperCase();
+  let rawCurr = currencyCode || getActiveCurrency() || 'USD';
+  if (rawCurr.toUpperCase() === 'INR') {
+    rawCurr = 'USD';
+  }
+  const curr = rawCurr.toUpperCase();
 
   const isDecimal = num % 1 !== 0;
   const formattedNum = num.toLocaleString('en-US', {
@@ -108,10 +114,8 @@ export function formatCurrency(
       return `€${formattedNum}`;
     case 'GBP':
       return `£${formattedNum}`;
-    case 'INR':
-      return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: isDecimal ? 2 : 0 })}`;
     default:
-      return `${curr} ${formattedNum}`;
+      return `$${formattedNum}`;
   }
 }
 

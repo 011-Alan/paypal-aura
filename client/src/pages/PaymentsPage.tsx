@@ -14,7 +14,8 @@ import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
 
 export const PaymentsPage: React.FC = () => {
-  const { balancesVisible, formatMoney } = useAuth();
+  const { balancesVisible, formatMoney, user } = useAuth();
+  const isUsd = (user?.currency || 'USD').toUpperCase() === 'USD';
   const [payments, setPayments] = useState<any[]>([]);
   const [paypalStatus, setPaypalStatus] = useState<any>(null);
 
@@ -357,7 +358,7 @@ export const PaymentsPage: React.FC = () => {
                     Active Payment Request • {activePayment.idempotencyKey}
                   </span>
                   <h3 className="text-base font-bold text-navy-900 dark:text-white mt-0.5">
-                    {!balancesVisible ? '••••••' : `${formatMoney(activePayment.amountInr)} ($${activePayment.amountUsd?.toFixed(2)} USD)`} → {activePayment.recipientName}
+                    {!balancesVisible ? '••••••' : isUsd ? formatMoney(activePayment.amountInr || activePayment.amountUsd) : `${formatMoney(activePayment.amountInr)} ($${activePayment.amountUsd?.toFixed(2)} USD)`} → {activePayment.recipientName}
                   </h3>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 uppercase">
@@ -507,8 +508,8 @@ export const PaymentsPage: React.FC = () => {
                   <td className="py-2.5 px-3 font-semibold text-navy-900 dark:text-white">{p.recipientName}</td>
                   <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{p.description}</td>
                   <td className="py-2.5 px-3 font-bold text-navy-900 dark:text-white">
-                    {!balancesVisible ? '••••••' : formatMoney(p.amountInr)}{' '}
-                    {!balancesVisible ? '' : <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
+                    {!balancesVisible ? '••••••' : formatMoney(p.amountInr || p.amountUsd)}{' '}
+                    {!balancesVisible || isUsd ? null : <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
                   </td>
                   <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{p.paypalOrderId || 'Pending'}</td>
                   <td className="py-2.5 px-3">
