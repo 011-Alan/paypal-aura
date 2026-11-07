@@ -134,11 +134,18 @@ export class PayPalProfileService {
         refreshToken: user.paypalRefreshToken,
       });
 
-      // Extract verified profile fields according to user consent
+      // Extract verified profile fields according to user consent (supports both Personal and Business accounts)
+      const businessName =
+        (userInfo as any)?.business_name ||
+        (userInfo as any)?.company_name ||
+        (userInfo as any)?.legal_name ||
+        (userInfo as any)?.organization_name;
+
       const fullName =
         userInfo.name ||
+        businessName ||
         (userInfo.given_name ? `${userInfo.given_name} ${userInfo.family_name || ''}`.trim() : '') ||
-        user.name ||
+        (user.name && user.name !== 'PayPal User' && user.name !== 'Denied Scopes User' ? user.name : '') ||
         'PayPal User';
 
       const firstName = userInfo.given_name || undefined;
@@ -147,6 +154,8 @@ export class PayPalProfileService {
       let email = '';
       if (typeof userInfo.email === 'string' && userInfo.email.trim()) {
         email = userInfo.email.trim();
+      } else if (typeof (userInfo as any)?.business_email === 'string' && (userInfo as any).business_email.trim()) {
+        email = (userInfo as any).business_email.trim();
       } else if (Array.isArray(userInfo.emails) && userInfo.emails.length > 0) {
         const primary = userInfo.emails.find((e: any) => e.primary)?.value || userInfo.emails[0]?.value;
         if (primary) email = String(primary).trim();
@@ -197,9 +206,14 @@ export class PayPalProfileService {
           user.paypalIdentityVerified
       );
 
-      // Safe update: Never overwrite existing AURA profile information with empty values
-      if (email && !user.paypalEmail) user.paypalEmail = email;
-      if (payerId && !user.paypalPayerId) user.paypalPayerId = payerId;
+      // Safe update: Update with live verified values returned by PayPal
+      if (email && email.trim() && !email.includes('@user.aura')) {
+        user.paypalEmail = email;
+      }
+      if (fullName && fullName !== 'PayPal User' && fullName !== 'Denied Scopes User') {
+        user.name = fullName;
+      }
+      if (payerId) user.paypalPayerId = payerId;
       user.paypalIdentityVerified = isVerified;
       if (addressObj) {
         user.paypalAddress = {

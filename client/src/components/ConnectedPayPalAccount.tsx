@@ -229,10 +229,14 @@ export const ConnectedPayPalAccount: React.FC = () => {
               {/* Name */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block mb-1">
-                  Full Name
+                  Full Name / Business Name
                 </span>
                 <span className="text-sm font-bold text-navy-900 dark:text-white block truncate">
-                  {data.profile?.name || user?.name || '-'}
+                  {(data.profile?.name && data.profile.name !== 'PayPal User' && data.profile.name !== 'Denied Scopes User')
+                    ? data.profile.name
+                    : (user?.name && user.name !== 'PayPal User' && user.name !== 'Denied Scopes User'
+                        ? user.name
+                        : (data.profile?.name || user?.name || '-'))}
                 </span>
                 {data.profile?.firstName && (
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
@@ -247,7 +251,11 @@ export const ConnectedPayPalAccount: React.FC = () => {
                   <Mail className="w-3 h-3" /> PayPal Email
                 </span>
                 <span className="text-sm font-semibold text-navy-900 dark:text-white block truncate">
-                  {data.profile?.email || '-'}
+                  {data.profile?.email && !data.profile.email.includes('@user.aura')
+                    ? data.profile.email
+                    : (user?.email && !user.email.includes('@user.aura')
+                        ? user.email
+                        : (data.profile?.email || '-'))}
                 </span>
                 <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block mt-0.5 font-medium">
                   Identity Consent Confirmed

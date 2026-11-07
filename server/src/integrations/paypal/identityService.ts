@@ -1042,10 +1042,12 @@ export class PayPalIdentityService {
         );
       }
 
-      // Extract email from email string or emails array
+      // Extract email from email string or emails array (supports Personal and Business accounts)
       let paypalEmail = '';
       if (typeof userInfo?.email === 'string' && userInfo.email.trim()) {
         paypalEmail = userInfo.email.trim();
+      } else if (typeof (userInfo as any)?.business_email === 'string' && (userInfo as any).business_email.trim()) {
+        paypalEmail = (userInfo as any).business_email.trim();
       } else if (Array.isArray(userInfo?.emails) && userInfo.emails.length > 0) {
         const primary = userInfo.emails.find((e: any) => e.primary)?.value || userInfo.emails[0]?.value;
         if (typeof primary === 'string') paypalEmail = primary.trim();
@@ -1054,9 +1056,17 @@ export class PayPalIdentityService {
       }
       paypalEmail = paypalEmail.toLowerCase();
 
+      const businessName =
+        (userInfo as any)?.business_name ||
+        (userInfo as any)?.company_name ||
+        (userInfo as any)?.legal_name ||
+        (userInfo as any)?.organization_name;
+
       const name =
         userInfo?.name ||
+        businessName ||
         idTokenClaims.name ||
+        (idTokenClaims as any)?.business_name ||
         (userInfo?.given_name ? `${userInfo.given_name} ${userInfo.family_name || ''}`.trim() : '') ||
         (idTokenClaims.given_name ? `${idTokenClaims.given_name} ${idTokenClaims.family_name || ''}`.trim() : '') ||
         (paypalEmail ? paypalEmail.split('@')[0] : 'PayPal User');
@@ -1109,7 +1119,12 @@ export class PayPalIdentityService {
 
         existingUser.paypalUserId = paypalSubjectId;
         existingUser.paypalPayerId = payerId || existingUser.paypalPayerId;
-        existingUser.paypalEmail = paypalEmail || existingUser.paypalEmail;
+        if (paypalEmail && !paypalEmail.includes('@user.aura')) {
+          existingUser.paypalEmail = paypalEmail;
+        }
+        if (name && name !== 'PayPal User' && name !== 'Denied Scopes User') {
+          existingUser.name = name;
+        }
         existingUser.paypalAccountLinked = true;
         existingUser.paypalIdentityVerified = isVerified;
         existingUser.authenticationProvider = existingUser.passwordHash ? 'both' : 'paypal';
@@ -1141,8 +1156,11 @@ export class PayPalIdentityService {
         // -------------------------------------------------------------------------
         const existingPayPalUser = await UserModel.findOne({ paypalUserId: paypalSubjectId });
         if (existingPayPalUser) {
-          if (paypalEmail && !existingPayPalUser.paypalEmail) {
+          if (paypalEmail && !paypalEmail.includes('@user.aura')) {
             existingPayPalUser.paypalEmail = paypalEmail;
+          }
+          if (name && name !== 'PayPal User' && name !== 'Denied Scopes User') {
+            existingPayPalUser.name = name;
           }
           existingPayPalUser.paypalAccountLinked = true;
           existingPayPalUser.paypalIdentityVerified = isVerified;
