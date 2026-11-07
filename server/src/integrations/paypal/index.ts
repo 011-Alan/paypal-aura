@@ -297,6 +297,86 @@ export class PayPalIntegrationService {
   }
 
   /**
+   * Adds or updates shipment tracking information for an order or capture with PayPal.
+   * Calls /v1/shipping/trackers using official PayPal application access token.
+   */
+  async addShipmentTracking(params: {
+    orderId?: string;
+    captureId?: string;
+    trackingNumber: string;
+    carrier: string;
+    status: 'SHIPPED' | 'DELIVERED' | 'ON_HOLD';
+    notifyBuyer?: boolean;
+  }): Promise<{
+    success: boolean;
+    trackerId?: string;
+    status?: string;
+    liveApiCalled: boolean;
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return {
+        success: false,
+        liveApiCalled: false,
+        error: 'PayPal credentials not configured; tracking recorded in local store only.',
+      };
+    }
+
+    try {
+      const accessToken = await this.getAccessToken();
+
+      // Official PayPal POST /v1/shipping/trackers
+      const payload: any = {
+        trackers: [
+          {
+            transaction_id: params.captureId || params.orderId,
+            tracking_number: params.trackingNumber,
+            status: params.status || 'SHIPPED',
+            carrier: params.carrier,
+            carrier_name_other: params.carrier,
+            notify_buyer: params.notifyBuyer ?? true,
+          },
+        ],
+      };
+
+      const resp = await fetch(`${env.PAYPAL_BASE_URL}/v1/shipping/trackers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.ok) {
+        const data: any = await resp.json();
+        const tracker = data?.tracker_identifiers?.[0] || data?.trackers?.[0];
+        return {
+          success: true,
+          trackerId: tracker?.tracker_id || `TRK-${params.trackingNumber}`,
+          status: tracker?.status || params.status,
+          liveApiCalled: true,
+        };
+      } else {
+        const errText = await resp.text();
+        logger.warn('PayPalIntegration', `PayPal addShipmentTracking returned status ${resp.status}`, { errText });
+        return {
+          success: false,
+          liveApiCalled: true,
+          error: `PayPal tracking API returned ${resp.status}: ${errText}`,
+        };
+      }
+    } catch (err: any) {
+      logger.warn('PayPalIntegration', 'PayPal addShipmentTracking request failed', { error: err?.message });
+      return {
+        success: false,
+        liveApiCalled: false,
+        error: err?.message,
+      };
+    }
+  }
+
+  /**
    * Verifies a PayPal Webhook event signature against /v1/notifications/verify-webhook-signature
    * and APIMatic's webhook contract specification.
    */

@@ -28,7 +28,7 @@ export interface IUser extends Document {
   email: string;
   passwordHash: string;
   pinHash: string;
-  role: 'user' | 'family_admin' | 'family_member';
+  role: 'user' | 'family_admin' | 'family_member' | 'merchant' | 'admin';
   currency: string;
   monthlyIncome: number;
   financialProfile?: IFinancialProfile;
@@ -69,7 +69,7 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     passwordHash: { type: String, required: true },
     pinHash: { type: String, required: true },
-    role: { type: String, enum: ['user', 'family_admin', 'family_member'], default: 'family_admin' },
+    role: { type: String, enum: ['user', 'family_admin', 'family_member', 'merchant', 'admin'], default: 'family_admin' },
     currency: { type: String, default: 'USD' },
     monthlyIncome: { type: Number, default: 95000 },
     // PayPal Identity Fields
@@ -890,4 +890,267 @@ SemanticEmbeddingSchema.index({ userId: 1, textHash: 1 });
 export const SemanticEmbeddingModel = mongoose.model<ISemanticEmbedding>(
   'SemanticEmbedding',
   SemanticEmbeddingSchema
+);
+
+// ============================================================================
+// 13. AURA E-Commerce: Shopping Cart Model
+// ============================================================================
+export interface ICartItem {
+  productId: string;
+  name: string;
+  brand: string;
+  category: string;
+  description: string;
+  imageUrl: string;
+  retailerName: string;
+  purchaseUrl: string;
+  originalPrice: number;
+  demoPrice: number;
+  currency: string;
+  selectedVariant: string;
+  quantity: number;
+  availableVariants: string[];
+}
+
+export interface ICart extends Document {
+  userId: mongoose.Types.ObjectId;
+  items: ICartItem[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const CartItemSchema = new Schema<ICartItem>(
+  {
+    productId: { type: String, required: true },
+    name: { type: String, required: true },
+    brand: { type: String, required: true },
+    category: { type: String, required: true },
+    description: { type: String, default: '' },
+    imageUrl: { type: String, required: true },
+    retailerName: { type: String, required: true },
+    purchaseUrl: { type: String, default: '' },
+    originalPrice: { type: Number, required: true },
+    demoPrice: { type: Number, required: true },
+    currency: { type: String, default: 'USD' },
+    selectedVariant: { type: String, default: 'Standard' },
+    quantity: { type: Number, required: true, min: 1, default: 1 },
+    availableVariants: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
+const CartSchema = new Schema<ICart>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+    items: { type: [CartItemSchema], default: [] },
+  },
+  { timestamps: true }
+);
+
+export const CartModel = mongoose.model<ICart>('Cart', CartSchema);
+
+// ============================================================================
+// 14. AURA E-Commerce: Orders & Shipment Model
+// ============================================================================
+export type FulfillmentStatus =
+  | 'payment_completed'
+  | 'order_confirmed'
+  | 'processing'
+  | 'packed'
+  | 'shipped'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'cancelled';
+
+export interface IEcommerceOrderItem {
+  productId: string;
+  name: string;
+  brand: string;
+  category: string;
+  imageUrl: string;
+  retailerName: string;
+  purchaseUrl: string;
+  originalPrice: number;
+  demoPrice: number;
+  selectedVariant: string;
+  quantity: number;
+  totalPrice: number;
+}
+
+export interface IEcommerceShippingAddress {
+  fullName: string;
+  streetAddress: string;
+  locality: string; // city
+  region: string; // state
+  postalCode: string;
+  country: string;
+  phone?: string;
+}
+
+export interface IEcommercePaymentInfo {
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  paymentStatus: 'pending' | 'completed' | 'failed' | 'cancelled';
+  paidAt?: Date;
+  amountPaid?: number;
+  currency?: string;
+  payerEmail?: string;
+  payerId?: string;
+  payerName?: string;
+  rawCaptureData?: any;
+  idempotencyKey?: string;
+}
+
+export interface IEcommerceShipment {
+  carrier?: string;
+  trackingNumber?: string;
+  shippedAt?: Date;
+  estimatedDeliveryAt?: Date;
+  notes?: string;
+  isSimulated: boolean;
+  paypalTrackerId?: string;
+  trackingSyncStatus?: 'not_synced' | 'synced' | 'failed';
+}
+
+export interface IEcommerceStatusHistory {
+  status: FulfillmentStatus;
+  timestamp: Date;
+  notes?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  updatedBy?: string;
+}
+
+export interface IEcommerceOrder extends Document {
+  orderNumber: string;
+  userId: mongoose.Types.ObjectId;
+  customerName: string;
+  customerEmail: string;
+  items: IEcommerceOrderItem[];
+  currency: string;
+  subtotal: number;
+  shippingFee: number;
+  tax: number;
+  totalAmount: number;
+  shippingAddress: IEcommerceShippingAddress;
+  paymentInfo: IEcommercePaymentInfo;
+  fulfillmentStatus: FulfillmentStatus;
+  shipment: IEcommerceShipment;
+  statusHistory: IEcommerceStatusHistory[];
+  isSimulatedStore: boolean;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const EcommerceOrderItemSchema = new Schema<IEcommerceOrderItem>(
+  {
+    productId: { type: String, required: true },
+    name: { type: String, required: true },
+    brand: { type: String, required: true },
+    category: { type: String, required: true },
+    imageUrl: { type: String, required: true },
+    retailerName: { type: String, required: true },
+    purchaseUrl: { type: String, default: '' },
+    originalPrice: { type: Number, required: true },
+    demoPrice: { type: Number, required: true },
+    selectedVariant: { type: String, default: 'Standard' },
+    quantity: { type: Number, required: true, min: 1, default: 1 },
+    totalPrice: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+const EcommerceShippingAddressSchema = new Schema<IEcommerceShippingAddress>(
+  {
+    fullName: { type: String, required: true, trim: true },
+    streetAddress: { type: String, required: true, trim: true },
+    locality: { type: String, required: true, trim: true },
+    region: { type: String, required: true, trim: true },
+    postalCode: { type: String, required: true, trim: true },
+    country: { type: String, required: true, trim: true, default: 'US' },
+    phone: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
+const EcommerceOrderSchema = new Schema<IEcommerceOrder>(
+  {
+    orderNumber: { type: String, required: true, unique: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    customerName: { type: String, required: true },
+    customerEmail: { type: String, required: true },
+    items: { type: [EcommerceOrderItemSchema], required: true },
+    currency: { type: String, default: 'USD' },
+    subtotal: { type: Number, required: true },
+    shippingFee: { type: Number, default: 0 },
+    tax: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
+    shippingAddress: { type: EcommerceShippingAddressSchema, required: true },
+    paymentInfo: {
+      paypalOrderId: { type: String, index: true },
+      paypalCaptureId: { type: String, index: true },
+      paymentStatus: {
+        type: String,
+        enum: ['pending', 'completed', 'failed', 'cancelled'],
+        default: 'pending',
+        index: true,
+      },
+      paidAt: { type: Date },
+      amountPaid: { type: Number },
+      currency: { type: String, default: 'USD' },
+      payerEmail: { type: String },
+      payerId: { type: String },
+      payerName: { type: String },
+      rawCaptureData: { type: Schema.Types.Mixed },
+      idempotencyKey: { type: String, index: true },
+    },
+    fulfillmentStatus: {
+      type: String,
+      enum: [
+        'payment_completed',
+        'order_confirmed',
+        'processing',
+        'packed',
+        'shipped',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+      ],
+      default: 'payment_completed',
+      index: true,
+    },
+    shipment: {
+      carrier: { type: String },
+      trackingNumber: { type: String },
+      shippedAt: { type: Date },
+      estimatedDeliveryAt: { type: Date },
+      notes: { type: String },
+      isSimulated: { type: Boolean, default: true },
+      paypalTrackerId: { type: String },
+      trackingSyncStatus: {
+        type: String,
+        enum: ['not_synced', 'synced', 'failed'],
+        default: 'not_synced',
+      },
+    },
+    statusHistory: [
+      {
+        status: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now },
+        notes: { type: String },
+        carrier: { type: String },
+        trackingNumber: { type: String },
+        updatedBy: { type: String },
+      },
+    ],
+    isSimulatedStore: { type: Boolean, default: true },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+export const EcommerceOrderModel = mongoose.model<IEcommerceOrder>(
+  'EcommerceOrder',
+  EcommerceOrderSchema
 );

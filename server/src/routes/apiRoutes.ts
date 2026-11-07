@@ -39,6 +39,7 @@ import {
 import { coreFinancialService } from '../services/financial/financialService';
 import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
+import { ecommerceService } from '../services/ecommerce/ecommerceService';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
 import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import { GEMINI_MODEL_REGISTRY, validateModelAvailability } from '../services/planning/modelConfig';
@@ -2330,6 +2331,280 @@ apiRouter.post('/purchase/evaluate', requireAuth, async (req: AuthenticatedReque
       },
       evaluatedProducts,
       kernelResearch,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// ============================================================================
+// 12b. AURA E-Commerce — Modern Online Storefront & Fulfillment Engine
+// ============================================================================
+
+// Merchant/Admin authorization middleware
+const requireMerchantAuth = async (req: AuthenticatedRequest, res: Response, next: any) => {
+  if (!req.userId) {
+    return res.status(401).json({ success: false, error: 'Authentication required.' });
+  }
+  try {
+    const user = await UserModel.findById(req.userId);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'User not found.' });
+    }
+    const isAuthorized =
+      ['admin', 'merchant', 'family_admin'].includes(user.role) ||
+      (user as any).paypalAccountType === 'BUSINESS';
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: Merchant or Store Administrator privileges are required to access this dashboard.',
+      });
+    }
+    next();
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+};
+
+// --- Product Discovery (Channel3 Catalog) ---
+apiRouter.get('/ecommerce/products', async (req: Request, res: Response) => {
+  try {
+    const { q, category, brand, minPrice, maxPrice, limit, offset } = req.query;
+    const result = await channel3Integration.searchStoreProducts({
+      query: q ? String(q) : undefined,
+      category: category ? String(category) : undefined,
+      brand: brand ? String(brand) : undefined,
+      minPrice: minPrice ? Number(minPrice) : undefined,
+      maxPrice: maxPrice ? Number(maxPrice) : undefined,
+      limit: limit ? Number(limit) : 50,
+      offset: offset ? Number(offset) : 0,
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/products/:id', async (req: Request, res: Response) => {
+  try {
+    const product = await channel3Integration.getProductById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found.' });
+    }
+    res.json({ success: true, product });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/categories', async (_req: Request, res: Response) => {
+  try {
+    const categories = channel3Integration.getCategories();
+    res.json({ success: true, categories });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// --- Shopping Cart ---
+apiRouter.get('/ecommerce/cart', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cartData = await ecommerceService.getCart(req.userId!);
+    res.json({ success: true, ...cartData });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ecommerce/cart/items', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { productId, quantity, selectedVariant } = req.body || {};
+    if (!productId) {
+      return res.status(400).json({ success: false, error: 'productId is required.' });
+    }
+    await ecommerceService.addItemToCart(req.userId!, {
+      productId,
+      quantity,
+      selectedVariant,
+    });
+    const cartData = await ecommerceService.getCart(req.userId!);
+    res.json({ success: true, ...cartData });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.put('/ecommerce/cart/items/:productId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { quantity, selectedVariant } = req.body || {};
+    await ecommerceService.updateCartItem(req.userId!, req.params.productId, {
+      quantity,
+      selectedVariant,
+    });
+    const cartData = await ecommerceService.getCart(req.userId!);
+    res.json({ success: true, ...cartData });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/ecommerce/cart/items/:productId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ecommerceService.removeCartItem(req.userId!, req.params.productId);
+    const cartData = await ecommerceService.getCart(req.userId!);
+    res.json({ success: true, ...cartData });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/ecommerce/cart', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ecommerceService.clearCart(req.userId!);
+    const cartData = await ecommerceService.getCart(req.userId!);
+    res.json({ success: true, ...cartData });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// --- Checkout & PayPal Sandbox Payment ---
+apiRouter.post('/ecommerce/checkout/validate', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { items } = req.body || {};
+    let targetItems = items;
+    if (!targetItems || targetItems.length === 0) {
+      const cartData = await ecommerceService.getCart(req.userId!);
+      targetItems = cartData.cart.items.map((it) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+        selectedVariant: it.selectedVariant,
+      }));
+    }
+    const calculation = await ecommerceService.calculateAuthoritativeTotals(targetItems);
+    res.json({ success: true, ...calculation });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ecommerce/orders/create-paypal-order', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { shippingAddress, items, notes } = req.body || {};
+    const result = await ecommerceService.createCheckoutOrder(req.userId!, {
+      shippingAddress,
+      items,
+      notes,
+    });
+    res.json({
+      success: true,
+      order: result.order,
+      paypalOrderId: result.paypalOrderId,
+      approvalUrl: result.approvalUrl,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ecommerce/orders/capture-payment', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId, orderNumber, paypalOrderId } = req.body || {};
+    if (!paypalOrderId) {
+      return res.status(400).json({ success: false, error: 'paypalOrderId is required to capture payment.' });
+    }
+    const result = await ecommerceService.captureOrderPayment(req.userId!, {
+      orderId,
+      orderNumber,
+      paypalOrderId,
+    });
+    res.json({
+      success: true,
+      order: result.order,
+      captureId: result.captureId,
+      isAlreadyPaid: result.isAlreadyPaid,
+      message: 'Payment captured and verified successfully.',
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// --- Customer Order Tracking ---
+apiRouter.get('/ecommerce/orders/my-orders', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orders = await ecommerceService.getCustomerOrders(req.userId!);
+    res.json({ success: true, orders });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/orders/:orderId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const order = await ecommerceService.getCustomerOrderById(req.userId!, req.params.orderId);
+    res.json({ success: true, order });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err?.message });
+  }
+});
+
+// --- Merchant Dashboard & Manual Fulfillment ---
+apiRouter.get('/ecommerce/merchant/overview', requireAuth, requireMerchantAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const overview = await ecommerceService.getMerchantOverview();
+    res.json({ success: true, overview });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/merchant/orders', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { status, search, limit, offset } = req.query;
+    const result = await ecommerceService.getMerchantOrders({
+      status: status ? String(status) : undefined,
+      search: search ? String(search) : undefined,
+      limit: limit ? Number(limit) : 50,
+      offset: offset ? Number(offset) : 0,
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/merchant/orders/:orderId', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const order = await ecommerceService.getMerchantOrderById(req.params.orderId);
+    res.json({ success: true, order });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.put('/ecommerce/merchant/orders/:orderId/fulfillment', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { fulfillmentStatus, carrier, trackingNumber, shippingDate, estimatedDeliveryDate, notes } = req.body || {};
+    if (!fulfillmentStatus) {
+      return res.status(400).json({ success: false, error: 'fulfillmentStatus is required.' });
+    }
+    const user = await UserModel.findById(req.userId);
+    const order = await ecommerceService.updateOrderFulfillment({
+      orderId: req.params.orderId,
+      fulfillmentStatus,
+      carrier,
+      trackingNumber,
+      shippingDate,
+      estimatedDeliveryDate,
+      notes,
+      adminName: user?.name || 'AURA Merchant Admin',
+    });
+    res.json({
+      success: true,
+      order,
+      message: `Order fulfillment status updated to ${fulfillmentStatus}.`,
     });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });

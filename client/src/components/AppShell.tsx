@@ -86,7 +86,7 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
     items: [
       { id: 'calendar', label: 'Calendar', icon: CalendarDays, tooltip: 'Financial calendar with scheduled bill reminders' },
       { id: 'family', label: 'Family Finance', icon: Users, tooltip: 'Shared household budgets with privacy boundaries' },
-      { id: 'smart-purchases', label: 'Smart Purchases', icon: ShoppingBag, tooltip: 'Affordability calculator before making large purchases' },
+      { id: 'smart-purchases', label: 'AURA E-Commerce', icon: ShoppingBag, tooltip: 'AURA E-Commerce Storefront, Cart, Checkout & Affordability' },
     ],
   },
   {
@@ -174,7 +174,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         return 'Financial Calendar';
       case 'smart-purchases':
       case 'smart-purchase':
-        return 'Smart Purchases';
+        return 'AURA E-Commerce';
       case 'family':
         return 'Family Finance';
       case 'payments':

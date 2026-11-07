@@ -1,0 +1,382 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Search,
+  ShoppingBag,
+  Sparkles,
+  SlidersHorizontal,
+  ExternalLink,
+  Check,
+  Star,
+  ShieldCheck,
+  Tag,
+  ArrowRight,
+} from 'lucide-react';
+import { EcommerceProduct } from './EcommerceTypes';
+import { apiRequest } from '../../lib/api';
+
+interface EcommerceStorefrontProps {
+  onSelectProduct: (product: EcommerceProduct) => void;
+  onAddToCart: (product: EcommerceProduct, variant?: string) => Promise<void>;
+  onBuyNow: (product: EcommerceProduct, variant?: string) => void;
+}
+
+export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
+  onSelectProduct,
+  onAddToCart,
+  onBuyNow,
+}) => {
+  const [products, setProducts] = useState<EcommerceProduct[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedBrand, setSelectedBrand] = useState('All');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addedId, setAddedId] = useState<string | null>(null);
+
+  const fetchProducts = async (q = searchQuery, cat = selectedCategory, br = selectedBrand, price = maxPrice) => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set('q', q.trim());
+      if (cat && cat !== 'All') params.set('category', cat);
+      if (br && br !== 'All') params.set('brand', br);
+      if (price && !isNaN(Number(price))) params.set('maxPrice', price);
+
+      const res = await apiRequest<{
+        success: boolean;
+        products: EcommerceProduct[];
+        categories: string[];
+        brands: string[];
+      }>(`/ecommerce/products?${params.toString()}`);
+
+      setProducts(res.products || []);
+      if (res.categories?.length) {
+        setCategories(['All', ...res.categories]);
+      }
+      if (res.brands?.length) {
+        setBrands(['All', ...res.brands]);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load products from Channel3 catalog.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, [selectedCategory, selectedBrand]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchProducts(searchQuery, selectedCategory, selectedBrand, maxPrice);
+  };
+
+  const handleQuickAdd = async (e: React.MouseEvent, product: EcommerceProduct) => {
+    e.stopPropagation();
+    setAddingId(product.id);
+    try {
+      await onAddToCart(product);
+      setAddedId(product.id);
+      setTimeout(() => setAddedId(null), 2000);
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy-900 via-navy-800 to-blue-950 p-6 sm:p-10 text-white shadow-xl border border-navy-700/50">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 -mb-20 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 max-w-2xl space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-300">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            AURA E-Commerce • Real Channel3 Catalog + PayPal Sandbox Execution
+          </div>
+
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+            Discover Real Products with Verified PayPal Fulfillment
+          </h1>
+
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            Shop genuine footwear, computing, audio, and mobile electronics retrieved in real-time through the Channel3 API. Complete checkout with PayPal Sandbox and follow manual merchant packaging and tracking.
+          </p>
+
+          <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-300">
+            <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              PayPal Orders v2 Protected
+            </span>
+            <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
+              <Tag className="w-4 h-4 text-blue-400" />
+              Special AURA Demo Store Pricing
+            </span>
+          </div>
+        </div>
+
+        {/* Clear Storefront Notice */}
+        <div className="relative z-10 mt-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-400/20 text-xs text-amber-200 flex items-start gap-2.5">
+          <span className="font-bold shrink-0 text-amber-300">Notice:</span>
+          <span>
+            This is a simulated AURA Demo Storefront using real product information from Channel3. It is not an authorised retailer for original brand owners (Nike, Apple, Asus, etc.). Purchases run strictly through PayPal Sandbox with simulated tracking.
+          </span>
+        </div>
+      </div>
+
+      {/* Search & Filtering Bar */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
+        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div className="sm:col-span-6 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search products by name, brand, or feature (e.g. Nike, Pegasus, MacBook)..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="sm:col-span-3">
+            <input
+              type="number"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              placeholder="Max Price (USD)"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="sm:col-span-3 flex gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-semibold transition shadow-xs flex items-center justify-center gap-1.5"
+            >
+              <Search className="w-3.5 h-3.5" />
+              {loading ? 'Searching...' : 'Search'}
+            </button>
+            {(searchQuery || maxPrice || selectedCategory !== 'All' || selectedBrand !== 'All') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setMaxPrice('');
+                  setSelectedCategory('All');
+                  setSelectedBrand('All');
+                  fetchProducts('', 'All', 'All', '');
+                }}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                title="Reset filters"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </form>
+
+        {/* Category Pills */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  selectedCategory === cat
+                    ? 'bg-navy-900 dark:bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Brand Filter */}
+          {brands.length > 2 && (
+            <div className="flex items-center gap-2 overflow-x-auto pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">Brand:</span>
+              {brands.slice(0, 8).map((br) => (
+                <button
+                  key={br}
+                  type="button"
+                  onClick={() => setSelectedBrand(br)}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    selectedBrand === br
+                      ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold'
+                      : 'hover:text-blue-600 dark:hover:text-blue-400'
+                  }`}
+                >
+                  {br}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Products Grid */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 font-medium">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 space-y-4 animate-pulse"
+            >
+              <div className="w-full h-48 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
+              <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2" />
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-1/3" />
+            </div>
+          ))}
+        </div>
+      ) : products.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200 dark:border-slate-800 text-center space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+            <ShoppingBag className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-bold text-navy-900 dark:text-white">No products found</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            We could not find any products matching your current search query and filters. Try adjusting your query or resetting filters.
+          </p>
+          <button
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedCategory('All');
+              setSelectedBrand('All');
+              setMaxPrice('');
+              fetchProducts('', 'All', 'All', '');
+            }}
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
+          >
+            Show All Products
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {products.map((product) => (
+            <div
+              key={product.id}
+              onClick={() => onSelectProduct(product)}
+              className="group bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                {/* Image Container with Badges */}
+                <div className="relative aspect-4/3 bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
+                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase bg-navy-900/80 backdrop-blur-xs text-white">
+                      {product.brand}
+                    </span>
+                    {product.availability === 'in_stock' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/90 backdrop-blur-xs text-white">
+                        In Stock
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/90 backdrop-blur-xs text-white">
+                        Limited
+                      </span>
+                    )}
+                  </div>
+
+                  {product.rating && (
+                    <div className="absolute bottom-3 left-3 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      <span>{product.rating}</span>
+                      {product.reviewCount && <span className="text-slate-300 font-normal">({product.reviewCount})</span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Details Area */}
+                <div className="p-5 space-y-2">
+                  <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                    {product.category}
+                  </div>
+                  <h3 className="text-sm font-bold text-navy-900 dark:text-white line-clamp-2 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {product.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                    {product.description}
+                  </p>
+
+                  {/* Pricing Comparison */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-lg font-extrabold text-navy-900 dark:text-white">
+                        ${product.demoPriceUsd.toFixed(2)}
+                      </span>
+                      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
+                        AURA Demo Price
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 line-through">
+                      Retail Ref: ${product.retailPriceRefUsd.toFixed(2)} ({product.retailerName})
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => handleQuickAdd(e, product)}
+                  disabled={addingId === product.id}
+                  className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-semibold transition shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  {addedId === product.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" /> Added
+                    </>
+                  ) : addingId === product.id ? (
+                    'Adding...'
+                  ) : (
+                    <>
+                      <ShoppingBag className="w-3.5 h-3.5" /> Add to Cart
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectProduct(product);
+                  }}
+                  className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
+                >
+                  Details
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

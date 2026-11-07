@@ -194,7 +194,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   }
 }
 
-export function requireRole(allowedRoles: Array<'user' | 'family_admin' | 'family_member'>) {
+export function requireRole(allowedRoles: Array<'user' | 'family_admin' | 'family_member' | 'merchant' | 'admin'>) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
       res.status(403).json({
