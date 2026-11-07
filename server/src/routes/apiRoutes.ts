@@ -732,7 +732,7 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
     paypalReportingService.clearTokenCache();
 
     const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
-      paypalProfileService.getProfile(userId),
+      paypalProfileService.getProfile(userId, { forceRefresh: true }),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
       paypalReportingService.getMerchantBalances(),
@@ -786,7 +786,7 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
     paypalReportingService.clearTokenCache();
 
     const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
-      paypalProfileService.getProfile(userId),
+      paypalProfileService.getProfile(userId, { forceRefresh: true }),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
       paypalReportingService.getMerchantBalances(),

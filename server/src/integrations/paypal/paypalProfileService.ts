@@ -32,12 +32,12 @@ export class PayPalProfileService {
    * Helper to ensure a fresh, valid user-authorized access token.
    * If expired, automatically utilizes the refresh token via PayPal Identity tokenservice.
    */
-  public async getValidUserAccessToken(user: IUser): Promise<string | null> {
+  public async getValidUserAccessToken(user: IUser, forceRefresh = false): Promise<string | null> {
     const now = Date.now();
     const tokenExpiresAt = user.paypalTokenExpiresAt || 0;
     const isExpiredOrClose = now >= tokenExpiresAt - 30 * 1000;
 
-    if (user.paypalAccessToken && !isExpiredOrClose) {
+    if (!forceRefresh && user.paypalAccessToken && !isExpiredOrClose) {
       return user.paypalAccessToken;
     }
 
@@ -92,7 +92,7 @@ export class PayPalProfileService {
    * Conforms to OpenID Connect profile, email, address, and paypalattributes scopes.
    * Safe fallback preserves existing database records on transient API failure.
    */
-  public async getProfile(userId: string): Promise<PayPalProfileData> {
+  public async getProfile(userId: string, options?: { forceRefresh?: boolean }): Promise<PayPalProfileData> {
     const user = await UserModel.findById(userId).select('+paypalAccessToken +paypalRefreshToken');
     if (!user) {
       throw new Error('User not found.');
@@ -121,7 +121,7 @@ export class PayPalProfileService {
     };
 
     try {
-      const accessToken = await this.getValidUserAccessToken(user);
+      const accessToken = await this.getValidUserAccessToken(user, options?.forceRefresh);
       if (!accessToken) {
         logger.info('PayPalProfileService', 'No active PayPal access token available; serving cached profile', {
           userId: String(user._id),
