@@ -83,7 +83,7 @@ export const FinancialPlanPage: React.FC = () => {
             Financial Planner &amp; Recovery Agent
           </span>
           <h2 className="text-xl font-bold text-navy-900 dark:text-white mt-2">{plan.title}</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-3xl leading-relaxed">{plan.aiSummary}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-3xl leading-relaxed">{plan.aiSummary?.replace(/₹/g, '$')}</p>
         </div>
         <button
           onClick={handleRegenerate}

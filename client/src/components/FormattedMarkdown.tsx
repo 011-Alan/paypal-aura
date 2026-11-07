@@ -22,6 +22,7 @@ export const FormattedMarkdown: React.FC<FormattedMarkdownProps> = ({ content, c
 
   // Unescape double-escaped markdown markers if any exist (e.g. \\*\\* -> **)
   const cleanedContent = content
+    .replace(/₹/g, '$')
     .replace(/\\\*/g, '*')
     .replace(/\\_/g, '_')
     .replace(/\\`/g, '`')

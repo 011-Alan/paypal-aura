@@ -65,8 +65,8 @@ class RenderBackgroundWorkflowManager {
             const trig = await zapierIntegration.triggerAutomation({
               userId: uid,
               automationType: 'upcoming_commitment_reminder',
-              title: `Upcoming Commitment: ${m.title} (₹${m.amount.toLocaleString('en-IN')})`,
-              message: `${m.title} of ₹${m.amount.toLocaleString('en-IN')} to ${m.merchant} is due on the ${m.dueDayOfMonth}th (${daysUntilDue <= 0 ? 'today' : `in ${daysUntilDue} day(s)`}).`,
+              title: `Upcoming Commitment: ${m.title} ($${m.amount.toLocaleString('en-US')})`,
+              message: `${m.title} of $${m.amount.toLocaleString('en-US')} to ${m.merchant} is due on the ${m.dueDayOfMonth}th (${daysUntilDue <= 0 ? 'today' : `in ${daysUntilDue} day(s)`}).`,
               deduplicationKey: `mandate-due-${String(m._id)}-${monthKey}`,
             });
             if (trig.triggered) remindersGenerated += 1;

@@ -45,8 +45,9 @@ export const ConversationalResponseRenderer: React.FC<ConversationalResponseRend
   const segments = useMemo(() => {
     if (!content) return [];
 
-    // Clean stray escaped markdown slashes e.g. \*\*₹18,000\*\* -> **₹18,000**
+    // Clean stray escaped markdown slashes and normalize currency
     const normalized = content
+      .replace(/₹/g, '$')
       .replace(/\\\*/g, '*')
       .replace(/\\_/g, '_')
       .replace(/\\`/g, '`')

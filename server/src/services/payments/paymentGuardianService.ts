@@ -82,15 +82,15 @@ export class PaymentGuardianService {
         rule: 'Single Transaction Limit',
         passed: checkSingleLimit,
         detail: checkSingleLimit
-          ? `₹${amountInr.toLocaleString('en-IN')} is within your ₹${policy.singleTransactionLimit.toLocaleString('en-IN')} single transaction limit.`
-          : `₹${amountInr.toLocaleString('en-IN')} exceeds your ₹${policy.singleTransactionLimit.toLocaleString('en-IN')} single transaction limit.`,
+          ? `$${amountInr.toLocaleString('en-US')} is within your $${policy.singleTransactionLimit.toLocaleString('en-US')} single transaction limit.`
+          : `$${amountInr.toLocaleString('en-US')} exceeds your $${policy.singleTransactionLimit.toLocaleString('en-US')} single transaction limit.`,
       },
       {
         rule: 'Daily Spending Cap',
         passed: checkDailyLimit,
         detail: checkDailyLimit
-          ? `Projected daily total ₹${(spentToday + amountInr).toLocaleString('en-IN')} is within your ₹${policy.dailySpendingLimit.toLocaleString('en-IN')} daily cap.`
-          : `Projected daily total ₹${(spentToday + amountInr).toLocaleString('en-IN')} exceeds your ₹${policy.dailySpendingLimit.toLocaleString('en-IN')} daily cap.`,
+          ? `Projected daily total $${(spentToday + amountInr).toLocaleString('en-US')} is within your $${policy.dailySpendingLimit.toLocaleString('en-US')} daily cap.`
+          : `Projected daily total $${(spentToday + amountInr).toLocaleString('en-US')} exceeds your $${policy.dailySpendingLimit.toLocaleString('en-US')} daily cap.`,
       },
       {
         rule: 'Category Permission Check',
@@ -103,8 +103,8 @@ export class PaymentGuardianService {
         rule: 'Account Liquidity Check',
         passed: checkSufficientBalance,
         detail: checkSufficientBalance
-          ? `Selected account (${account?.name || 'Primary'}) has sufficient funds (₹${(account?.balance || 0).toLocaleString('en-IN')}).`
-          : `Selected account balance (₹${(account?.balance || 0).toLocaleString('en-IN')}) is lower than ₹${amountInr.toLocaleString('en-IN')}.`,
+          ? `Selected account (${account?.name || 'Primary'}) has sufficient funds ($${(account?.balance || 0).toLocaleString('en-US')}).`
+          : `Selected account balance ($${(account?.balance || 0).toLocaleString('en-US')}) is lower than $${amountInr.toLocaleString('en-US')}.`,
       },
     ];
 
@@ -438,8 +438,8 @@ export class PaymentGuardianService {
     const zapierResult = await zapierIntegration.triggerAutomation({
       userId: params.userId,
       automationType: 'payment_status_notification',
-      title: `PayPal Payment Captured: ₹${paymentReq.amountInr.toLocaleString('en-IN')}`,
-      message: `Your payment of ₹${paymentReq.amountInr.toLocaleString('en-IN')} ($${paymentReq.amountUsd.toFixed(2)} USD) to ${paymentReq.recipientName} was captured via PayPal Sandbox (Capture ID: ${captureResult.captureId}).`,
+      title: `PayPal Payment Captured: $${paymentReq.amountInr.toLocaleString('en-US')}`,
+      message: `Your payment of $${paymentReq.amountInr.toLocaleString('en-US')} ($${paymentReq.amountUsd.toFixed(2)} USD) to ${paymentReq.recipientName} was captured via PayPal Sandbox (Capture ID: ${captureResult.captureId}).`,
       deduplicationKey: `paypal-cap-${captureResult.captureId}`,
       metadata: {
         paypalOrderId: captureResult.orderId,

@@ -81,7 +81,7 @@ export class CoreFinancialService {
 
       const isUnusual = type === 'expense' && amount >= 12000 && !['Rent', 'Housing', 'Loan EMI'].includes(category);
       const unusualReason = isUnusual
-        ? `High single transaction of ₹${amount.toLocaleString('en-IN')} in ${category} detected during import.`
+        ? `High single transaction of $${amount.toLocaleString('en-US')} in ${category} detected during import.`
         : undefined;
 
       if (isUnusual) unusualDetectedCount += 1;
@@ -255,8 +255,8 @@ export class CoreFinancialService {
     const overrunCount = (pythonPlan.recoveryRecommendations || []).length;
     const aiSummary =
       overrunCount > 0
-        ? `Your ${monthStr} plan allocates ₹${pythonPlan.totalCommitments.toLocaleString('en-IN')} to recurring commitments, ₹${pythonPlan.totalSavingsTarget.toLocaleString('en-IN')} to savings goals, and ₹${pythonPlan.totalDiscretionaryBudget.toLocaleString('en-IN')} to discretionary spending. AURA detected ${overrunCount} category overrun(s) and prepared non-judgmental recovery adjustments below.`
-        : `Your ${monthStr} financial plan is healthy and balanced. Out of ₹${user.monthlyIncome.toLocaleString('en-IN')} monthly income, ₹${pythonPlan.totalCommitments.toLocaleString('en-IN')} covers confirmed commitments, ₹${pythonPlan.totalSavingsTarget.toLocaleString('en-IN')} advances your active goals, and ₹${pythonPlan.totalDiscretionaryBudget.toLocaleString('en-IN')} is available for discretionary choices.`;
+        ? `Your ${monthStr} plan allocates $${pythonPlan.totalCommitments.toLocaleString('en-US')} to recurring commitments, $${pythonPlan.totalSavingsTarget.toLocaleString('en-US')} to savings goals, and $${pythonPlan.totalDiscretionaryBudget.toLocaleString('en-US')} to discretionary spending. AURA detected ${overrunCount} category overrun(s) and prepared non-judgmental recovery adjustments below.`
+        : `Your ${monthStr} financial plan is healthy and balanced. Out of $${user.monthlyIncome.toLocaleString('en-US')} monthly income, $${pythonPlan.totalCommitments.toLocaleString('en-US')} covers confirmed commitments, $${pythonPlan.totalSavingsTarget.toLocaleString('en-US')} advances your active goals, and $${pythonPlan.totalDiscretionaryBudget.toLocaleString('en-US')} is available for discretionary choices.`;
 
     let plan = await FinancialPlanModel.findOne({ userId: userObjId, month: monthStr });
     if (plan) {

@@ -132,8 +132,9 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
   const goalProgressPercent = totalGoalTarget > 0 ? Math.round((totalGoalSaved / totalGoalTarget) * 100) : 0;
 
   // 4. Synthesize natural briefing statement
+  const rawAiSummary = data?.activePlan?.aiSummary;
   const fullBriefingStatement =
-    data?.activePlan?.aiSummary ||
+    (rawAiSummary ? rawAiSummary.replace(/₹/g, '$') : '') ||
     `You are on track with your monthly savings target (${data?.metrics?.savingsRatePercent ?? 25}% savings rate). You have ${data?.mandates?.length ?? 0} confirmed recurring commitments scheduled this month totalling ${formatMoney(
       upcomingTotal
     )}, with essential housing and utility allocations safely ringfenced.`;

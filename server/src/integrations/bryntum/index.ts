@@ -112,20 +112,20 @@ export class BryntumCalendarIntegrationService {
         if (!existing) {
           await CalendarEventModel.create({
             userId: userObjId,
-            title: `${mandate.title} (₹${mandate.amount.toLocaleString('en-IN')})`,
+            title: `${mandate.title} ($${mandate.amount.toLocaleString('en-US')})`,
             eventType: mapping.eventType,
             startDate,
             endDate,
             allDay: true,
             amount: mandate.amount,
-            currency: mandate.currency,
+            currency: 'USD',
             linkedMandateId: mandate._id as mongoose.Types.ObjectId,
             status: startDate < now && mandate.category !== 'Salary' ? 'completed' : 'upcoming',
             color: mapping.color,
             notes: `${mandate.status === 'confirmed' ? 'Confirmed Mandate' : 'Inferred Recurring Commitment'} • ${mandate.merchant}`,
           });
         } else {
-          existing.title = `${mandate.title} (₹${mandate.amount.toLocaleString('en-IN')})`;
+          existing.title = `${mandate.title} ($${mandate.amount.toLocaleString('en-US')})`;
           existing.amount = mandate.amount;
           existing.startDate = startDate;
           existing.endDate = endDate;
@@ -143,17 +143,17 @@ export class BryntumCalendarIntegrationService {
       if (!existingGoalEvent) {
         await CalendarEventModel.create({
           userId: userObjId,
-          title: `Goal Target: ${goal.title} (₹${goal.targetAmount.toLocaleString('en-IN')})`,
+          title: `Goal Target: ${goal.title} ($${goal.targetAmount.toLocaleString('en-US')})`,
           eventType: 'goal_deadline',
           startDate: deadlineDate,
           endDate: deadlineDate,
           allDay: true,
           amount: goal.targetAmount,
-          currency: 'INR',
+          currency: 'USD',
           linkedGoalId: goal._id as mongoose.Types.ObjectId,
           status: 'upcoming',
           color: '#d97706',
-          notes: `Monthly savings contribution: ₹${goal.monthlyContribution.toLocaleString('en-IN')}`,
+          notes: `Monthly savings contribution: $${goal.monthlyContribution.toLocaleString('en-US')}`,
         });
       }
     }

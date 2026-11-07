@@ -807,12 +807,12 @@ export class Channel3IntegrationService {
       if (price <= availableDiscretionaryBudgetInr * 0.85) {
         guidanceCategory = 'Comfortable within the current plan';
         affordabilityScore = Math.min(96, Math.max(78, 100 - Math.round(impactPercent * 0.25)));
-        explanation = `At ₹${price.toLocaleString('en-IN')}, this uses ${impactPercent}% of your ₹${availableDiscretionaryBudgetInr.toLocaleString('en-IN')} allocated discretionary budget while leaving all upcoming commitments (₹${upcomingCommitmentsInr.toLocaleString('en-IN')}) and your ₹${activeGoalsMonthlyTargetInr.toLocaleString('en-IN')} monthly goal contributions untouched.`;
+        explanation = `At $${price.toLocaleString('en-US')}, this uses ${impactPercent}% of your $${availableDiscretionaryBudgetInr.toLocaleString('en-US')} allocated discretionary budget while leaving all upcoming commitments ($${upcomingCommitmentsInr.toLocaleString('en-US')}) and your $${activeGoalsMonthlyTargetInr.toLocaleString('en-US')} monthly goal contributions untouched.`;
       } else if (price <= availableDiscretionaryBudgetInr * 1.25 && price <= freeBufferAfterCommitments) {
         guidanceCategory = 'Possible with budget adjustments';
         affordabilityScore = Math.max(58, 76 - Math.round((impactPercent - 85) * 0.4));
         const adjustmentNeeded = Math.max(0, price - availableDiscretionaryBudgetInr);
-        explanation = `You have ₹${availableDiscretionaryBudgetInr.toLocaleString('en-IN')} allocated for discretionary spending. Buying this immediately requires reallocating ₹${adjustmentNeeded.toLocaleString('en-IN')} from flexible lifestyle categories this month while keeping your ₹${upcomingCommitmentsInr.toLocaleString('en-IN')} upcoming commitments protected.`;
+        explanation = `You have $${availableDiscretionaryBudgetInr.toLocaleString('en-US')} allocated for discretionary spending. Buying this immediately requires reallocating $${adjustmentNeeded.toLocaleString('en-US')} from flexible lifestyle categories this month while keeping your $${upcomingCommitmentsInr.toLocaleString('en-US')} upcoming commitments protected.`;
         const monthlySave = Math.ceil(price / 2 / 100) * 100;
         const targetDate = new Date();
         targetDate.setMonth(targetDate.getMonth() + 2);
@@ -820,7 +820,7 @@ export class Channel3IntegrationService {
           monthsRequired: 2,
           monthlyContributionInr: monthlySave,
           targetCompletionDate: targetDate.toISOString().split('T')[0],
-          summary: `Split over 2 months at ₹${monthlySave.toLocaleString('en-IN')}/month to avoid any current-month budget adjustment.`,
+          summary: `Split over 2 months at $${monthlySave.toLocaleString('en-US')}/month to avoid any current-month budget adjustment.`,
         };
       } else if (price <= freeBufferAfterCommitments * 1.15) {
         guidanceCategory = 'Better postponed';
@@ -831,12 +831,12 @@ export class Channel3IntegrationService {
         const targetDate = new Date();
         targetDate.setMonth(targetDate.getMonth() + months);
 
-        explanation = `You have ₹${availableDiscretionaryBudgetInr.toLocaleString('en-IN')} allocated for discretionary spending and ₹${upcomingCommitmentsInr.toLocaleString('en-IN')} in upcoming commitments. Buying this for ₹${price.toLocaleString('en-IN')} immediately would require a significant adjustment of ₹${shortfall.toLocaleString('en-IN')} to your current plan. A dedicated ${months}-month savings plan is recommended.`;
+        explanation = `You have $${availableDiscretionaryBudgetInr.toLocaleString('en-US')} allocated for discretionary spending and $${upcomingCommitmentsInr.toLocaleString('en-US')} in upcoming commitments. Buying this for $${price.toLocaleString('en-US')} immediately would require a significant adjustment of $${shortfall.toLocaleString('en-US')} to your current plan. A dedicated ${months}-month savings plan is recommended.`;
         suggestedSavingsPlan = {
           monthsRequired: months,
           monthlyContributionInr: monthlySave,
           targetCompletionDate: targetDate.toISOString().split('T')[0],
-          summary: `Save ₹${monthlySave.toLocaleString('en-IN')}/month for ${months} months so you can buy it comfortably without disrupting your emergency fund or active goals.`,
+          summary: `Save $${monthlySave.toLocaleString('en-US')}/month for ${months} months so you can buy it comfortably without disrupting your emergency fund or active goals.`,
         };
       } else {
         guidanceCategory = 'Not currently recommended';
@@ -846,12 +846,12 @@ export class Channel3IntegrationService {
         const targetDate = new Date();
         targetDate.setMonth(targetDate.getMonth() + months);
 
-        explanation = `At ₹${price.toLocaleString('en-IN')}, an immediate purchase would exceed your ₹${availableDiscretionaryBudgetInr.toLocaleString('en-IN')} discretionary budget and encroach on your ₹${savingsTargetInr.toLocaleString('en-IN')} savings target and upcoming commitments (₹${upcomingCommitmentsInr.toLocaleString('en-IN')}).`;
+        explanation = `At $${price.toLocaleString('en-US')}, an immediate purchase would exceed your $${availableDiscretionaryBudgetInr.toLocaleString('en-US')} discretionary budget and encroach on your $${savingsTargetInr.toLocaleString('en-US')} savings target and upcoming commitments ($${upcomingCommitmentsInr.toLocaleString('en-US')}).`;
         suggestedSavingsPlan = {
           monthsRequired: months,
           monthlyContributionInr: monthlySave,
           targetCompletionDate: targetDate.toISOString().split('T')[0],
-          summary: `Create a dedicated "${product.name.slice(0, 28)}" goal at ₹${monthlySave.toLocaleString('en-IN')}/month over ${months} months.`,
+          summary: `Create a dedicated "${product.name.slice(0, 28)}" goal at $${monthlySave.toLocaleString('en-US')}/month over ${months} months.`,
         };
       }
 
