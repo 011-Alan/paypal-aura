@@ -61,13 +61,68 @@ export async function apiRequest<T = any>(
   return data as T;
 }
 
-export function formatInr(amount: number | undefined | null, _isMasked: boolean = false): string {
-  const num = Number(amount || 0);
-  return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+export function getActiveCurrency(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('aura_currency');
+      if (stored && typeof stored === 'string' && stored.trim()) {
+        return stored.trim().toUpperCase();
+      }
+    } catch {
+      // localStorage may fail in private mode
+    }
+  }
+  return 'USD';
 }
 
-export function formatMaskedInr(amount: number | undefined | null, _isVisible: boolean = false): string {
-  return formatInr(amount);
+export function setActiveCurrency(currency: string): void {
+  if (typeof window !== 'undefined' && currency) {
+    try {
+      localStorage.setItem('aura_currency', currency.trim().toUpperCase());
+      window.dispatchEvent(new CustomEvent('aura-currency-changed', { detail: { currency } }));
+    } catch {
+      // ignored
+    }
+  }
+}
+
+export function formatCurrency(
+  amount: number | undefined | null,
+  isMasked: boolean = false,
+  currencyCode?: string
+): string {
+  if (isMasked) return '••••••';
+  const num = Number(amount || 0);
+  const curr = (currencyCode || getActiveCurrency() || 'USD').toUpperCase();
+
+  const isDecimal = num % 1 !== 0;
+  const formattedNum = num.toLocaleString('en-US', {
+    minimumFractionDigits: isDecimal ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+
+  switch (curr) {
+    case 'USD':
+      return `$${formattedNum}`;
+    case 'EUR':
+      return `€${formattedNum}`;
+    case 'GBP':
+      return `£${formattedNum}`;
+    case 'INR':
+      return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: isDecimal ? 2 : 0 })}`;
+    default:
+      return `${curr} ${formattedNum}`;
+  }
+}
+
+export const formatInr = formatCurrency;
+
+export function formatMaskedInr(
+  amount: number | undefined | null,
+  isVisible: boolean = false,
+  currencyCode?: string
+): string {
+  return formatCurrency(amount, !isVisible, currencyCode);
 }
 
 export function formatDateShort(dateStr: string | Date | undefined): string {

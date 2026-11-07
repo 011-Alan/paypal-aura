@@ -22,8 +22,8 @@ export const PaymentsPage: React.FC = () => {
   const [recipientName, setRecipientName] = useState('Greenwood Residency Landlords');
   const [recipientEmail, setRecipientEmail] = useState('merchant-sandbox@paypal.com');
   const [merchantCategory, setMerchantCategory] = useState('Rent');
-  const [description, setDescription] = useState('Prepare a payment of ₹5,000 towards maintenance & utility settlement');
-  const [amountInr, setAmountInr] = useState('5000');
+  const [description, setDescription] = useState('Prepare a payment of $50 towards maintenance & utility settlement');
+  const [amountInr, setAmountInr] = useState('50');
 
   // Active workflow state
   const [activePaymentId, setActivePaymentId] = useState<string>('');

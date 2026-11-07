@@ -266,7 +266,7 @@ apiRouter.post('/auth/register', strictAuthRateLimiter, async (req: Request, res
       email: cleanEmail,
       passwordHash,
       pinHash,
-      monthlyIncome: Number(monthlyIncome || 85000),
+      monthlyIncome: Number(monthlyIncome || 5000),
       familyGroupId: `aura-family-${Date.now()}`,
     });
 
@@ -274,11 +274,11 @@ apiRouter.post('/auth/register', strictAuthRateLimiter, async (req: Request, res
     await AccountModel.create({
       userId: user._id,
       name: 'Primary Checking Account',
-      institution: 'HDFC Bank',
+      institution: 'Primary Checking Bank',
       type: 'checking',
       accountNumberMasked: 'XXXX-1024',
-      balance: Number(monthlyIncome || 85000),
-      currency: 'INR',
+      balance: Number(monthlyIncome || 5000),
+      currency: 'USD',
       isSharedWithFamily: false,
       familyGroupId: user.familyGroupId,
     });
@@ -585,6 +585,109 @@ apiRouter.post('/auth/paypal/link', requireAuth, async (req: AuthenticatedReques
   }
 });
 
+/**
+ * Helper to reconcile Available Balance vs. Transaction Ledger Calculation:
+ * - Checks both the available balance in account and the calculation of transactions.
+ * - Gives preference to the available balance in account first as the primary source of truth.
+ * - If both match, confirms match.
+ * - If they differ (e.g., initial balance was adjusted in sandbox without creating a transaction ledger entry),
+ *   prioritizes the account's available balance.
+ * - Synchronizes the verified balance to the user's primary/PayPal AccountModel and updates currency.
+ */
+async function reconcilePayPalAccountBalances(
+  user: any,
+  balance: any,
+  transactions: any,
+  merchantBalances: any,
+  merchantTransactions: any
+): Promise<void> {
+  try {
+    const allTxns = (transactions?.transactions?.length ? transactions.transactions : (merchantTransactions?.transactions || []));
+    let calculatedLedgerTotal: number | null = null;
+    if (allTxns.length > 0) {
+      calculatedLedgerTotal = allTxns.reduce((sum: number, t: any) => {
+        const amt = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount || 0));
+        const isNegative = t.type === 'debit' || t.type === 'expense' || String(t.amount).startsWith('-');
+        return sum + (isNegative ? -Math.abs(amt) : Math.abs(amt));
+      }, 0);
+    }
+
+    let accountAvailableBalance: number | null = null;
+    let resolvedCurrency = user.currency || 'USD';
+
+    if (balance?.available && balance.balance !== null && typeof balance.balance === 'number') {
+      accountAvailableBalance = balance.balance;
+      resolvedCurrency = balance.currency || resolvedCurrency;
+    } else if (merchantBalances?.available && merchantBalances.primaryBalance !== null && typeof merchantBalances.primaryBalance === 'number') {
+      accountAvailableBalance = merchantBalances.primaryBalance;
+      resolvedCurrency = merchantBalances.primaryCurrency || resolvedCurrency;
+    }
+
+    let resolvedBalance: number | null = null;
+    if (accountAvailableBalance !== null) {
+      resolvedBalance = accountAvailableBalance;
+      balance.available = true;
+      balance.balance = resolvedBalance;
+      balance.currency = resolvedCurrency;
+      if (calculatedLedgerTotal !== null && Math.abs(calculatedLedgerTotal - resolvedBalance) < 0.01) {
+        balance.statusMessage = 'Live available balance verified and matches transaction ledger.';
+      } else {
+        balance.statusMessage = 'Live available balance in account (primary source of truth).';
+      }
+    } else if (calculatedLedgerTotal !== null) {
+      resolvedBalance = calculatedLedgerTotal;
+      balance.available = true;
+      balance.balance = resolvedBalance;
+      balance.currency = resolvedCurrency;
+      balance.statusMessage = 'Balance calculated from transaction history ledger.';
+    }
+
+    // Persist reconciled balance & currency to AURA's local accounts and user profile
+    if (resolvedBalance !== null) {
+      let linkedAccount = await AccountModel.findOne({
+        userId: user._id,
+        $or: [
+          { institution: { $regex: /PayPal/i } },
+          { name: { $regex: /PayPal/i } },
+          { type: 'checking' },
+        ],
+      });
+
+      if (linkedAccount) {
+        linkedAccount.balance = resolvedBalance;
+        linkedAccount.currency = resolvedCurrency;
+        linkedAccount.lastSyncedAt = new Date();
+        await linkedAccount.save();
+      } else {
+        await AccountModel.create({
+          userId: user._id,
+          name: 'Primary PayPal Linked Account',
+          institution: `PayPal ${env.PAYPAL_MODE === 'live' ? 'Live' : 'Sandbox'} Account`,
+          type: 'checking',
+          accountNumberMasked: `PP-${user.paypalPayerId ? user.paypalPayerId.slice(-4) : '0000'}`,
+          balance: resolvedBalance,
+          currency: resolvedCurrency,
+          isSharedWithFamily: false,
+          familyGroupId: user.familyGroupId,
+          lastSyncedAt: new Date(),
+        });
+      }
+
+      if (user.currency !== resolvedCurrency || user.financialProfile?.preferredCurrency !== resolvedCurrency) {
+        user.currency = resolvedCurrency;
+        if (user.financialProfile) {
+          user.financialProfile.preferredCurrency = resolvedCurrency;
+        }
+        await user.save();
+      }
+    }
+  } catch (err: any) {
+    logger.warn('reconcilePayPalAccountBalances', 'Failed to synchronize account balance to database', {
+      error: err?.message,
+    });
+  }
+}
+
 apiRouter.get('/paypal/connected-account', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.userId;
@@ -625,6 +728,9 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       return;
     }
 
+    // Force fresh balance and transaction pull from PayPal
+    paypalReportingService.clearTokenCache();
+
     const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
       paypalProfileService.getProfile(userId),
       paypalBalanceService.getBalance(userId),
@@ -632,6 +738,9 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       paypalReportingService.getMerchantBalances(),
       paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
     ]);
+
+    // Reconcile Available Balance vs. Transaction Ledger (Preference: Available Balance in Account First)
+    await reconcilePayPalAccountBalances(user, balance, transactions, merchantBalances, merchantTransactions);
 
     res.json({
       success: true,
@@ -673,6 +782,9 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
       return;
     }
 
+    // Force fresh balance and transaction pull from PayPal
+    paypalReportingService.clearTokenCache();
+
     const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
       paypalProfileService.getProfile(userId),
       paypalBalanceService.getBalance(userId),
@@ -680,6 +792,9 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
       paypalReportingService.getMerchantBalances(),
       paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
     ]);
+
+    // Reconcile Available Balance vs. Transaction Ledger (Preference: Available Balance in Account First)
+    await reconcilePayPalAccountBalances(user, balance, transactions, merchantBalances, merchantTransactions);
 
     user.paypalLastSyncAt = new Date();
     await user.save();
@@ -1061,7 +1176,7 @@ apiRouter.post('/accounts', requireAuth, async (req: AuthenticatedRequest, res: 
       type: type || 'checking',
       accountNumberMasked: String(accountNumberMasked || `XXXX-${Math.floor(1000 + Math.random() * 9000)}`),
       balance: Number(balance || 0),
-      currency: 'INR',
+      currency: req.body?.currency || (req.user as any)?.preferredCurrency || (req.user as any)?.currency || 'USD',
       isSharedWithFamily: Boolean(isSharedWithFamily),
       familyGroupId: req.user?.familyGroupId,
     });
@@ -1677,7 +1792,7 @@ apiRouter.get('/user/financial-profile', requireAuth, async (req: AuthenticatedR
       expectedIncomeDate: 1,
       additionalIncome: 0,
       incomeStatus: 'user_estimate',
-      preferredCurrency: user.currency || 'INR',
+      preferredCurrency: user.currency || 'USD',
     };
     res.json({
       success: true,
@@ -1710,9 +1825,9 @@ apiRouter.put('/user/financial-profile', requireAuth, async (req: AuthenticatedR
       preferredCurrency,
     } = req.body || {};
 
-    const newIncome = Number(monthlyIncome ?? user.monthlyIncome ?? 95000);
+    const newIncome = Number(monthlyIncome ?? user.monthlyIncome ?? 5000);
     user.monthlyIncome = newIncome;
-    user.currency = preferredCurrency || user.currency || 'INR';
+    user.currency = preferredCurrency || user.currency || 'USD';
 
     user.financialProfile = {
       monthlyIncome: newIncome,

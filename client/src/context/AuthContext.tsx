@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { apiRequest, getStoredToken, setStoredToken } from '../lib/api';
+import { apiRequest, getStoredToken, setStoredToken, formatCurrency } from '../lib/api';
 
 export interface UserProfile {
   id: string;
@@ -321,17 +321,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastActivityRef.current = Date.now();
   };
 
+  useEffect(() => {
+    if (user?.preferredCurrency || user?.currency) {
+      const c = user.preferredCurrency || user.currency;
+      localStorage.setItem('aura_currency', c);
+    } else if (!localStorage.getItem('aura_currency')) {
+      localStorage.setItem('aura_currency', 'USD');
+    }
+  }, [user?.currency, user?.preferredCurrency]);
+
   // User-configured currency formatter (Section 13)
   const formatMoney = useCallback(
     (amount: number | undefined | null): string => {
-      const num = Number(amount || 0);
-      const curr = (user?.currency || 'INR').toUpperCase();
-      if (curr === 'USD') return `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-      if (curr === 'EUR') return `€${num.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`;
-      if (curr === 'GBP') return `£${num.toLocaleString('en-GB', { maximumFractionDigits: 0 })}`;
-      return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+      return formatCurrency(amount, !balancesVisible, user?.preferredCurrency || user?.currency);
     },
-    [user?.currency]
+    [user?.currency, user?.preferredCurrency, balancesVisible]
   );
 
   return (

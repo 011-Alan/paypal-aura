@@ -32,19 +32,19 @@ export const SettingsPage: React.FC = () => {
   const [riskTolerance, setRiskTolerance] = useState<'conservative' | 'balanced' | 'growth'>('balanced');
 
   // Financial Profile fields (Section 11)
-  const [monthlyIncome, setMonthlyIncome] = useState('95000');
+  const [monthlyIncome, setMonthlyIncome] = useState('5000');
   const [incomeType, setIncomeType] = useState<'salary' | 'freelance' | 'business' | 'pension' | 'other'>('salary');
   const [incomeFrequency, setIncomeFrequency] = useState<'monthly' | 'biweekly' | 'weekly'>('monthly');
   const [expectedIncomeDate, setExpectedIncomeDate] = useState('1');
   const [additionalIncome, setAdditionalIncome] = useState('0');
   const [incomeStatus, setIncomeStatus] = useState<'user_estimate' | 'imported_record' | 'verified'>('user_estimate');
-  const [preferredCurrency, setPreferredCurrency] = useState('INR');
+  const [preferredCurrency, setPreferredCurrency] = useState('USD');
 
   // Policy limits
-  const [singleLimit, setSingleLimit] = useState('75000');
-  const [dailyLimit, setDailyLimit] = useState('100000');
-  const [discretionaryCap, setDiscretionaryCap] = useState('18000');
-  const [pinThreshold, setPinThreshold] = useState('1000');
+  const [singleLimit, setSingleLimit] = useState('2500');
+  const [dailyLimit, setDailyLimit] = useState('5000');
+  const [discretionaryCap, setDiscretionaryCap] = useState('1200');
+  const [pinThreshold, setPinThreshold] = useState('200');
   const [allowFamilySharedView, setAllowFamilySharedView] = useState(true);
 
   // PIN rotation
@@ -98,7 +98,7 @@ export const SettingsPage: React.FC = () => {
           setExpectedIncomeDate(String(res.profile.expectedIncomeDate || '1'));
           setAdditionalIncome(String(res.profile.additionalIncome || '0'));
           setIncomeStatus(res.profile.incomeStatus || 'user_estimate');
-          setPreferredCurrency(res.profile.preferredCurrency || user?.preferredCurrency || 'INR');
+          setPreferredCurrency(res.profile.preferredCurrency || user?.preferredCurrency || 'USD');
         }
       } catch {
         if (user?.monthlyIncome) setMonthlyIncome(String(user.monthlyIncome));
@@ -430,8 +430,8 @@ export const SettingsPage: React.FC = () => {
                 onChange={(e) => setPreferredCurrency(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="INR">INR (₹) — Indian Rupee</option>
                 <option value="USD">USD ($) — US Dollar</option>
+                <option value="INR">INR (₹) — Indian Rupee</option>
                 <option value="EUR">EUR (€) — Euro</option>
                 <option value="GBP">GBP (£) — British Pound</option>
               </select>

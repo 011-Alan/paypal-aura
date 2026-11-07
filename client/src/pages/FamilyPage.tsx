@@ -152,11 +152,11 @@ export const FamilyPage: React.FC = () => {
 
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                  Shared Monthly Spending Envelope (INR)
+                  Shared Monthly Spending Envelope (USD)
                 </label>
                 <input
                   type="number"
-                  placeholder="30000"
+                  placeholder="5000"
                   value={setupBudget}
                   onChange={(e) => setSetupBudget(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-navy-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"

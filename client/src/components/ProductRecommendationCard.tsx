@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShoppingBag, ExternalLink, ShieldCheck, Tag, Zap } from 'lucide-react';
+import { formatInr } from '../lib/api';
 
 export interface ProductItem {
   id: string;
@@ -102,7 +103,7 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
           <div>
             <span className="text-slate-400 text-[10px] block">Price</span>
             <span className="text-base font-extrabold text-navy-900 dark:text-white">
-              ₹{product.priceInr.toLocaleString('en-IN')}
+              {formatInr(product.priceInr)}
             </span>
           </div>
 

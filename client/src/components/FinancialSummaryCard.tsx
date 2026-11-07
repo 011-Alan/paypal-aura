@@ -1,5 +1,6 @@
 import React from 'react';
 import { PieChart, TrendingUp, ShieldAlert, Calendar, CheckCircle2, DollarSign } from 'lucide-react';
+import { formatInr } from '../lib/api';
 
 export interface FinancialMetric {
   label: string;
@@ -58,7 +59,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
             Liquid Balance
           </span>
           <span className="text-base font-extrabold text-navy-900 dark:text-white">
-            ₹{liquidBalance.toLocaleString('en-IN')}
+            {formatInr(liquidBalance)}
           </span>
           <span className="text-[10px] text-slate-400 block mt-0.5">
             {accountsCount} accounts active
@@ -70,7 +71,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
             Discretionary Buffer
           </span>
           <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">
-            ₹{discretionaryRemaining.toLocaleString('en-IN')}
+            {formatInr(discretionaryRemaining)}
           </span>
           <span className="text-[10px] text-slate-400 block mt-0.5">
             Current month free pool
@@ -82,7 +83,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
             Upcoming Commitments
           </span>
           <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
-            ₹{upcomingCommitmentsTotal.toLocaleString('en-IN')}
+            {formatInr(upcomingCommitmentsTotal)}
           </span>
           <span className="text-[10px] text-slate-400 block mt-0.5">
             Ringfenced on Bryntum
@@ -97,7 +98,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
             {savingsRatePercent}%
           </span>
           <span className="text-[10px] text-slate-400 block mt-0.5">
-            Income: ₹{monthlyIncome.toLocaleString('en-IN')}
+            Income: {formatInr(monthlyIncome)}
           </span>
         </div>
       </div>

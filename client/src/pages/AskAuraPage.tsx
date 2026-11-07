@@ -67,11 +67,11 @@ interface ConversationSummary {
 const STARTER_PROMPTS = [
   { label: 'Financial Health', prompt: 'How am I doing financially overall?' },
   { label: 'Sneakers Search', prompt: 'I need to buy sneakers.' },
-  { label: 'Purchase Affordability', prompt: 'Can I afford a laptop for ₹55,000?' },
+  { label: 'Purchase Affordability', prompt: 'Can I afford a laptop for $750?' },
   { label: 'Schedule Reminder', prompt: 'Schedule my electricity bill reminder for the 10th of every month.' },
-  { label: 'Currency to INR', prompt: 'Change my preferred currency to INR.' },
+  { label: 'Currency to USD', prompt: 'Change my preferred currency to USD.' },
   { label: 'Take me to Accounts', prompt: 'Take me to my accounts.' },
-  { label: 'Create Savings Plan', prompt: 'I want to save ₹30,000 over the next six months. Create a plan.' },
+  { label: 'Create Savings Plan', prompt: 'I want to save $3,000 over the next six months. Create a plan.' },
   { label: 'Compounding Interest', prompt: 'What is compounding interest and how does it help me save?' },
 ];
 
@@ -207,7 +207,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
             'How am I doing financially overall?',
             'I need to buy sneakers.',
             'Help me plan my expenses for this month',
-            'Change my preferred currency to INR',
+            'Change my preferred currency to USD',
           ],
         },
       ]);
@@ -970,7 +970,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                             </span>
                           </div>
                           <p className="text-xs text-teal-950 dark:text-teal-200">
-                            Preferred currency is set to <strong>{msg.toolAction.details?.preferredCurrency || 'INR'}</strong>. All balances across your accounts and overview have been updated.
+                            Preferred currency is set to <strong>{msg.toolAction.details?.preferredCurrency || 'USD'}</strong>. All balances across your accounts and overview have been updated.
                           </p>
                         </div>
                       )}

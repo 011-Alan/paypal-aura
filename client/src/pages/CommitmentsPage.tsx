@@ -186,7 +186,7 @@ export const CommitmentsPage: React.FC = () => {
           </select>
           <input
             type="number"
-            placeholder="Amount (INR)"
+            placeholder="Amount (USD)"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required

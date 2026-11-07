@@ -508,7 +508,7 @@ export const FinancialCalendarPage: React.FC = () => {
           <div className="flex gap-2">
             <input
               type="number"
-              placeholder="Amount INR (optional)"
+              placeholder="Amount USD (optional)"
               value={newAmount}
               onChange={(e) => setNewAmount(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"

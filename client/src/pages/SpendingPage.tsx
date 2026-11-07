@@ -19,7 +19,7 @@ import { Tooltip } from '../components/Tooltip';
 const PRESET_NL_QUERIES = [
   'Show my dining expenditure over the last three months.',
   'How much did I spend on travel during my last holiday?',
-  'Show unusual transactions above ₹2,000',
+  'Show unusual transactions above $50',
   'Show my rent and internet expenditure',
 ];
 
@@ -161,7 +161,7 @@ export const SpendingPage: React.FC = () => {
       },
       {
         field: 'amount',
-        headerName: 'Amount (₹)',
+        headerName: 'Amount',
         sortable: true,
         filter: 'agNumberColumnFilter',
         width: 140,

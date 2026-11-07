@@ -15,15 +15,15 @@ import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
 
 const PRESET_SHOPPING_PROMPTS = [
-  { label: 'Can I afford a laptop for ₹55,000?', query: 'laptop', maxPrice: 60000 },
-  { label: 'Find a phone under ₹20,000', query: 'phone', maxPrice: 20000 },
-  { label: 'Compare noise-cancelling headphones', query: 'headphones', maxPrice: 15000 },
+  { label: 'Can I afford a laptop for $750?', query: 'laptop', maxPrice: 800 },
+  { label: 'Find a phone under $300', query: 'phone', maxPrice: 300 },
+  { label: 'Compare noise-cancelling headphones', query: 'headphones', maxPrice: 150 },
 ];
 
 export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
   const { balancesVisible } = useAuth();
   const [query, setQuery] = useState('laptop');
-  const [maxPrice, setMaxPrice] = useState('60000');
+  const [maxPrice, setMaxPrice] = useState('800');
   const [includeKernel, setIncludeKernel] = useState(true);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
   };
 
   useEffect(() => {
-    runEvaluation('laptop', '60000', true);
+    runEvaluation('laptop', '800', true);
   }, []);
 
   const handleCreateSavingsGoal = async (product: any, plan: any) => {
@@ -131,7 +131,7 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
             type="number"
             value={maxPrice}
             onChange={(e) => setMaxPrice(e.target.value)}
-            placeholder="Target Budget Ceiling (INR)"
+            placeholder="Target Budget Ceiling (USD)"
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
           <button

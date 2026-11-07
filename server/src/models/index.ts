@@ -70,7 +70,7 @@ const UserSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     pinHash: { type: String, required: true },
     role: { type: String, enum: ['user', 'family_admin', 'family_member'], default: 'family_admin' },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     monthlyIncome: { type: Number, default: 95000 },
     // PayPal Identity Fields
     paypalUserId: { type: String, unique: true, sparse: true, index: true },
@@ -98,7 +98,7 @@ const UserSchema = new Schema<IUser>(
       expectedIncomeDate: { type: Number, default: 1 },
       additionalIncome: { type: Number, default: 0 },
       incomeStatus: { type: String, enum: ['user_estimate', 'imported_record', 'verified'], default: 'user_estimate' },
-      preferredCurrency: { type: String, default: 'INR' },
+      preferredCurrency: { type: String, default: 'USD' },
     },
     familyGroupId: { type: String, index: true },
     spendingPreferences: {
@@ -149,7 +149,7 @@ const AccountSchema = new Schema<IAccount>(
     type: { type: String, enum: ['checking', 'savings', 'credit', 'wallet', 'investment'], default: 'checking' },
     accountNumberMasked: { type: String, required: true },
     balance: { type: Number, required: true, default: 0 },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     isSharedWithFamily: { type: Boolean, default: false },
     familyGroupId: { type: String, index: true },
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
@@ -204,7 +204,7 @@ const TransactionSchema = new Schema<ITransaction>(
     subcategory: { type: String },
     type: { type: String, enum: ['income', 'expense', 'transfer'], required: true, index: true },
     amount: { type: Number, required: true },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     status: { type: String, enum: ['completed', 'pending', 'flagged', 'failed'], default: 'completed', index: true },
     paymentMethod: {
       type: String,
@@ -287,7 +287,7 @@ const MandateSchema = new Schema<IMandate>(
       default: 'Other',
     },
     amount: { type: Number, required: true },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     frequency: { type: String, enum: ['monthly', 'quarterly', 'yearly', 'weekly'], default: 'monthly' },
     dueDayOfMonth: { type: Number, required: true, min: 1, max: 31 },
     nextDueDate: { type: Date, required: true, index: true },
@@ -551,7 +551,7 @@ const CalendarEventSchema = new Schema<ICalendarEvent>(
     endDate: { type: Date, required: true },
     allDay: { type: Boolean, default: true },
     amount: { type: Number },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     linkedMandateId: { type: Schema.Types.ObjectId, ref: 'Mandate' },
     linkedGoalId: { type: Schema.Types.ObjectId, ref: 'Goal' },
     status: { type: String, enum: ['upcoming', 'completed', 'overdue', 'rescheduled'], default: 'upcoming' },
@@ -624,7 +624,7 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
     description: { type: String, required: true },
     amountInr: { type: Number, required: true },
     amountUsd: { type: Number, required: true },
-    currency: { type: String, default: 'INR' },
+    currency: { type: String, default: 'USD' },
     status: {
       type: String,
       enum: [

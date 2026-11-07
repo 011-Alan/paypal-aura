@@ -187,7 +187,7 @@ export const GoalsPage: React.FC = () => {
           </select>
           <input
             type="number"
-            placeholder="Target Amount (INR)"
+            placeholder="Target Amount (USD)"
             value={targetAmount}
             onChange={(e) => setTargetAmount(e.target.value)}
             required
@@ -195,7 +195,7 @@ export const GoalsPage: React.FC = () => {
           />
           <input
             type="number"
-            placeholder="Monthly Savings (INR)"
+            placeholder="Monthly Savings (USD)"
             value={monthlyContribution}
             onChange={(e) => setMonthlyContribution(e.target.value)}
             className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"

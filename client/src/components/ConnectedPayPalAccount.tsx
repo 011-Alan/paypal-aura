@@ -14,7 +14,7 @@ import {
   ArrowUpRight,
   Info,
 } from 'lucide-react';
-import { apiRequest } from '../lib/api';
+import { apiRequest, setActiveCurrency } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from './Tooltip';
 
@@ -84,6 +84,9 @@ export const ConnectedPayPalAccount: React.FC = () => {
       setError(null);
       const res = await apiRequest('/paypal/connected-account');
       setData(res);
+      if (res?.balance?.currency) {
+        setActiveCurrency(res.balance.currency);
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to load connected PayPal account.');
     } finally {
@@ -97,6 +100,10 @@ export const ConnectedPayPalAccount: React.FC = () => {
       setError(null);
       const res = await apiRequest('/paypal/sync', { method: 'POST' });
       setData(res);
+      if (res?.balance?.currency) {
+        setActiveCurrency(res.balance.currency);
+      }
+      window.dispatchEvent(new CustomEvent('aura-state-changed'));
     } catch (err: any) {
       setError(err?.message || 'Manual synchronization failed.');
     } finally {
