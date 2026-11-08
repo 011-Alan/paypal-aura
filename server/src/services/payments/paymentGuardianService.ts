@@ -542,21 +542,33 @@ export class PaymentGuardianService {
         eventType.includes('ORDER.PROCESSED') ||
         resource?.tracking_number
       ) {
-        ecommerceOrder.fulfillmentStatus = 'shipped';
+        const rawStatus = String(resource?.status || '').toUpperCase();
+        let targetStatus: any = 'shipped';
+        if (rawStatus === 'DELIVERED' || eventType.includes('DELIVERED')) {
+          targetStatus = 'delivered';
+        } else if (rawStatus === 'OUT_FOR_DELIVERY') {
+          targetStatus = 'out_for_delivery';
+        } else if (rawStatus === 'CANCELLED') {
+          targetStatus = 'cancelled';
+        } else {
+          targetStatus = 'shipped';
+        }
+
+        ecommerceOrder.fulfillmentStatus = targetStatus;
         ecommerceOrder.shipment = {
           carrier: resource?.carrier || resource?.carrier_name_other || 'Courier',
           trackingNumber: resource?.tracking_number || `TRACK-${Date.now().toString().slice(-6)}`,
           shippedAt: resource?.shipment_date ? new Date(resource.shipment_date) : new Date(),
-          estimatedDeliveryAt: new Date(Date.now() + 3 * 86400000),
+          estimatedDeliveryAt: targetStatus === 'delivered' ? new Date() : new Date(Date.now() + 3 * 86400000),
           isSimulated: false,
           paypalTrackerId: resource?.id,
           trackingSyncStatus: 'synced',
-          notes: 'Shipment tracking received automatically via PayPal Webhook.',
+          notes: `Shipment status (${targetStatus}) received automatically via PayPal Webhook.`,
         };
         ecommerceOrder.statusHistory.push({
-          status: 'shipped',
+          status: targetStatus,
           timestamp: new Date(),
-          notes: `Shipment tracking updated on PayPal: ${ecommerceOrder.shipment.carrier} #${ecommerceOrder.shipment.trackingNumber}`,
+          notes: `Shipment status updated to ${targetStatus} on PayPal: ${ecommerceOrder.shipment.carrier} #${ecommerceOrder.shipment.trackingNumber}`,
           carrier: ecommerceOrder.shipment.carrier,
           trackingNumber: ecommerceOrder.shipment.trackingNumber,
           updatedBy: 'PayPal Webhook Event',
