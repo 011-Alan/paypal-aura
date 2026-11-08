@@ -525,12 +525,17 @@ export class PaymentGuardianService {
     }
 
     // Match and update EcommerceOrderModel if this webhook is for an e-commerce order
-    const captureId = resource?.supplementary_data?.related_ids?.capture_id || resource?.id;
+    const captureId =
+      resource?.transaction_id ||
+      resource?.supplementary_data?.related_ids?.capture_id ||
+      resource?.id;
     const ecommerceOrder = await EcommerceOrderModel.findOne({
       $or: [
         { 'paymentInfo.paypalCaptureId': captureId },
+        { 'paymentInfo.paypalCaptureId': resource?.transaction_id },
         { 'paymentInfo.paypalCaptureId': resource?.id },
         { 'paymentInfo.paypalOrderId': orderId },
+        { 'paymentInfo.paypalOrderId': resource?.transaction_id },
         { orderNumber: resource?.custom_id || resource?.invoice_id },
       ].filter(Boolean),
     });
