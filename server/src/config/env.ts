@@ -99,7 +99,7 @@ export const env = {
     return `${this.CLIENT_ORIGIN}/payments?status=cancelled`;
   },
 
-  PAYPAL_WEBHOOK_ID: process.env.PAYPAL_WEBHOOK_ID || '',
+  PAYPAL_WEBHOOK_ID: process.env.PAYPAL_WEBHOOK_ID || '06282161AL7534003',
   PAYPAL_DEFAULT_CURRENCY: process.env.PAYPAL_DEFAULT_CURRENCY || 'USD',
   INR_TO_USD_RATE: parseFloat(process.env.INR_TO_USD_RATE || '0.01190476'),
 
