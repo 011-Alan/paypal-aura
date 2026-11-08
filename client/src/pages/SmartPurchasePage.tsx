@@ -260,7 +260,7 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
       const orderToken = params.get('token');
       const orderNumber = params.get('orderNumber');
 
-      if (checkoutStatus === 'checkout-success' || checkoutStatus === 'approved') {
+      if (checkoutStatus === 'checkout-success' || checkoutStatus === 'approved' || (orderToken && params.has('PayerID'))) {
         const orderIdToCapture = orderToken || orderNumber;
         if (orderIdToCapture) {
           setNotification({

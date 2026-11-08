@@ -277,6 +277,8 @@ export class EcommerceService {
       shippingAddress: IEcommerceShippingAddress;
       items?: Array<{ productId: string; quantity: number; selectedVariant?: string }>;
       notes?: string;
+      customReturnUrl?: string;
+      customCancelUrl?: string;
     }
   ): Promise<{
     order: IEcommerceOrder;
@@ -321,8 +323,15 @@ export class EcommerceService {
     const idempotencyKey = `ecom-${userId.slice(-6)}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
     // Prepare custom return and cancel URLs for the e-commerce flow
-    const customReturnUrl = `${env.CLIENT_ORIGIN}/smart-purchases?view=checkout-success&orderNumber=${orderNumber}`;
-    const customCancelUrl = `${env.CLIENT_ORIGIN}/smart-purchases?view=checkout-cancelled&orderNumber=${orderNumber}`;
+    // Using root path `/?tab=smart-purchases&view=checkout-success` ensures SPA hosting on Render/Netlify
+    // serves index.html without 404 Not Found errors on direct page transitions.
+    const baseUrl = env.CLIENT_ORIGIN ? env.CLIENT_ORIGIN.replace(/\/+$/, '') : '';
+    const customReturnUrl = params.customReturnUrl
+      ? (params.customReturnUrl.includes('orderNumber') ? params.customReturnUrl : `${params.customReturnUrl}${params.customReturnUrl.includes('?') ? '&' : '?'}orderNumber=${orderNumber}`)
+      : `${baseUrl}/?tab=smart-purchases&view=checkout-success&orderNumber=${orderNumber}`;
+    const customCancelUrl = params.customCancelUrl
+      ? (params.customCancelUrl.includes('orderNumber') ? params.customCancelUrl : `${params.customCancelUrl}${params.customCancelUrl.includes('?') ? '&' : '?'}orderNumber=${orderNumber}`)
+      : `${baseUrl}/?tab=smart-purchases&view=checkout-cancelled&orderNumber=${orderNumber}`;
 
     // Create the PayPal Sandbox Order v2 using Business Sandbox credentials
     const paypalRes = await paypalIntegration.createOrder({

@@ -2491,11 +2491,22 @@ apiRouter.post('/ecommerce/checkout/validate', requireAuth, async (req: Authenti
 
 apiRouter.post('/ecommerce/orders/create-paypal-order', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { shippingAddress, items, notes } = req.body || {};
+    const { shippingAddress, items, notes, customReturnUrl, customCancelUrl } = req.body || {};
+    let finalReturnUrl = customReturnUrl as string | undefined;
+    let finalCancelUrl = customCancelUrl as string | undefined;
+
+    if (!finalReturnUrl && req.headers.host?.includes('.onrender.com')) {
+      const frontendOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+      finalReturnUrl = `${frontendOrigin}/?tab=smart-purchases&view=checkout-success`;
+      finalCancelUrl = `${frontendOrigin}/?tab=smart-purchases&view=checkout-cancelled`;
+    }
+
     const result = await ecommerceService.createCheckoutOrder(req.userId!, {
       shippingAddress,
       items,
       notes,
+      customReturnUrl: finalReturnUrl,
+      customCancelUrl: finalCancelUrl,
     });
     res.json({
       success: true,

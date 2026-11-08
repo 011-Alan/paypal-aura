@@ -56,6 +56,10 @@ export const EcommerceCheckout: React.FC<EcommerceCheckoutProps> = ({
     setIsSubmitting(true);
     setErrorMessage('');
     try {
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const customReturnUrl = `${currentOrigin}/?tab=smart-purchases&view=checkout-success`;
+      const customCancelUrl = `${currentOrigin}/?tab=smart-purchases&view=checkout-cancelled`;
+
       // 1. Create order & PayPal order via backend
       const res = await apiRequest<{
         success: boolean;
@@ -71,6 +75,8 @@ export const EcommerceCheckout: React.FC<EcommerceCheckoutProps> = ({
             quantity: it.quantity,
             selectedVariant: it.selectedVariant,
           })),
+          customReturnUrl,
+          customCancelUrl,
         }),
       });
 
