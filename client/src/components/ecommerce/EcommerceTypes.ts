@@ -124,6 +124,7 @@ export interface EcommerceOrder {
     isSimulated: boolean;
     paypalTrackerId?: string;
     trackingSyncStatus?: 'not_synced' | 'synced' | 'failed';
+    trackingSyncError?: string;
   };
   statusHistory: EcommerceStatusHistory[];
   isSimulatedStore: boolean;

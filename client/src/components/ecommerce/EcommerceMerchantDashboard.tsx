@@ -135,7 +135,13 @@ export const EcommerceMerchantDashboard: React.FC = () => {
       );
 
       setSelectedOrder(res.order);
-      setUpdateSuccess(res.message || 'Fulfillment status updated successfully.');
+      if (res.order?.shipment?.trackingSyncStatus === 'failed' && res.order?.shipment?.trackingSyncError) {
+        setUpdateError(`Order updated locally in store, but PayPal rejected tracking sync: ${res.order.shipment.trackingSyncError}`);
+      } else if (res.order?.shipment?.trackingSyncStatus === 'synced') {
+        setUpdateSuccess(`Order updated and successfully synced to PayPal! (Tracker ID: ${res.order.shipment.paypalTrackerId})`);
+      } else {
+        setUpdateSuccess(res.message || 'Fulfillment status updated successfully.');
+      }
       fetchMerchantData();
     } catch (err: any) {
       setUpdateError(err?.message || 'Failed to update order fulfillment.');

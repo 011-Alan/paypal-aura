@@ -801,14 +801,17 @@ export class EcommerceService {
         if (paypalTrackingRes.success) {
           order.shipment.paypalTrackerId = paypalTrackingRes.trackerId;
           order.shipment.trackingSyncStatus = 'synced';
+          order.shipment.trackingSyncError = undefined;
         } else {
           order.shipment.trackingSyncStatus = 'failed';
+          order.shipment.trackingSyncError = paypalTrackingRes.error;
           logger.warn('EcommerceService', 'PayPal shipment tracking API notice', {
             error: paypalTrackingRes.error,
           });
         }
       } catch (err: any) {
         order.shipment.trackingSyncStatus = 'failed';
+        order.shipment.trackingSyncError = err?.message;
         logger.warn('EcommerceService', 'Error syncing tracking to PayPal', { error: err?.message });
       }
     }

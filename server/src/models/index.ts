@@ -1010,6 +1010,7 @@ export interface IEcommerceShipment {
   isSimulated: boolean;
   paypalTrackerId?: string;
   trackingSyncStatus?: 'not_synced' | 'synced' | 'failed';
+  trackingSyncError?: string;
 }
 
 export interface IEcommerceStatusHistory {
@@ -1133,6 +1134,7 @@ const EcommerceOrderSchema = new Schema<IEcommerceOrder>(
         enum: ['not_synced', 'synced', 'failed'],
         default: 'not_synced',
       },
+      trackingSyncError: { type: String },
     },
     statusHistory: [
       {
