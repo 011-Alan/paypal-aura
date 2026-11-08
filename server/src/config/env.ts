@@ -9,12 +9,9 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '4000', 10),
   get CLIENT_ORIGIN(): string {
-    if (process.env.CLIENT_ORIGIN) return process.env.CLIENT_ORIGIN;
+    if (process.env.CLIENT_ORIGIN) return process.env.CLIENT_ORIGIN.replace(/\/+$/, '');
     if (process.env.RENDER_EXTERNAL_URL) {
-      return process.env.RENDER_EXTERNAL_URL
-        .replace('aura-backend-api', 'aura-frontend')
-        .replace('-backend-api', '-frontend')
-        .replace('-backend', '-frontend');
+      return 'https://aura-frontend-izl2.onrender.com';
     }
     return 'http://localhost:5173';
   },

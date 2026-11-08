@@ -67,6 +67,35 @@ import { logger } from '../config/logger';
 
 export const apiRouter = Router();
 
+export function resolveFrontendOrigin(req: Request): string {
+  // 1. If explicitly set in environment (non-localhost)
+  if (process.env.CLIENT_ORIGIN && !process.env.CLIENT_ORIGIN.includes('localhost')) {
+    return process.env.CLIENT_ORIGIN.replace(/\/+$/, '');
+  }
+  // 2. Browser origin header if valid and non-local
+  const origin = req.headers.origin as string | undefined;
+  if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+    return origin.replace(/\/+$/, '');
+  }
+  // 3. Browser referer header if valid and non-local
+  if (req.headers.referer) {
+    try {
+      const refUrl = new URL(req.headers.referer);
+      if (!refUrl.origin.includes('localhost') && !refUrl.origin.includes('127.0.0.1')) {
+        return refUrl.origin.replace(/\/+$/, '');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  // 4. If on Render or production host, use exact deployed frontend URL
+  if (req.headers.host?.includes('.onrender.com') || process.env.RENDER_EXTERNAL_URL) {
+    return 'https://aura-frontend-izl2.onrender.com';
+  }
+  // 5. env.CLIENT_ORIGIN fallback or local dev
+  return env.CLIENT_ORIGIN || 'http://localhost:5173';
+}
+
 // Helper to sanitize user response (never expose passwordHash or pinHash)
 function sanitizeUser(u: any) {
   const normCurrency = (u.currency && u.currency !== 'INR') ? u.currency : 'USD';
@@ -457,15 +486,8 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
 
     const action = (req.query.action as any) || 'continue';
     let clientOrigin = (req.query.client_origin as string) || (req.headers.origin as string);
-    if (!clientOrigin && req.headers.referer) {
-      try {
-        clientOrigin = new URL(req.headers.referer).origin;
-      } catch {
-        // ignore invalid referer
-      }
-    }
-    if ((!clientOrigin || clientOrigin.includes('localhost') || clientOrigin.includes('127.0.0.1')) && req.headers.host?.includes('.onrender.com')) {
-      clientOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+    if (!clientOrigin || clientOrigin.includes('localhost') || clientOrigin.includes('127.0.0.1')) {
+      clientOrigin = resolveFrontendOrigin(req);
     }
 
     const { url, state, nonce } = paypalIdentityService.getAuthorizationUrl({
@@ -494,18 +516,18 @@ apiRouter.get('/auth/paypal/authorize', async (req: Request, res: Response) => {
 apiRouter.get('/auth/paypal/callback', async (req: Request, res: Response) => {
   const { code, state, error, error_description } = req.query;
 
-  // Dynamically resolve target frontend origin from verified state payload
-  let targetOrigin = env.CLIENT_ORIGIN;
+  // Dynamically resolve target frontend origin from verified state payload or request
+  let targetOrigin = '';
   if (state && typeof state === 'string') {
     const verifiedState = paypalIdentityService.verifyOAuthState(state);
-    if (verifiedState.payload?.clientOrigin) {
+    if (verifiedState.payload?.clientOrigin && !verifiedState.payload.clientOrigin.includes('localhost') && !verifiedState.payload.clientOrigin.includes('127.0.0.1')) {
       targetOrigin = verifiedState.payload.clientOrigin;
     }
   }
 
-  // Fallback safeguard: on Render, never redirect browser back to localhost
-  if ((!targetOrigin || targetOrigin.includes('localhost') || targetOrigin.includes('127.0.0.1')) && req.headers.host?.includes('.onrender.com')) {
-    targetOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+  // Fallback safeguard: resolve to verified frontend origin
+  if (!targetOrigin || targetOrigin.includes('localhost') || targetOrigin.includes('127.0.0.1')) {
+    targetOrigin = resolveFrontendOrigin(req);
   }
 
   if (error) {
@@ -2502,8 +2524,8 @@ apiRouter.post('/ecommerce/orders/create-paypal-order', requireAuth, async (req:
     let finalReturnUrl = customReturnUrl as string | undefined;
     let finalCancelUrl = customCancelUrl as string | undefined;
 
-    if (!finalReturnUrl && req.headers.host?.includes('.onrender.com')) {
-      const frontendOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+    if (!finalReturnUrl) {
+      const frontendOrigin = resolveFrontendOrigin(req);
       finalReturnUrl = `${frontendOrigin}/?tab=smart-purchases&view=checkout-success`;
       finalCancelUrl = `${frontendOrigin}/?tab=smart-purchases&view=checkout-cancelled`;
     }
@@ -2774,8 +2796,8 @@ apiRouter.post('/payments/:id/paypal-order', requireAuth, async (req: Authentica
 
     let customReturnUrl = req.body?.customReturnUrl as string | undefined;
     let customCancelUrl = req.body?.customCancelUrl as string | undefined;
-    if (!customReturnUrl && req.headers.host?.includes('.onrender.com')) {
-      const frontendOrigin = 'https://' + req.headers.host.replace('aura-backend-api', 'aura-frontend').replace('-backend-api', '-frontend').replace('-backend', '-frontend');
+    if (!customReturnUrl) {
+      const frontendOrigin = resolveFrontendOrigin(req);
       customReturnUrl = `${frontendOrigin}/payments?status=approved`;
       customCancelUrl = `${frontendOrigin}/payments?status=cancelled`;
     }

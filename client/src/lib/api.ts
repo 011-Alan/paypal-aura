@@ -3,6 +3,9 @@
 function getApiBase(): string {
   let rawUrl = (import.meta.env?.VITE_API_URL || '').trim();
   if (!rawUrl) {
+    if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+      return 'https://aura-backend-api-88nx.onrender.com/api';
+    }
     return '/api';
   }
   // If protocol not present, add https://
