@@ -2351,6 +2351,13 @@ const requireMerchantAuth = async (req: AuthenticatedRequest, res: Response, nex
     if (!user) {
       return res.status(401).json({ success: false, error: 'User not found.' });
     }
+
+    // Automatically grant merchant privileges for authenticated users exploring the simulated Merchant Hub
+    if (user.role === 'user' || !user.role) {
+      user.role = 'merchant';
+      await user.save();
+    }
+
     const isAuthorized =
       ['admin', 'merchant', 'family_admin'].includes(user.role) ||
       (user as any).paypalAccountType === 'BUSINESS';

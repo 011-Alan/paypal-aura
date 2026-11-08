@@ -1170,6 +1170,15 @@ export class PayPalIdentityService {
           if (tokens.expires_at) existingPayPalUser.paypalTokenExpiresAt = tokens.expires_at;
           if (grantedScopes) existingPayPalUser.paypalGrantedScopes = grantedScopes;
           existingPayPalUser.paypalLastSyncAt = new Date();
+          const isBusiness = Boolean(
+            (userInfo as any)?.account_type === 'BUSINESS' ||
+            (idTokenClaims as any)?.account_type === 'BUSINESS' ||
+            businessName ||
+            (paypalEmail && (paypalEmail.includes('business') || paypalEmail.includes('merchant')))
+          );
+          if (isBusiness || existingPayPalUser.role === 'user') {
+            existingPayPalUser.role = isBusiness ? 'merchant' : 'family_admin';
+          }
           if (parsedAddress && Object.values(parsedAddress).some(Boolean)) {
             existingPayPalUser.paypalAddress = parsedAddress;
           }
@@ -1208,12 +1217,19 @@ export class PayPalIdentityService {
           const passwordHash = await hashSecretArgon2id(secureRandomPassword);
           const pinHash = await hashSecretArgon2id(secureRandomPin);
 
+          const isBusiness = Boolean(
+            (userInfo as any)?.account_type === 'BUSINESS' ||
+            (idTokenClaims as any)?.account_type === 'BUSINESS' ||
+            businessName ||
+            (paypalEmail && (paypalEmail.includes('business') || paypalEmail.includes('merchant')))
+          );
+
           const newUser = await UserModel.create({
             name,
             email: paypalEmail || `paypal-${crypto.randomBytes(4).toString('hex')}@user.aura`,
             passwordHash,
             pinHash,
-            role: 'user',
+            role: isBusiness ? 'merchant' : 'family_admin',
             currency: 'USD',
             monthlyIncome: 5000,
             familyGroupId: `aura-family-${Date.now()}`,
