@@ -330,17 +330,41 @@ export class PayPalIntegrationService {
       const accessToken = await this.getAccessToken();
 
       // Official PayPal POST /v1/shipping/trackers
-      const payload: any = {
-        trackers: [
-          {
-            transaction_id: params.captureId || params.orderId,
-            tracking_number: params.trackingNumber,
-            status: params.status || 'SHIPPED',
-            carrier: params.carrier,
-            carrier_name_other: params.carrier,
-            notify_buyer: params.notifyBuyer ?? true,
-          },
-        ],
+      // Normalize carrier to PayPal enum: FEDEX, UPS, USPS, DHL, or OTHER with carrier_name_other
+      const upperCarrier = (params.carrier || 'OTHER').toUpperCase().trim();
+      let carrierEnum = 'OTHER';
+      let carrierNameOther: string | undefined = params.carrier;
+
+      if (upperCarrier.includes('FEDEX')) {
+        carrierEnum = 'FEDEX';
+        carrierNameOther = undefined;
+      } else if (upperCarrier.includes('UPS')) {
+        carrierEnum = 'UPS';
+        carrierNameOther = undefined;
+      } else if (upperCarrier.includes('USPS')) {
+        carrierEnum = 'USPS';
+        carrierNameOther = undefined;
+      } else if (upperCarrier.includes('DHL')) {
+        carrierEnum = 'DHL';
+        carrierNameOther = undefined;
+      } else {
+        carrierEnum = 'OTHER';
+        carrierNameOther = params.carrier || 'Standard Courier';
+      }
+
+      const trackerItem: any = {
+        transaction_id: params.captureId || params.orderId,
+        tracking_number: params.trackingNumber,
+        status: params.status || 'SHIPPED',
+        carrier: carrierEnum,
+        notify_buyer: params.notifyBuyer ?? true,
+      };
+      if (carrierNameOther) {
+        trackerItem.carrier_name_other = carrierNameOther;
+      }
+
+      const payload = {
+        trackers: [trackerItem],
       };
 
       const resp = await fetch(`${env.PAYPAL_BASE_URL}/v1/shipping/trackers`, {
