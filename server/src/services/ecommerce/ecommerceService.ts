@@ -537,11 +537,59 @@ export class EcommerceService {
   }
 
   /**
+   * Synchronizes an order's tracking status from PayPal's Tracker API if available.
+   */
+  private async syncOrderTrackingFromPayPal(order: IEcommerceOrder): Promise<IEcommerceOrder> {
+    const txId = order.paymentInfo?.paypalCaptureId || order.paymentInfo?.paypalOrderId;
+    if (!txId || ['shipped', 'out_for_delivery', 'delivered'].includes(order.fulfillmentStatus)) {
+      return order;
+    }
+    try {
+      const tracker = await paypalIntegration.getShipmentTracking(txId);
+      if (tracker && tracker.tracking_number) {
+        order.fulfillmentStatus = tracker.status?.toLowerCase() === 'delivered' ? 'delivered' : 'shipped';
+        order.shipment = {
+          carrier: tracker.carrier || tracker.carrier_name_other || 'Courier',
+          trackingNumber: tracker.tracking_number,
+          shippedAt: tracker.shipment_date ? new Date(tracker.shipment_date) : new Date(),
+          estimatedDeliveryAt: new Date(Date.now() + 3 * 86400000),
+          isSimulated: false,
+          paypalTrackerId: tracker.tracker_id,
+          trackingSyncStatus: 'synced',
+          notes: 'Shipment tracking information synchronized from PayPal Business Dashboard.',
+        };
+        order.statusHistory.push({
+          status: order.fulfillmentStatus,
+          timestamp: new Date(),
+          notes: `Tracking updated directly on PayPal: ${tracker.carrier || 'Courier'} #${tracker.tracking_number}`,
+          carrier: tracker.carrier || tracker.carrier_name_other,
+          trackingNumber: tracker.tracking_number,
+          updatedBy: 'PayPal Merchant Action',
+        });
+        await order.save();
+      }
+    } catch {
+      // Ignore background sync errors
+    }
+    return order;
+  }
+
+  /**
    * Retrieves orders for an authenticated customer.
    */
   async getCustomerOrders(userId: string): Promise<IEcommerceOrder[]> {
     const userObjId = new mongoose.Types.ObjectId(userId);
-    return EcommerceOrderModel.find({ userId: userObjId }).sort({ createdAt: -1 });
+    const orders = await EcommerceOrderModel.find({ userId: userObjId }).sort({ createdAt: -1 });
+
+    // Sync any un-shipped paid orders with PayPal's Tracker API
+    return Promise.all(
+      orders.map((ord) => {
+        if (ord.paymentInfo?.paymentStatus === 'completed' && !['shipped', 'out_for_delivery', 'delivered'].includes(ord.fulfillmentStatus)) {
+          return this.syncOrderTrackingFromPayPal(ord);
+        }
+        return ord;
+      })
+    );
   }
 
   /**
@@ -564,6 +612,11 @@ export class EcommerceService {
     if (!order) {
       throw new Error('Order not found or you do not have permission to view it.');
     }
+
+    if (order.paymentInfo?.paymentStatus === 'completed' && !['shipped', 'out_for_delivery', 'delivered'].includes(order.fulfillmentStatus)) {
+      return this.syncOrderTrackingFromPayPal(order);
+    }
+
     return order;
   }
 

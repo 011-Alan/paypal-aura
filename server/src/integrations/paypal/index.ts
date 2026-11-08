@@ -381,6 +381,32 @@ export class PayPalIntegrationService {
   }
 
   /**
+   * Retrieves shipment tracking information for a transaction from PayPal's Tracker API.
+   */
+  async getShipmentTracking(transactionId: string): Promise<any | null> {
+    if (!this.isConfigured() || !transactionId) return null;
+    try {
+      const accessToken = await this.getAccessToken();
+      const resp = await fetch(
+        `${env.PAYPAL_BASE_URL}/v1/shipping/trackers?transaction_id=${encodeURIComponent(transactionId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      if (resp.ok) {
+        const data: any = await resp.json();
+        return data?.trackers?.[0] || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Verifies a PayPal Webhook event signature against /v1/notifications/verify-webhook-signature
    * and APIMatic's webhook contract specification.
    */
