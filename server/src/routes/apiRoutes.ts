@@ -31,10 +31,12 @@ import {
 import {
   ensureDemoUserAlexSeeded,
   ensureDemoUserMayaSeeded,
+  ensureDemoMerchantBruceSeeded,
   getDemoPersonas,
   DEMO_ALEX_CREDENTIALS,
   DEMO_PRIYA_CREDENTIALS,
   DEMO_MAYA_CREDENTIALS,
+  DEMO_BRUCE_CREDENTIALS,
 } from '../seed/seedService';
 import { coreFinancialService } from '../services/financial/financialService';
 import { pythonAnalyticsService } from '../services/analytics/analyticsService';
@@ -432,6 +434,10 @@ apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
       const resMaya = await ensureDemoUserMayaSeeded(false);
       targetUser = resMaya.user;
       targetCreds = DEMO_MAYA_CREDENTIALS;
+    } else if (persona === 'bruce') {
+      const resBruce = await ensureDemoMerchantBruceSeeded(false);
+      targetUser = resBruce.user;
+      targetCreds = DEMO_BRUCE_CREDENTIALS;
     } else {
       // Default to Alex
       const resAlex = await ensureDemoUserAlexSeeded(false);
@@ -457,6 +463,47 @@ apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Demo persona switch failed' });
+  }
+});
+
+apiRouter.post('/auth/account-type', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { accountType } = req.body || {};
+    if (!accountType || !['personal', 'business'].includes(accountType)) {
+      return res.status(400).json({ success: false, error: 'Invalid accountType. Must be "personal" or "business".' });
+    }
+    const user = await UserModel.findById(req.userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found.' });
+
+    user.accountType = accountType;
+    if (accountType === 'business') {
+      user.role = 'merchant';
+      const existingAccount = await AccountModel.findOne({ userId: user._id, name: /Merchant/i });
+      if (!existingAccount) {
+        await AccountModel.create({
+          userId: user._id,
+          name: `${user.name} Merchant Settlement`,
+          institution: 'PayPal Sandbox Business Account',
+          type: 'checking',
+          accountNumberMasked: user.email,
+          balance: 0,
+          currency: 'USD',
+          isSharedWithFamily: false,
+          status: 'active',
+        });
+      }
+    } else if (user.role === 'merchant') {
+      user.role = 'user';
+    }
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Account type successfully updated to ${accountType}.`,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 
@@ -1245,14 +1292,78 @@ apiRouter.put('/accounts/:id', requireAuth, async (req: AuthenticatedRequest, re
 // ============================================================================
 apiRouter.get('/transactions', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const transactions = await TransactionModel.find({ userId: req.userId }).sort({ date: -1 });
+    const query: Record<string, any> = { userId: req.userId };
+    const { direction, type, status, category, dateFrom, dateTo, search, onlyUnusual, limit, offset } = req.query;
+
+    if (direction && direction !== 'all') {
+      if (direction === 'sent') {
+        query.$or = [{ direction: 'outgoing' }, { type: 'expense' }];
+      } else if (direction === 'received') {
+        query.$or = [{ direction: 'incoming' }, { type: 'income' }];
+      } else {
+        query.direction = direction;
+      }
+    }
+
+    if (type && type !== 'all') {
+      query.type = type;
+    }
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (category && category !== 'all') {
+      query.category = { $regex: String(category).trim(), $options: 'i' };
+    }
+
+    if (dateFrom || dateTo) {
+      query.date = {};
+      if (dateFrom) query.date.$gte = new Date(String(dateFrom));
+      if (dateTo) query.date.$lte = new Date(String(dateTo));
+    }
+
+    if (onlyUnusual === 'true') {
+      query.isUnusual = true;
+    }
+
+    if (search && String(search).trim()) {
+      const q = String(search).trim();
+      query.$or = [
+        { merchant: { $regex: q, $options: 'i' } },
+        { description: { $regex: q, $options: 'i' } },
+        { counterparty: { $regex: q, $options: 'i' } },
+        { paypalCaptureId: { $regex: q, $options: 'i' } },
+        { paypalOrderId: { $regex: q, $options: 'i' } },
+        { orderNumber: { $regex: q, $options: 'i' } },
+        { category: { $regex: q, $options: 'i' } },
+      ];
+    }
+
+    const total = await TransactionModel.countDocuments(query);
+    const transactions = await TransactionModel.find(query)
+      .sort({ date: -1 })
+      .limit(limit ? Number(limit) : 200)
+      .skip(offset ? Number(offset) : 0);
+
+    // Compute sent/received aggregates for spending intelligence
+    const allUserTxs = await TransactionModel.find({ userId: req.userId }).sort({ date: -1 });
+    const totalSent = allUserTxs
+      .filter((t) => t.type === 'expense' || t.direction === 'outgoing')
+      .reduce((s, t) => s + t.amount, 0);
+    const totalReceived = allUserTxs
+      .filter((t) => t.type === 'income' || t.direction === 'incoming')
+      .reduce((s, t) => s + t.amount, 0);
+    const sentCount = allUserTxs.filter((t) => t.type === 'expense' || t.direction === 'outgoing').length;
+    const receivedCount = allUserTxs.filter((t) => t.type === 'income' || t.direction === 'incoming').length;
+
     const filterCmd = {
-      categoryFilter: req.query.category ? [String(req.query.category)] : undefined,
-      typeFilter: req.query.type as any,
-      dateFrom: req.query.dateFrom ? String(req.query.dateFrom) : undefined,
-      dateTo: req.query.dateTo ? String(req.query.dateTo) : undefined,
-      onlyUnusual: req.query.onlyUnusual === 'true',
-      searchQuery: req.query.search ? String(req.query.search) : undefined,
+      categoryFilter: category ? [String(category)] : undefined,
+      typeFilter: type as any,
+      dateFrom: dateFrom ? String(dateFrom) : undefined,
+      dateTo: dateTo ? String(dateTo) : undefined,
+      onlyUnusual: onlyUnusual === 'true',
+      searchQuery: search ? String(search) : undefined,
     };
 
     const agGridPayload = agGridIntegration.buildGridAnalyticsPayload(transactions, filterCmd);
@@ -1267,6 +1378,15 @@ apiRouter.get('/transactions', requireAuth, async (req: AuthenticatedRequest, re
       agGrid: agGridPayload,
       pythonAnalytics,
       transactions,
+      total,
+      summary: {
+        totalTransactions: allUserTxs.length,
+        totalSent,
+        totalReceived,
+        sentCount,
+        receivedCount,
+        netCashFlow: totalReceived - totalSent,
+      },
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
@@ -1739,6 +1859,24 @@ apiRouter.get('/calendar', requireAuth, async (req: AuthenticatedRequest, res: R
       req.query.start ? String(req.query.start) : undefined,
       req.query.end ? String(req.query.end) : undefined
     );
+    res.json(dataset);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/calendar/gantt-roadmap', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const dataset = await bryntumIntegration.getBryntumGanttRoadmap(req.userId!);
+    res.json(dataset);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/calendar/scheduler-commitments', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const dataset = await bryntumIntegration.getBryntumSchedulerCommitments(req.userId!);
     res.json(dataset);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
@@ -2374,20 +2512,15 @@ const requireMerchantAuth = async (req: AuthenticatedRequest, res: Response, nex
       return res.status(401).json({ success: false, error: 'User not found.' });
     }
 
-    // Automatically grant merchant privileges for authenticated users exploring the simulated Merchant Hub
-    if (user.role === 'user' || !user.role) {
-      user.role = 'merchant';
-      await user.save();
-    }
-
     const isAuthorized =
-      ['admin', 'merchant', 'family_admin'].includes(user.role) ||
-      (user as any).paypalAccountType === 'BUSINESS';
+      user.accountType === 'business' ||
+      user.role === 'merchant' ||
+      user.role === 'admin';
 
     if (!isAuthorized) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied: Merchant or Store Administrator privileges are required to access this dashboard.',
+        error: 'Access denied: Merchant or Business account privileges are required to access this dashboard. Regular personal accounts cannot access merchant operations.',
       });
     }
     next();
@@ -2424,6 +2557,55 @@ apiRouter.get('/ecommerce/products/:id', async (req: Request, res: Response) => 
     res.json({ success: true, product });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ecommerce/products/compare', async (req: Request, res: Response) => {
+  try {
+    const { productIds, userId } = req.body || {};
+    if (!Array.isArray(productIds) || productIds.length < 2) {
+      return res.status(400).json({ success: false, error: 'productIds array with at least 2 items is required.' });
+    }
+
+    let financialContext: any = null;
+    const targetUserId = userId || (req as any).userId;
+    if (targetUserId) {
+      try {
+        const plan = await FinancialPlanModel.findOne({ userId: targetUserId }).sort({ createdAt: -1 });
+        financialContext = {
+          availableDiscretionaryBudgetInr: plan?.totalDiscretionaryBudget || 25000,
+        };
+      } catch {
+        // optional financial context
+      }
+    }
+
+    const comparison = await channel3Integration.compareProducts(productIds, financialContext);
+    res.json({ success: true, ...comparison });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/ecommerce/products/:id/click', async (req: Request, res: Response) => {
+  try {
+    const { merchantName, monetizableUrl } = req.body || {};
+    await recordAuditLog({
+      actor: 'channel3_shopper',
+      action: 'channel3_monetizable_link_click',
+      resourceType: 'product_offer',
+      resourceId: req.params.id,
+      status: 'success',
+      details: {
+        productId: req.params.id,
+        merchantName,
+        monetizableUrl,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    res.json({ success: true, recorded: true });
+  } catch {
+    res.json({ success: true, recorded: false });
   }
 });
 
@@ -2595,6 +2777,27 @@ apiRouter.get('/ecommerce/merchant/overview', requireAuth, requireMerchantAuth, 
   try {
     const overview = await ecommerceService.getMerchantOverview();
     res.json({ success: true, overview });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.get('/ecommerce/merchant/received-payments', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const query: Record<string, any> = {
+      userId: req.userId,
+      $or: [{ direction: 'incoming' }, { type: 'income' }],
+    };
+    const payments = await TransactionModel.find(query).sort({ date: -1 });
+    const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    res.json({
+      success: true,
+      totalCount: payments.length,
+      totalAmount: totalReceived,
+      currency: 'USD',
+      payments,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
   }

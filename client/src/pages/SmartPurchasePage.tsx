@@ -40,7 +40,8 @@ const PRESET_SHOPPING_PROMPTS = [
 ];
 
 export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
-  const { balancesVisible, user } = useAuth();
+  const { balancesVisible, user, switchAccountType, switchDemoPersona } = useAuth();
+  const isMerchantAuthorized = user?.accountType === 'business' || user?.role === 'merchant' || user?.role === 'admin';
 
   // Navigation tab state: 'storefront' | 'my-purchases' | 'merchant-hub' | 'affordability'
   const [activeTab, setActiveTab] = useState<'storefront' | 'my-purchases' | 'merchant-hub' | 'affordability'>('storefront');
@@ -454,6 +455,11 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
               }`}
             >
               🏪 Merchant Hub
+              {!isMerchantAuthorized && (
+                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-200 dark:bg-slate-700 text-slate-500 font-bold">
+                  Business
+                </span>
+              )}
             </button>
 
             <button
@@ -574,7 +580,58 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
         /* ======================================================================= */
         /* 5. MERCHANT DASHBOARD & MANUAL FULFILLMENT                              */
         /* ======================================================================= */
-        <EcommerceMerchantDashboard />
+        isMerchantAuthorized ? (
+          <EcommerceMerchantDashboard />
+        ) : (
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xs max-w-2xl mx-auto text-center space-y-5 animate-fadeIn">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-navy-900 dark:text-white">
+                Merchant Operations Hub Restricted
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed mt-1">
+                The Merchant Fulfillment Hub, AG Grid Received Payments explorer, and Bryntum TaskBoard are isolated strictly to verified Business and Merchant accounts. You are currently signed in as a <span className="font-bold text-navy-900 dark:text-white">Personal Account ({user?.email})</span>.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-left space-y-3">
+              <span className="font-bold text-navy-900 dark:text-white uppercase tracking-wider text-[11px]">
+                Authorized Merchant Access Options:
+              </span>
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200">Switch to Verified Merchant Persona</div>
+                    <div className="text-[11px] text-slate-400">Log in as Bruce Wayne (Wayne Enterprises • Verified Business Account)</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => switchDemoPersona('bruce')}
+                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition self-start sm:self-center"
+                  >
+                    Switch to Bruce
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200">Upgrade Current Account to Business</div>
+                    <div className="text-[11px] text-slate-400">Upgrades accountType to 'business' and provisions a Merchant Settlement account</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => switchAccountType('business')}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition self-start sm:self-center"
+                  >
+                    Upgrade to Business
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       ) : (
         /* ======================================================================= */
         /* 6. ORIGINAL AFFORDABILITY EVALUATION LAB                                */

@@ -11,10 +11,14 @@ import {
   CheckCircle2,
   Database,
   RotateCcw,
+  BarChart3,
+  Layers,
+  ArrowUpDown,
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { SpendingIntelligence } from '../components/SpendingIntelligence';
 
 const PRESET_NL_QUERIES = [
   'Show my dining expenditure over the last three months.',
@@ -25,6 +29,7 @@ const PRESET_NL_QUERIES = [
 
 export const SpendingPage: React.FC = () => {
   const { balancesVisible } = useAuth();
+  const [spendingView, setSpendingView] = useState<'intelligence' | 'aggrid'>('intelligence');
   const [agGridData, setAgGridData] = useState<any>(null);
   const [pythonAnalytics, setPythonAnalytics] = useState<any>(null);
   const [nlQuery, setNlQuery] = useState('');
@@ -213,8 +218,46 @@ export const SpendingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Natural-Language Analytics Header (AG Grid + Gemini + Elastic) */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
+      {/* Experience Mode Switcher */}
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-2xl p-2 border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSpendingView('intelligence')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              spendingView === 'intelligence'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Spending Intelligence
+          </button>
+          <button
+            onClick={() => setSpendingView('aggrid')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              spendingView === 'aggrid'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            AG Grid Transactions Explorer
+          </button>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 pr-3">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Real-time Ledger Analysis</span>
+        </div>
+      </div>
+
+      {/* Render View */}
+      {spendingView === 'intelligence' ? (
+        <SpendingIntelligence />
+      ) : (
+        <>
+          {/* Natural-Language Analytics Header (AG Grid + Gemini + Elastic) */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold text-navy-900 dark:text-white">
@@ -404,6 +447,8 @@ export const SpendingPage: React.FC = () => {
           ))}
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

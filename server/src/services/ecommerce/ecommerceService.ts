@@ -10,9 +10,14 @@ import {
   IEcommerceShippingAddress,
   FulfillmentStatus,
   UserModel,
+  AccountModel,
+  TransactionModel,
+  CalendarEventModel,
 } from '../../models';
 import { channel3Integration, Channel3ProductItem } from '../../integrations/channel3';
 import { paypalIntegration } from '../../integrations/paypal';
+import { elasticIntegration } from '../../integrations/elastic';
+import { bryntumIntegration } from '../../integrations/bryntum';
 import { recordAuditLog } from '../../middleware/security';
 
 export class EcommerceService {
@@ -506,6 +511,91 @@ export class EcommerceService {
 
     // Clear user's shopping cart upon successful payment
     await CartModel.findOneAndUpdate({ userId: order.userId }, { $set: { items: [] } });
+
+    // 1. Customer Outgoing Payment Record & Account Deduction
+    try {
+      const customerAccount = await AccountModel.findOne({ userId: order.userId, status: 'active' }).sort({ balance: -1 });
+      if (customerAccount) {
+        customerAccount.balance = Math.max(0, Math.round((customerAccount.balance - order.totalAmount) * 100) / 100);
+        customerAccount.lastSyncedAt = new Date();
+        await customerAccount.save();
+      }
+
+      const customerTx = await TransactionModel.create({
+        userId: order.userId,
+        accountId: customerAccount?._id || new mongoose.Types.ObjectId(),
+        accountName: customerAccount?.name || 'PayPal Linked Checking',
+        date: new Date(),
+        merchant: 'AURA Store',
+        counterparty: 'AURA Demo Store',
+        description: `AURA Store Purchase — Order #${order.orderNumber} (${order.items.map((i) => i.name).slice(0, 2).join(', ')})`,
+        category: 'Shopping',
+        type: 'expense',
+        direction: 'outgoing',
+        amount: order.totalAmount,
+        currency: 'USD',
+        status: 'completed',
+        paymentMethod: 'paypal',
+        isRecurring: false,
+        paypalOrderId: order.paymentInfo?.paypalOrderId,
+        paypalCaptureId: captureRes.captureId,
+        associatedOrderId: String(order._id),
+        orderNumber: order.orderNumber,
+        tags: ['ecommerce', 'paypal-sandbox', 'order-paid', 'channel3-store'],
+      });
+
+      // 2. Merchant Incoming Payment Record & Account Credit
+      const merchantUser = await UserModel.findOne({
+        $or: [
+          { email: env.PAYPAL_MERCHANT_EMAIL },
+          { email: 'bruce_wayne@business.example.com' },
+          { accountType: 'business' },
+          { role: 'merchant' },
+        ],
+      });
+
+      if (merchantUser) {
+        let merchantAccount = await AccountModel.findOne({ userId: merchantUser._id, name: /Merchant/i });
+        if (!merchantAccount) {
+          merchantAccount = await AccountModel.findOne({ userId: merchantUser._id, status: 'active' });
+        }
+        if (merchantAccount) {
+          merchantAccount.balance = Math.round((merchantAccount.balance + order.totalAmount) * 100) / 100;
+          merchantAccount.lastSyncedAt = new Date();
+          await merchantAccount.save();
+        }
+
+        await TransactionModel.create({
+          userId: merchantUser._id,
+          accountId: merchantAccount?._id || new mongoose.Types.ObjectId(),
+          accountName: merchantAccount?.name || 'Wayne Enterprises Merchant Settlement',
+          date: new Date(),
+          merchant: order.customerName || payerName || 'AURA Customer',
+          counterparty: order.customerEmail || 'Customer',
+          description: `Customer Payment Received — Order #${order.orderNumber}`,
+          category: 'Income',
+          type: 'income',
+          direction: 'incoming',
+          amount: order.totalAmount,
+          currency: 'USD',
+          status: 'completed',
+          paymentMethod: 'paypal',
+          isRecurring: false,
+          paypalOrderId: order.paymentInfo?.paypalOrderId,
+          paypalCaptureId: captureRes.captureId,
+          associatedOrderId: String(order._id),
+          orderNumber: order.orderNumber,
+          tags: ['ecommerce-revenue', 'paypal-sandbox', 'merchant-received'],
+        });
+
+        await bryntumIntegration.syncUserFinancialCalendar(String(merchantUser._id)).catch(() => {});
+      }
+
+      await elasticIntegration.syncTransaction(customerTx).catch(() => {});
+      await bryntumIntegration.syncUserFinancialCalendar(String(order.userId)).catch(() => {});
+    } catch (settleErr: any) {
+      logger.warn('EcommerceService', 'Ledger settlement notice', { error: settleErr?.message });
+    }
 
     // Record immutable audit log
     await recordAuditLog({

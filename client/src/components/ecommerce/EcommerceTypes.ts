@@ -1,3 +1,15 @@
+export interface Channel3MerchantOffer {
+  retailerName: string;
+  offerPriceUsd: number;
+  currency: string;
+  inStock: boolean;
+  purchaseUrl: string;
+  deliveryTimeframe?: string;
+  condition?: string;
+  isLowestPrice?: boolean;
+  affiliateAttributionUrl?: string;
+}
+
 export interface EcommerceProduct {
   id: string;
   name: string;
@@ -21,6 +33,10 @@ export interface EcommerceProduct {
   features?: string[];
   rating?: number;
   reviewCount?: number;
+  merchantOffers?: Channel3MerchantOffer[];
+  lowestPriceUsd?: number;
+  highestPriceUsd?: number;
+  merchantOfferCount?: number;
 }
 
 export interface EcommerceCartItem {

@@ -16,9 +16,14 @@ import {
   RefreshCw,
   X,
   FileText,
+  Layers,
+  ArrowDownLeft,
+  ListOrdered,
 } from 'lucide-react';
 import { EcommerceOrder, FulfillmentStatus, MerchantOverview } from './EcommerceTypes';
 import { apiRequest } from '../../lib/api';
+import { BryntumTaskBoardFulfillment } from './BryntumTaskBoardFulfillment';
+import { MerchantReceivedPaymentsAgGrid } from './MerchantReceivedPaymentsAgGrid';
 
 const STAGE_CONFIG: Record<
   FulfillmentStatus,
@@ -35,6 +40,7 @@ const STAGE_CONFIG: Record<
 };
 
 export const EcommerceMerchantDashboard: React.FC = () => {
+  const [merchantTab, setMerchantTab] = useState<'taskboard' | 'received_payments' | 'orders_list'>('taskboard');
   const [overview, setOverview] = useState<MerchantOverview | null>(null);
   const [orders, setOrders] = useState<EcommerceOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -236,8 +242,63 @@ export const EcommerceMerchantDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Orders Filter & Search Toolbar */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+      {/* Merchant Operations Tabs */}
+      <div className="flex flex-wrap items-center gap-2 bg-white dark:bg-slate-900 rounded-2xl p-2 border border-slate-200 dark:border-slate-800 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setMerchantTab('taskboard')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            merchantTab === 'taskboard'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
+              : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          Bryntum TaskBoard Kanban
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMerchantTab('received_payments')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            merchantTab === 'received_payments'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
+              : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+          }`}
+        >
+          <ArrowDownLeft className="w-3.5 h-3.5" />
+          AG Grid Received Payments
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMerchantTab('orders_list')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            merchantTab === 'orders_list'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
+              : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+          }`}
+        >
+          <ListOrdered className="w-3.5 h-3.5" />
+          Orders Detail List
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {merchantTab === 'taskboard' && (
+        <BryntumTaskBoardFulfillment
+          orders={orders}
+          onOrderUpdated={fetchMerchantData}
+          onOpenOrderDetails={openOrderManager}
+        />
+      )}
+
+      {merchantTab === 'received_payments' && <MerchantReceivedPaymentsAgGrid />}
+
+      {merchantTab === 'orders_list' && (
+        <>
+          {/* Orders Filter & Search Toolbar */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <form onSubmit={handleSearchSubmit} className="w-full sm:w-96 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -367,6 +428,8 @@ export const EcommerceMerchantDashboard: React.FC = () => {
           </table>
         </div>
       </div>
+    </>
+  )}
 
       {/* Manual Fulfillment Modal */}
       {selectedOrder && (

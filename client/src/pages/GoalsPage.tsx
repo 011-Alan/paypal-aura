@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Target, Trophy, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Target, Trophy, Plus, Sparkles, CheckCircle2, Layers, LayoutGrid } from 'lucide-react';
 import { apiRequest, formatInr, formatDateShort } from '../lib/api';
+import { FinancialRoadmapPage } from './FinancialRoadmapPage';
 
 export const GoalsPage: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'roadmap' | 'cards'>('roadmap');
   const [goals, setGoals] = useState<any[]>([]);
   const [celebrationMsg, setCelebrationMsg] = useState('');
   const [title, setTitle] = useState('');
@@ -58,12 +60,44 @@ export const GoalsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <h2 className="text-xl font-bold text-navy-900 dark:text-white">Personal &amp; Family Financial Goals</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Track savings progress, celebrate 25% / 50% / 75% / 100% milestones, and synchronise target deadlines with your Financial Life Calendar.
-        </p>
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
+        <div>
+          <h2 className="text-xl font-bold text-navy-900 dark:text-white">Personal &amp; Family Financial Goals</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Track savings progress, celebrate 25% / 50% / 75% / 100% milestones, and synchronise target deadlines with your Bryntum Financial Roadmap.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+          <button
+            onClick={() => setViewMode('roadmap')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+              viewMode === 'roadmap'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Bryntum Gantt Roadmap
+          </button>
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+              viewMode === 'cards'
+                ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Goal Cards
+          </button>
+        </div>
       </div>
+
+      {viewMode === 'roadmap' ? (
+        <FinancialRoadmapPage />
+      ) : (
+        <>
 
       {celebrationMsg && (
         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
@@ -208,6 +242,8 @@ export const GoalsPage: React.FC = () => {
           </button>
         </form>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

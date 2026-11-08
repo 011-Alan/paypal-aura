@@ -6,6 +6,7 @@ export interface UserProfile {
   name: string;
   email: string;
   role: string;
+  accountType?: 'personal' | 'business';
   currency: string;
   preferredCurrency?: string;
   monthlyIncome: number;
@@ -38,7 +39,7 @@ interface AuthContextValue {
   user: UserProfile | null;
   loading: boolean;
   isDemoMode: boolean;
-  activeDemoPersona: 'alex' | 'priya' | 'maya' | null;
+  activeDemoPersona: 'alex' | 'priya' | 'maya' | 'bruce' | null;
   balancesVisible: boolean;
   toggleBalancesVisible: () => void;
   setBalancesVisible: (visible: boolean) => void;
@@ -53,7 +54,8 @@ interface AuthContextValue {
     monthlyIncome: number;
   }) => Promise<void>;
   loginAsDemoAlex: () => Promise<void>;
-  switchDemoPersona: (persona: 'alex' | 'priya' | 'maya') => Promise<void>;
+  switchDemoPersona: (persona: 'alex' | 'priya' | 'maya' | 'bruce') => Promise<void>;
+  switchAccountType: (accountType: 'personal' | 'business') => Promise<void>;
   logout: (reason?: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   formatMoney: (amount: number | undefined | null) => string;
@@ -311,14 +313,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastActivityRef.current = Date.now();
   };
 
-  const switchDemoPersona = async (persona: 'alex' | 'priya' | 'maya') => {
-    const res = await apiRequest('/auth/demo-switch', {
+  const switchDemoPersona = async (persona: 'alex' | 'priya' | 'maya' | 'bruce') => {
+    const res = await apiRequest<{ token: string; user: UserProfile }>('/auth/demo-switch', {
       method: 'POST',
       body: JSON.stringify({ persona }),
     });
     setStoredToken(res.token);
     setUser(res.user);
     lastActivityRef.current = Date.now();
+  };
+
+  const switchAccountType = async (accountType: 'personal' | 'business') => {
+    const res = await apiRequest<{ success: boolean; user: UserProfile }>('/auth/account-type', {
+      method: 'POST',
+      body: JSON.stringify({ accountType }),
+    });
+    if (res.user) {
+      setUser(res.user);
+    }
   };
 
   useEffect(() => {
@@ -353,6 +365,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registerAccount,
         loginAsDemoAlex,
         switchDemoPersona,
+        switchAccountType,
         logout,
         refreshUser,
         formatMoney,

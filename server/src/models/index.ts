@@ -29,6 +29,7 @@ export interface IUser extends Document {
   passwordHash: string;
   pinHash: string;
   role: 'user' | 'family_admin' | 'family_member' | 'merchant' | 'admin';
+  accountType?: 'personal' | 'business';
   currency: string;
   monthlyIncome: number;
   financialProfile?: IFinancialProfile;
@@ -70,6 +71,7 @@ const UserSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     pinHash: { type: String, required: true },
     role: { type: String, enum: ['user', 'family_admin', 'family_member', 'merchant', 'admin'], default: 'family_admin' },
+    accountType: { type: String, enum: ['personal', 'business'], default: 'personal' },
     currency: { type: String, default: 'USD' },
     monthlyIncome: { type: Number, default: 95000 },
     // PayPal Identity Fields
@@ -173,9 +175,10 @@ export interface ITransaction extends Document {
   category: string;
   subcategory?: string;
   type: 'income' | 'expense' | 'transfer';
+  direction?: 'incoming' | 'outgoing';
   amount: number;
   currency: string;
-  status: 'completed' | 'pending' | 'flagged' | 'failed';
+  status: 'completed' | 'pending' | 'flagged' | 'failed' | 'refunded' | 'reversed';
   paymentMethod: 'bank_transfer' | 'upi' | 'card' | 'paypal' | 'direct_debit' | 'cash';
   isRecurring: boolean;
   mandateId?: mongoose.Types.ObjectId;
@@ -186,6 +189,15 @@ export interface ITransaction extends Document {
   familyGroupId?: string;
   tags: string[];
   paypalOrderId?: string;
+  paypalCaptureId?: string;
+  paypalTransactionId?: string;
+  counterparty?: string;
+  sourceAccount?: string;
+  destinationAccount?: string;
+  associatedOrderId?: string;
+  orderNumber?: string;
+  feeAmount?: number;
+  netAmount?: number;
   elasticSynced: boolean;
   elasticSyncedAt?: Date;
   createdAt: Date;
@@ -203,9 +215,15 @@ const TransactionSchema = new Schema<ITransaction>(
     category: { type: String, required: true, index: true },
     subcategory: { type: String },
     type: { type: String, enum: ['income', 'expense', 'transfer'], required: true, index: true },
+    direction: { type: String, enum: ['incoming', 'outgoing'], index: true },
     amount: { type: Number, required: true },
     currency: { type: String, default: 'USD' },
-    status: { type: String, enum: ['completed', 'pending', 'flagged', 'failed'], default: 'completed', index: true },
+    status: {
+      type: String,
+      enum: ['completed', 'pending', 'flagged', 'failed', 'refunded', 'reversed'],
+      default: 'completed',
+      index: true,
+    },
     paymentMethod: {
       type: String,
       enum: ['bank_transfer', 'upi', 'card', 'paypal', 'direct_debit', 'cash'],
@@ -219,7 +237,16 @@ const TransactionSchema = new Schema<ITransaction>(
     isSharedFamilyTransaction: { type: Boolean, default: false },
     familyGroupId: { type: String, index: true },
     tags: { type: [String], default: [] },
-    paypalOrderId: { type: String },
+    paypalOrderId: { type: String, index: true },
+    paypalCaptureId: { type: String, index: true },
+    paypalTransactionId: { type: String, index: true },
+    counterparty: { type: String },
+    sourceAccount: { type: String },
+    destinationAccount: { type: String },
+    associatedOrderId: { type: String },
+    orderNumber: { type: String },
+    feeAmount: { type: Number, default: 0 },
+    netAmount: { type: Number },
     elasticSynced: { type: Boolean, default: false },
     elasticSyncedAt: { type: Date },
   },
@@ -510,15 +537,31 @@ export interface ICalendarEvent extends Document {
     | 'commitment'
     | 'milestone'
     | 'goal_deadline'
-    | 'reminder';
+    | 'reminder'
+    | 'bill'
+    | 'loan_repayment'
+    | 'credit_card'
+    | 'planned_purchase'
+    | 'paypal_payment'
+    | 'commerce_delivery'
+    | 'income'
+    | 'incoming'
+    | 'outgoing';
   startDate: Date;
   endDate: Date;
   allDay: boolean;
   amount?: number;
   currency: string;
+  direction?: 'incoming' | 'outgoing';
   linkedMandateId?: mongoose.Types.ObjectId;
   linkedGoalId?: mongoose.Types.ObjectId;
-  status: 'upcoming' | 'completed' | 'overdue' | 'rescheduled';
+  linkedOrderId?: string;
+  linkedTransactionId?: mongoose.Types.ObjectId;
+  counterparty?: string;
+  paymentMethod?: string;
+  isOverdue?: boolean;
+  isCompleted?: boolean;
+  status: 'upcoming' | 'completed' | 'overdue' | 'rescheduled' | 'scheduled' | 'cancelled';
   reminderSent: boolean;
   color: string;
   notes?: string;
@@ -544,6 +587,15 @@ const CalendarEventSchema = new Schema<ICalendarEvent>(
         'milestone',
         'goal_deadline',
         'reminder',
+        'bill',
+        'loan_repayment',
+        'credit_card',
+        'planned_purchase',
+        'paypal_payment',
+        'commerce_delivery',
+        'income',
+        'incoming',
+        'outgoing',
       ],
       default: 'commitment',
     },
@@ -552,9 +604,20 @@ const CalendarEventSchema = new Schema<ICalendarEvent>(
     allDay: { type: Boolean, default: true },
     amount: { type: Number },
     currency: { type: String, default: 'USD' },
+    direction: { type: String, enum: ['incoming', 'outgoing'] },
     linkedMandateId: { type: Schema.Types.ObjectId, ref: 'Mandate' },
     linkedGoalId: { type: Schema.Types.ObjectId, ref: 'Goal' },
-    status: { type: String, enum: ['upcoming', 'completed', 'overdue', 'rescheduled'], default: 'upcoming' },
+    linkedOrderId: { type: String },
+    linkedTransactionId: { type: Schema.Types.ObjectId, ref: 'Transaction' },
+    counterparty: { type: String },
+    paymentMethod: { type: String },
+    isOverdue: { type: Boolean, default: false },
+    isCompleted: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ['upcoming', 'completed', 'overdue', 'rescheduled', 'scheduled', 'cancelled'],
+      default: 'upcoming',
+    },
     reminderSent: { type: Boolean, default: false },
     color: { type: String, default: '#2563eb' },
     notes: { type: String },

@@ -112,6 +112,7 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
     passwordHash: alexPasswordHash,
     pinHash: alexPinHash,
     role: 'family_admin',
+    accountType: 'personal',
     currency: 'INR',
     monthlyIncome: 95000,
     familyGroupId,
@@ -138,6 +139,7 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
     passwordHash: priyaPasswordHash,
     pinHash: priyaPinHash,
     role: 'family_member',
+    accountType: 'personal',
     currency: 'INR',
     monthlyIncome: 78000,
     familyGroupId,
@@ -752,6 +754,7 @@ export async function ensureDemoUserMayaSeeded(forceReset = false) {
     passwordHash,
     pinHash,
     role: 'user',
+    accountType: 'personal',
     currency: 'INR',
     monthlyIncome: 42000,
     familyGroupId: 'aura-family-patel',
@@ -894,6 +897,87 @@ export async function ensureDemoUserMayaSeeded(forceReset = false) {
   };
 }
 
+export const DEMO_BRUCE_CREDENTIALS = {
+  email: 'bruce_wayne@business.example.com',
+  password: 'BruceBusiness#2026',
+  pin: '1939',
+  name: 'Bruce Wayne',
+  role: 'merchant' as const,
+  accountType: 'business' as const,
+  monthlyIncome: 250000,
+  bio: 'AURA Store Merchant & Enterprise Administrator managing inventory, order fulfillment, and verified PayPal business settlements.',
+};
+
+export async function ensureDemoMerchantBruceSeeded(forceReset = false) {
+  const existingBruce = await UserModel.findOne({ email: DEMO_BRUCE_CREDENTIALS.email });
+  if (existingBruce && !forceReset) {
+    if (existingBruce.accountType !== 'business' || existingBruce.role !== 'merchant') {
+      existingBruce.accountType = 'business';
+      existingBruce.role = 'merchant';
+      await existingBruce.save();
+    }
+    return {
+      seeded: false,
+      user: existingBruce,
+      credentials: DEMO_BRUCE_CREDENTIALS,
+    };
+  }
+
+  if (forceReset && existingBruce) {
+    await UserModel.deleteOne({ _id: existingBruce._id });
+    await AccountModel.deleteMany({ userId: existingBruce._id });
+  }
+
+  logger.info('SeedService', 'Seeding demo merchant Bruce Wayne (Business Account persona)...');
+  const passwordHash = await hashSecretArgon2id(DEMO_BRUCE_CREDENTIALS.password);
+  const pinHash = await hashSecretArgon2id(DEMO_BRUCE_CREDENTIALS.pin);
+
+  const bruce = await UserModel.create({
+    name: DEMO_BRUCE_CREDENTIALS.name,
+    email: DEMO_BRUCE_CREDENTIALS.email,
+    passwordHash,
+    pinHash,
+    role: 'merchant',
+    accountType: 'business',
+    currency: 'USD',
+    monthlyIncome: 250000,
+    spendingPreferences: {
+      riskTolerance: 'balanced',
+      priorityCategories: ['Inventory', 'Logistics', 'Operations'],
+      savingsTargetPercent: 30,
+    },
+    financialPolicy: {
+      requirePinAboveAmount: 5000,
+      singleTransactionLimit: 500000,
+      dailySpendingLimit: 1000000,
+      requireExplicitApproval: true,
+      discretionaryMonthlyCap: 100000,
+      allowFamilySharedView: false,
+      blockedCategories: [],
+    },
+    onboardingCompleted: true,
+  });
+
+  const merchantAccount = await AccountModel.create({
+    userId: bruce._id,
+    name: 'Wayne Enterprises Merchant Settlement',
+    institution: 'PayPal Sandbox Business Account',
+    type: 'checking',
+    accountNumberMasked: 'bruce_wayne@business.example.com',
+    balance: 15420,
+    currency: 'USD',
+    isSharedWithFamily: false,
+    status: 'active',
+  });
+
+  return {
+    seeded: true,
+    user: bruce,
+    account: merchantAccount,
+    credentials: DEMO_BRUCE_CREDENTIALS,
+  };
+}
+
 export function getDemoPersonas() {
   return [
     {
@@ -907,6 +991,10 @@ export function getDemoPersonas() {
     {
       id: 'maya',
       ...DEMO_MAYA_CREDENTIALS,
+    },
+    {
+      id: 'bruce',
+      ...DEMO_BRUCE_CREDENTIALS,
     },
   ];
 }

@@ -10,9 +10,13 @@ import {
   ShieldCheck,
   Tag,
   ArrowRight,
+  Layers,
+  TrendingDown,
+  Building2,
 } from 'lucide-react';
 import { EcommerceProduct } from './EcommerceTypes';
 import { apiRequest } from '../../lib/api';
+import { Channel3ProductComparisonModal } from './Channel3ProductComparisonModal';
 
 interface EcommerceStorefrontProps {
   onSelectProduct: (product: EcommerceProduct) => void;
@@ -38,6 +42,25 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+
+  // Channel3 Multi-Product Comparison
+  const [selectedForCompare, setSelectedForCompare] = useState<EcommerceProduct[]>([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+
+  const toggleCompare = (e: React.MouseEvent, product: EcommerceProduct) => {
+    e.stopPropagation();
+    setSelectedForCompare((prev) => {
+      const exists = prev.some((p) => p.id === product.id);
+      if (exists) {
+        return prev.filter((p) => p.id !== product.id);
+      }
+      if (prev.length >= 4) {
+        alert('You can compare up to 4 products simultaneously.');
+        return prev;
+      }
+      return [...prev, product];
+    });
+  };
 
   const fetchProducts = async (q = searchQuery, cat = selectedCategory, br = selectedBrand, price = maxPrice) => {
     setLoading(true);
@@ -302,6 +325,20 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                     )}
                   </div>
 
+                  {/* Compare Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => toggleCompare(e, product)}
+                    className={`absolute top-3 right-3 px-2 py-1 rounded-lg text-[10px] font-bold backdrop-blur-xs transition flex items-center gap-1 ${
+                      selectedForCompare.some((p) => p.id === product.id)
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-black/60 hover:bg-black/80 text-white/90'
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    {selectedForCompare.some((p) => p.id === product.id) ? 'Selected' : 'Compare'}
+                  </button>
+
                   {product.rating && (
                     <div className="absolute bottom-3 left-3 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
                       <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
@@ -337,6 +374,16 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                     <div className="text-[11px] text-slate-400 dark:text-slate-500 line-through">
                       Retail Ref: ${product.retailPriceRefUsd.toFixed(2)} ({product.retailerName})
                     </div>
+
+                    {/* Multi-Merchant Offers Pill */}
+                    {product.merchantOffers && product.merchantOffers.length > 1 && (
+                      <div className="pt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <TrendingDown className="w-3 h-3" />
+                        <span>
+                          Available at {product.merchantOffers.length} retailers (from ${product.lowestPriceUsd || product.demoPriceUsd})
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -377,6 +424,56 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
           ))}
         </div>
       )}
+
+      {/* Floating Channel3 Product Comparison Bar */}
+      {selectedForCompare.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md border border-purple-500/40 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-bounce-subtle">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">
+                {selectedForCompare.length} product{selectedForCompare.length > 1 ? 's' : ''} selected
+              </div>
+              <div className="text-[10px] text-slate-400">
+                Compare multi-merchant offers & AI financial impact
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCompareModalOpen(true)}
+              disabled={selectedForCompare.length < 2}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+                selectedForCompare.length >= 2
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-900/50'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              {selectedForCompare.length < 2 ? 'Select 1 more to compare' : 'Compare Now'}
+            </button>
+
+            <button
+              onClick={() => setSelectedForCompare([])}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+              title="Clear selection"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Channel3 Product Comparison Modal */}
+      <Channel3ProductComparisonModal
+        products={selectedForCompare}
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        onAddToCart={(product, variant) => onAddToCart(product, variant)}
+      />
     </div>
   );
 };

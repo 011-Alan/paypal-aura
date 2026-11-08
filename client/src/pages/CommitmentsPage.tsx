@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Repeat, CheckCircle2, AlertCircle, Plus, Calendar, ShieldCheck } from 'lucide-react';
+import { Repeat, CheckCircle2, AlertCircle, Plus, Calendar, ShieldCheck, ListOrdered, Layers } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { FinancialSchedulerView } from '../components/FinancialSchedulerView';
 
 export const CommitmentsPage: React.FC = () => {
   const { balancesVisible } = useAuth();
+  const [viewMode, setViewMode] = useState<'scheduler' | 'list'>('scheduler');
   const [mandates, setMandates] = useState<any[]>([]);
   const [confirmedTotal, setConfirmedTotal] = useState(0);
   const [title, setTitle] = useState('');
@@ -66,19 +68,52 @@ export const CommitmentsPage: React.FC = () => {
             <Tooltip content="Confirmed recurring payments like Rent, Insurance, Internet, and Loan EMIs detected from bank statements or entered manually." />
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Automated commitment intelligence synchronised with your Bryntum Financial Life Calendar.
+            Automated commitment intelligence synchronised with your Bryntum Financial Scheduler &amp; Life Calendar.
           </p>
         </div>
-        <div className="bg-blue-50 dark:bg-blue-950/40 px-5 py-3 rounded-2xl border border-blue-100 dark:border-blue-900/60 text-right">
-          <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase flex items-center gap-1 justify-end">
-            Confirmed Monthly Outflow
-            <Tooltip content="Total sum of all recurring obligations due within each calendar cycle." />
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+            <button
+              onClick={() => setViewMode('scheduler')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                viewMode === 'scheduler'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              Bryntum Scheduler
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+              }`}
+            >
+              <ListOrdered className="w-3.5 h-3.5" />
+              Commitments List
+            </button>
           </div>
-          <div className="text-2xl font-bold text-navy-900 dark:text-white">
-            {formatInr(confirmedTotal, !balancesVisible)}
+
+          <div className="bg-blue-50 dark:bg-blue-950/40 px-5 py-3 rounded-2xl border border-blue-100 dark:border-blue-900/60 text-right">
+            <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase flex items-center gap-1 justify-end">
+              Confirmed Outflow
+              <Tooltip content="Total sum of all recurring obligations due within each calendar cycle." />
+            </div>
+            <div className="text-2xl font-bold text-navy-900 dark:text-white">
+              {formatInr(confirmedTotal, !balancesVisible)}
+            </div>
           </div>
         </div>
       </div>
+
+      {viewMode === 'scheduler' ? (
+        <FinancialSchedulerView />
+      ) : (
+        <>
 
       {/* Mandates List */}
       {mandates.length === 0 ? (
@@ -213,6 +248,8 @@ export const CommitmentsPage: React.FC = () => {
           </div>
         </form>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

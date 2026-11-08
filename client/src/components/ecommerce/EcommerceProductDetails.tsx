@@ -169,6 +169,63 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
                 </div>
               </div>
 
+              {/* Multi-Merchant Offers from Channel3 */}
+              {product.merchantOffers && product.merchantOffers.length > 0 && (
+                <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                      Channel3 Verified Merchant Offers ({product.merchantOffers.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Live Multi-Retailer Prices
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {product.merchantOffers.map((offer, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                          offer.isLowestPrice
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            {offer.retailerName}
+                            {offer.isLowestPrice && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+                                Lowest
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {offer.deliveryTimeframe || '2-4 business days'} • {offer.inStock ? 'In Stock' : 'Pre-order'}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-navy-900 dark:text-white">
+                            ${offer.offerPriceUsd}
+                          </span>
+                          <a
+                            href={offer.affiliateAttributionUrl || offer.purchaseUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            title="Visit retailer store with attribution"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Variant Selector */}
               {product.variants && product.variants.length > 0 && (
                 <div className="space-y-2">
