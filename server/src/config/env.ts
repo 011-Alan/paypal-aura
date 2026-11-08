@@ -66,6 +66,7 @@ export const env = {
   },
   PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID || '',
   PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET || '',
+  PAYPAL_MERCHANT_EMAIL: process.env.PAYPAL_MERCHANT_EMAIL || '',
 
   // PayPal Identity API (Log in with PayPal)
   PAYPAL_IDENTITY_CLIENT_ID: process.env.PAYPAL_IDENTITY_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || '',

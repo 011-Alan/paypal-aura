@@ -109,6 +109,7 @@ export class PayPalIntegrationService {
     recipientName: string;
     customReturnUrl?: string;
     customCancelUrl?: string;
+    payeeEmail?: string;
   }): Promise<{
     orderId: string;
     status: string;
@@ -121,7 +122,9 @@ export class PayPalIntegrationService {
     const returnUrl = params.customReturnUrl || env.PAYPAL_RETURN_URL;
     const cancelUrl = params.customCancelUrl || env.PAYPAL_CANCEL_URL;
 
-    const requestPayload = {
+    const targetPayeeEmail = (params.payeeEmail || env.PAYPAL_MERCHANT_EMAIL || '').trim();
+
+    const requestPayload: any = {
       intent: 'CAPTURE',
       purchase_units: [
         {
@@ -131,6 +134,7 @@ export class PayPalIntegrationService {
             currency_code: env.PAYPAL_DEFAULT_CURRENCY,
             value: formattedUsd,
           },
+          ...(targetPayeeEmail ? { payee: { email_address: targetPayeeEmail } } : {}),
         },
       ],
       application_context: {
