@@ -153,39 +153,39 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
   return (
     <div className="space-y-8">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy-900 via-navy-800 to-blue-950 p-6 sm:p-10 text-white shadow-xl border border-navy-700/50">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 dark:from-navy-900 dark:via-navy-800 dark:to-blue-950 p-6 sm:p-10 text-slate-800 dark:text-white shadow-xs dark:shadow-xl border border-blue-100/80 dark:border-navy-700/50 transition-colors">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-20 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-2xl space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-300">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-400/30 text-xs font-semibold text-blue-700 dark:text-blue-300">
+            <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             Curated Storefront
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-navy-900 dark:text-white leading-tight">
             Curated Products &amp; Multi-Retailer Deals
           </h1>
 
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
             Compare real-time offers across top merchants and checkout with secure buyer protection.
           </p>
 
-          <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-300">
-            <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
+            <span className="flex items-center gap-1.5 bg-white dark:bg-white/10 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-2xs backdrop-blur-xs">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               PayPal Orders v2 Protected
             </span>
-            <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-              <Tag className="w-4 h-4 text-blue-400" />
+            <span className="flex items-center gap-1.5 bg-white dark:bg-white/10 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-2xs backdrop-blur-xs">
+              <Tag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               Special AURA Demo Store Pricing
             </span>
           </div>
         </div>
 
         {/* Clear Storefront Notice */}
-        <div className="relative z-10 mt-6 p-3 rounded-2xl bg-amber-500/10 border border-amber-400/20 text-xs text-amber-200 flex items-start gap-2">
-          <span className="font-bold shrink-0 text-amber-300">Notice:</span>
+        <div className="relative z-10 mt-6 p-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-400/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+          <span className="font-bold shrink-0 text-amber-700 dark:text-amber-300">Notice:</span>
           <span>
             Demonstration Store: Orders run securely in sandbox mode with live multi-merchant price comparison.
           </span>

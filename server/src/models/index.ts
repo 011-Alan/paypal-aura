@@ -1088,6 +1088,8 @@ export interface IEcommerceStatusHistory {
 export interface IEcommerceOrder extends Document {
   orderNumber: string;
   userId: mongoose.Types.ObjectId;
+  merchantId?: mongoose.Types.ObjectId;
+  merchantEmail?: string;
   customerName: string;
   customerEmail: string;
   items: IEcommerceOrderItem[];
@@ -1142,6 +1144,8 @@ const EcommerceOrderSchema = new Schema<IEcommerceOrder>(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    merchantId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    merchantEmail: { type: String, index: true },
     customerName: { type: String, required: true },
     customerEmail: { type: String, required: true },
     items: { type: [EcommerceOrderItemSchema], required: true },

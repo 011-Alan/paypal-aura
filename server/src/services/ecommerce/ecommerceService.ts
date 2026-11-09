@@ -349,10 +349,22 @@ export class EcommerceService {
       customCancelUrl,
     });
 
+    // Find designated business merchant account receiving payment
+    const designatedMerchant = await UserModel.findOne({
+      $or: [
+        { email: env.PAYPAL_MERCHANT_EMAIL },
+        { email: 'bruce_wayne@business.example.com' },
+        { accountType: 'business' },
+        { role: 'merchant' },
+      ],
+    });
+
     // Create the order record in database with initial status
     const order = await EcommerceOrderModel.create({
       orderNumber,
       userId: userObjId,
+      merchantId: designatedMerchant?._id,
+      merchantEmail: designatedMerchant?.email,
       customerName: params.shippingAddress.fullName || user.name,
       customerEmail: user.email,
       items: calc.orderItems,
@@ -545,14 +557,22 @@ export class EcommerceService {
       });
 
       // 2. Merchant Incoming Payment Record & Account Credit
-      const merchantUser = await UserModel.findOne({
-        $or: [
-          { email: env.PAYPAL_MERCHANT_EMAIL },
-          { email: 'bruce_wayne@business.example.com' },
-          { accountType: 'business' },
-          { role: 'merchant' },
-        ],
-      });
+      let merchantUser = order.merchantId ? await UserModel.findById(order.merchantId) : null;
+      if (!merchantUser) {
+        merchantUser = await UserModel.findOne({
+          $or: [
+            { email: env.PAYPAL_MERCHANT_EMAIL },
+            { email: 'bruce_wayne@business.example.com' },
+            { accountType: 'business' },
+            { role: 'merchant' },
+          ],
+        });
+        if (merchantUser) {
+          order.merchantId = merchantUser._id;
+          order.merchantEmail = merchantUser.email;
+          await order.save();
+        }
+      }
 
       if (merchantUser) {
         let merchantAccount = await AccountModel.findOne({ userId: merchantUser._id, name: /Merchant/i });
@@ -711,9 +731,48 @@ export class EcommerceService {
   }
 
   /**
-   * Merchant Overview KPIs.
+   * Builds a query filter ensuring a business merchant account only accesses
+   * orders and purchased products that were paid to that specific business account.
    */
-  async getMerchantOverview(): Promise<{
+  private async buildMerchantOrderFilter(merchantUserId?: string): Promise<Record<string, any>> {
+    if (!merchantUserId) {
+      return { 'paymentInfo.paymentStatus': 'completed' };
+    }
+
+    const merchantObjId = new mongoose.Types.ObjectId(merchantUserId);
+    const merchantTxs = await TransactionModel.find({
+      userId: merchantObjId,
+      $or: [{ direction: 'incoming' }, { type: 'income' }, { tags: 'merchant-payment-received' }],
+    }).select('associatedOrderId orderNumber');
+
+    const matchedOrderIds = merchantTxs
+      .map((t) => t.associatedOrderId)
+      .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const matchedOrderNumbers = merchantTxs
+      .map((t: any) => t.orderNumber)
+      .filter(Boolean);
+
+    const orConditions: any[] = [{ merchantId: merchantObjId }];
+    if (matchedOrderIds.length > 0) {
+      orConditions.push({ _id: { $in: matchedOrderIds } });
+    }
+    if (matchedOrderNumbers.length > 0) {
+      orConditions.push({ orderNumber: { $in: matchedOrderNumbers } });
+    }
+
+    return {
+      'paymentInfo.paymentStatus': 'completed',
+      $or: orConditions,
+    };
+  }
+
+  /**
+   * Merchant Overview KPIs.
+   * Scoped strictly to orders purchased and paid to the authenticated business account.
+   */
+  async getMerchantOverview(merchantUserId?: string): Promise<{
     totalOrders: number;
     paidOrders: number;
     awaitingProcessing: number;
@@ -722,9 +781,10 @@ export class EcommerceService {
     deliveredOrders: number;
     totalRevenue: number;
   }> {
+    const baseFilter = await this.buildMerchantOrderFilter(merchantUserId);
     const [allOrders, paidOrdersList] = await Promise.all([
-      EcommerceOrderModel.find({}),
-      EcommerceOrderModel.find({ 'paymentInfo.paymentStatus': 'completed' }),
+      EcommerceOrderModel.find(baseFilter),
+      EcommerceOrderModel.find(baseFilter),
     ]);
 
     const totalOrders = allOrders.length;
@@ -758,8 +818,10 @@ export class EcommerceService {
 
   /**
    * Merchant order search & management list.
+   * Scoped strictly to orders and products purchased and paid to the authenticated business account.
    */
   async getMerchantOrders(params: {
+    merchantUserId?: string;
     status?: string;
     search?: string;
     limit?: number;
@@ -768,14 +830,16 @@ export class EcommerceService {
     orders: IEcommerceOrder[];
     total: number;
   }> {
-    const filter: any = {};
+    const baseFilter = await this.buildMerchantOrderFilter(params.merchantUserId);
+    const filter: any = { ...baseFilter };
+
     if (params.status && params.status !== 'all') {
       filter.fulfillmentStatus = params.status;
     }
 
     if (params.search) {
       const q = params.search.trim();
-      filter.$or = [
+      const searchOr = [
         { orderNumber: { $regex: q, $options: 'i' } },
         { customerName: { $regex: q, $options: 'i' } },
         { customerEmail: { $regex: q, $options: 'i' } },
@@ -783,6 +847,7 @@ export class EcommerceService {
         { 'paymentInfo.paypalCaptureId': { $regex: q, $options: 'i' } },
         { 'shipment.trackingNumber': { $regex: q, $options: 'i' } },
       ];
+      filter.$and = [{ $or: searchOr }];
     }
 
     const total = await EcommerceOrderModel.countDocuments(filter);
@@ -798,13 +863,35 @@ export class EcommerceService {
   }
 
   /**
-   * Merchant order details retrieval.
+   * Merchant order details retrieval with strict ownership verification.
    */
-  async getMerchantOrderById(orderId: string): Promise<IEcommerceOrder> {
+  async getMerchantOrderById(orderId: string, merchantUserId?: string): Promise<IEcommerceOrder> {
     const order = await EcommerceOrderModel.findById(orderId);
     if (!order) {
       throw new Error(`Order ${orderId} not found.`);
     }
+
+    if (merchantUserId) {
+      const merchantObjId = new mongoose.Types.ObjectId(merchantUserId);
+      const isDirectMerchant = order.merchantId && order.merchantId.equals(merchantObjId);
+      
+      let isTxMerchant = false;
+      if (!isDirectMerchant) {
+        const tx = await TransactionModel.findOne({
+          userId: merchantObjId,
+          $or: [
+            { associatedOrderId: String(order._id) },
+            { orderNumber: order.orderNumber },
+          ],
+        });
+        isTxMerchant = !!tx;
+      }
+
+      if (!isDirectMerchant && !isTxMerchant) {
+        throw new Error('Unauthorized: You do not have permission to access orders paid to another merchant account.');
+      }
+    }
+
     return order;
   }
 
@@ -816,6 +903,7 @@ export class EcommerceService {
    */
   async updateOrderFulfillment(params: {
     orderId: string;
+    merchantUserId?: string;
     fulfillmentStatus: FulfillmentStatus;
     carrier?: string;
     trackingNumber?: string;
@@ -824,7 +912,7 @@ export class EcommerceService {
     notes?: string;
     adminName: string;
   }): Promise<IEcommerceOrder> {
-    const order = await EcommerceOrderModel.findById(params.orderId);
+    const order = await this.getMerchantOrderById(params.orderId, params.merchantUserId);
     if (!order) {
       throw new Error(`Order "${params.orderId}" not found.`);
     }

@@ -35,10 +35,17 @@ import {
 
 export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
   const { balancesVisible, user, switchAccountType, switchDemoPersona } = useAuth();
-  const isMerchantAuthorized = user?.accountType === 'business' || user?.role === 'merchant' || user?.role === 'admin';
+  const isMerchantAuthorized = user?.accountType === 'business' || user?.role === 'merchant';
 
   // Navigation tab state: 'storefront' | 'my-purchases' | 'merchant-hub'
   const [activeTab, setActiveTab] = useState<'storefront' | 'my-purchases' | 'merchant-hub'>('storefront');
+
+  // Ensure non-business accounts cannot remain in merchant hub
+  useEffect(() => {
+    if (!isMerchantAuthorized && activeTab === 'merchant-hub') {
+      setActiveTab('storefront');
+    }
+  }, [isMerchantAuthorized, activeTab]);
 
   // Sub-views
   const [selectedProduct, setSelectedProduct] = useState<EcommerceProduct | null>(null);
@@ -376,26 +383,23 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
               📦 My Purchases
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('merchant-hub');
-                setSelectedProduct(null);
-                setIsCheckout(false);
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-                activeTab === 'merchant-hub'
-                  ? 'bg-white dark:bg-slate-900 text-navy-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              🏪 Merchant Hub
-              {!isMerchantAuthorized && (
-                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-200 dark:bg-slate-700 text-slate-500 font-bold">
-                  Business
-                </span>
-              )}
-            </button>
+            {isMerchantAuthorized && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('merchant-hub');
+                  setSelectedProduct(null);
+                  setIsCheckout(false);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeTab === 'merchant-hub'
+                    ? 'bg-white dark:bg-slate-900 text-navy-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                🏪 Merchant Hub
+              </button>
+            )}
           </div>
 
           {/* Shopping Cart Pill Button */}

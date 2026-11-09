@@ -2773,9 +2773,9 @@ apiRouter.get('/ecommerce/orders/:orderId', requireAuth, async (req: Authenticat
 });
 
 // --- Merchant Dashboard & Manual Fulfillment ---
-apiRouter.get('/ecommerce/merchant/overview', requireAuth, requireMerchantAuth, async (_req: AuthenticatedRequest, res: Response) => {
+apiRouter.get('/ecommerce/merchant/overview', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const overview = await ecommerceService.getMerchantOverview();
+    const overview = await ecommerceService.getMerchantOverview(req.userId);
     res.json({ success: true, overview });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
@@ -2807,6 +2807,7 @@ apiRouter.get('/ecommerce/merchant/orders', requireAuth, requireMerchantAuth, as
   try {
     const { status, search, limit, offset } = req.query;
     const result = await ecommerceService.getMerchantOrders({
+      merchantUserId: req.userId,
       status: status ? String(status) : undefined,
       search: search ? String(search) : undefined,
       limit: limit ? Number(limit) : 50,
@@ -2820,7 +2821,7 @@ apiRouter.get('/ecommerce/merchant/orders', requireAuth, requireMerchantAuth, as
 
 apiRouter.get('/ecommerce/merchant/orders/:orderId', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const order = await ecommerceService.getMerchantOrderById(req.params.orderId);
+    const order = await ecommerceService.getMerchantOrderById(req.params.orderId, req.userId);
     res.json({ success: true, order });
   } catch (err: any) {
     res.status(404).json({ success: false, error: err?.message });
@@ -2836,6 +2837,7 @@ apiRouter.put('/ecommerce/merchant/orders/:orderId/fulfillment', requireAuth, re
     const user = await UserModel.findById(req.userId);
     const order = await ecommerceService.updateOrderFulfillment({
       orderId: req.params.orderId,
+      merchantUserId: req.userId,
       fulfillmentStatus,
       carrier,
       trackingNumber,
@@ -2906,8 +2908,13 @@ apiRouter.patch('/notifications/:id/read', requireAuth, async (req: Authenticate
 });
 
 apiRouter.post('/notifications/read-all', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  await NotificationModel.updateMany({ userId: req.userId, isRead: false }, { $set: { isRead: true } });
-  res.json({ success: true });
+  const result = await NotificationModel.updateMany({ userId: req.userId, isRead: false }, { $set: { isRead: true } });
+  res.json({ success: true, count: result.modifiedCount, unreadCount: 0 });
+});
+
+apiRouter.post('/notifications/mark-all-read', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await NotificationModel.updateMany({ userId: req.userId, isRead: false }, { $set: { isRead: true } });
+  res.json({ success: true, count: result.modifiedCount, unreadCount: 0 });
 });
 
 // ============================================================================

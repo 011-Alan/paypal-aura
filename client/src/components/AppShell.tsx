@@ -183,6 +183,24 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
       setUnreadCount(0);
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch {
+      try {
+        await apiRequest('/notifications/read-all', { method: 'POST' });
+        setUnreadCount(0);
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      } catch {
+        // Non-fatal
+      }
+    }
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      await apiRequest(`/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
       // Non-fatal
     }
   };
@@ -242,12 +260,12 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
       {/* Desktop Navigation Sidebar */}
       <aside
         className={`${
-          sidebarCollapsed ? 'w-20' : 'w-72'
-        } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40 transition-[width] duration-300 ease-in-out`}
+          sidebarCollapsed ? 'w-16' : 'w-72'
+        } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40 transition-[width] duration-300 ease-in-out overflow-hidden`}
       >
         {/* App Logo & Header */}
         <div
-          className={`h-16 border-b border-slate-200 dark:border-slate-800 flex items-center ${
+          className={`h-16 border-b border-slate-200 dark:border-slate-800 flex items-center shrink-0 ${
             sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-5'
           }`}
         >
@@ -285,144 +303,84 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           )}
         </div>
 
-        {/* Grouped Navigation List */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
-          {NAVIGATION_GROUPS.map((group, gIdx) => (
-            <div key={group.group}>
-              {!sidebarCollapsed ? (
-                <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  {group.group}
-                </div>
-              ) : (
-                gIdx > 0 && <div className="my-2 border-t border-slate-100 dark:border-slate-800" />
-              )}
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isTabActive(item.id);
+        {/* When collapsed, only the open/close button above is visible - no other buttons */}
+        {!sidebarCollapsed && (
+          <>
+            {/* Grouped Navigation List */}
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+              {NAVIGATION_GROUPS.map((group) => (
+                <div key={group.group}>
+                  <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    {group.group}
+                  </div>
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isTabActive(item.id);
 
-                  if (sidebarCollapsed) {
-                    return (
-                      <Tooltip key={item.id} content={item.label} position="right" className="w-full">
+                      return (
                         <button
+                          key={item.id}
                           onClick={() => onSelectTab(item.id)}
-                          className={`w-full flex items-center justify-center p-2.5 rounded-xl transition-colors ${
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                             active
                               ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
                               : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
                           }`}
-                          aria-label={item.label}
                         >
-                          <Icon
-                            className={`w-5 h-5 shrink-0 ${
-                              active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
-                            }`}
-                          />
+                          <div className="flex items-center gap-3 truncate">
+                            <Icon
+                              className={`w-4 h-4 shrink-0 ${
+                                active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                              }`}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </div>
+                          {item.badge && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                              {item.badge}
+                            </span>
+                          )}
                         </button>
-                      </Tooltip>
-                    );
-                  }
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => onSelectTab(item.id)}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                        active
-                          ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 truncate">
-                        <Icon
-                          className={`w-4 h-4 shrink-0 ${
-                            active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
-                          }`}
-                        />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.badge && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          {/* Strict Separation: Dedicated Demo Lab Navigation Item */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            {!sidebarCollapsed && (
-              <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Testing &amp; Evaluation
-              </div>
-            )}
-            {sidebarCollapsed ? (
-              <Tooltip content="Demo Lab" position="right" className="w-full">
+              {/* Dedicated Demo Lab Navigation Item */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Testing &amp; Evaluation
+                </div>
                 <button
                   onClick={() => onSelectTab('demo-lab')}
-                  className={`w-full flex items-center justify-center p-2.5 rounded-xl transition-colors ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     isDemoLabActive
                       ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
-                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                  aria-label="Demo Lab"
-                >
-                  <FlaskConical className={`w-5 h-5 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
-                </button>
-              </Tooltip>
-            ) : (
-              <button
-                onClick={() => onSelectTab('demo-lab')}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  isDemoLabActive
-                    ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
-                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <FlaskConical className={`w-4 h-4 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
-                  <span className="font-semibold truncate">Demo Lab</span>
-                </div>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isDemoLabActive
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  Sim &amp; Dev
-                </span>
-              </button>
-            )}
-          </div>
-        </nav>
-
-        {/* User Card */}
-        {user && (
-          <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80">
-            {sidebarCollapsed ? (
-              <div className="flex flex-col items-center gap-2">
-                <Tooltip content={`${user.name} (${user.email})`} position="right">
-                  <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-sm">
-                    {user.name.charAt(0)}
+                  <div className="flex items-center gap-2.5 truncate">
+                    <FlaskConical className={`w-4 h-4 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
+                    <span className="font-semibold truncate">Demo Lab</span>
                   </div>
-                </Tooltip>
-                <Tooltip content="Sign Out" position="right">
-                  <button
-                    onClick={() => logout('sidebar_sign_out')}
-                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                    aria-label="Sign Out"
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isDemoLabActive
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
                   >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                </Tooltip>
+                    Sim &amp; Dev
+                  </span>
+                </button>
               </div>
-            ) : (
-              <>
+            </nav>
+
+            {/* User Card */}
+            {user && (
+              <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
                     <div className="text-sm font-bold text-navy-900 dark:text-white truncate">{user.name}</div>
@@ -445,9 +403,9 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                   </span>
                   <span className="font-semibold text-navy-900 dark:text-white">{formatMoney(user.monthlyIncome)}</span>
                 </div>
-              </>
+              </div>
             )}
-          </div>
+          </>
         )}
       </aside>
 
@@ -455,7 +413,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
       <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0 transition-all duration-300 ease-in-out">
         {/* Top Header */}
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 lg:px-8 h-16 flex items-center justify-between">
-          {/* Left Title & Mobile Menu Button / Desktop Collapse Toggle */}
+          {/* Left Title & Mobile Menu Button */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -463,14 +421,6 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               aria-label="Open navigation menu"
             >
               <Menu className="w-5 h-5" />
-            </button>
-            <button
-              onClick={toggleSidebar}
-              className="hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700/60"
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
             <div>
               <h1 className="text-base lg:text-lg font-bold text-navy-900 dark:text-white leading-tight">
@@ -524,9 +474,22 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                       notifications.map((n) => (
                         <div
                           key={n._id}
-                          className={`p-3.5 text-xs ${n.isRead ? 'bg-white dark:bg-slate-900' : 'bg-blue-50/40 dark:bg-blue-950/40'}`}
+                          onClick={() => {
+                            if (!n.isRead) markNotificationAsRead(n._id);
+                          }}
+                          className={`p-3.5 text-xs transition-colors cursor-pointer ${
+                            n.isRead
+                              ? 'bg-white dark:bg-slate-900 opacity-70 hover:opacity-100'
+                              : 'bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/60 dark:hover:bg-blue-900/40'
+                          }`}
+                          title={n.isRead ? 'Notification (Read)' : 'Click to mark as read'}
                         >
-                          <div className="font-semibold text-navy-900 dark:text-white">{n.title}</div>
+                          <div className="flex items-center justify-between">
+                            <div className="font-semibold text-navy-900 dark:text-white">{n.title}</div>
+                            {!n.isRead && (
+                              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" title="Unread" />
+                            )}
+                          </div>
                           <div className="text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{n.message}</div>
                           <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                             {new Date(n.createdAt).toLocaleString('en-IN', {
