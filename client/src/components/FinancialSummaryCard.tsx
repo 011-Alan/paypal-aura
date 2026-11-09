@@ -42,7 +42,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
               {title}
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Synchronized with MongoDB, Bryntum &amp; Elastic Memory
+              Real-time ledger overview
             </p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export const FinancialSummaryCard: React.FC<FinancialSummaryCardProps> = ({
             {formatInr(upcomingCommitmentsTotal)}
           </span>
           <span className="text-[10px] text-slate-400 block mt-0.5">
-            Ringfenced on Bryntum
+            Safely ringfenced
           </span>
         </div>
 

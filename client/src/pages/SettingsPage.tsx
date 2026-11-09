@@ -431,7 +431,6 @@ export const SettingsPage: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="USD">USD ($) — US Dollar</option>
-                <option value="INR">INR (₹) — Indian Rupee</option>
                 <option value="EUR">EUR (€) — Euro</option>
                 <option value="GBP">GBP (£) — British Pound</option>
               </select>
@@ -521,7 +520,7 @@ export const SettingsPage: React.FC = () => {
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                 Require PIN Verification Above
-                <Tooltip content="Transactions exceeding this threshold require explicit Argon2id PIN verification." />
+                <Tooltip content="Transactions exceeding this threshold require your security PIN." />
               </label>
               <input
                 type="number"
@@ -559,7 +558,7 @@ export const SettingsPage: React.FC = () => {
         </form>
       </div>
 
-      {/* 3. Payment Security PIN Management (Argon2id) */}
+      {/* 3. Payment Security PIN Management */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -568,7 +567,7 @@ export const SettingsPage: React.FC = () => {
           <div>
             <h3 className="text-base font-bold text-navy-900 dark:text-white">Payment Security PIN</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Protected with Argon2id cryptographic hashing. Required to authorize payments.
+              Encrypted security PIN required to authorize and execute payments.
             </p>
           </div>
         </div>

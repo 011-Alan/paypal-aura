@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Target, Trophy, Plus, Sparkles, CheckCircle2, Layers, LayoutGrid } from 'lucide-react';
-import { apiRequest, formatInr, formatDateShort } from '../lib/api';
+import { apiRequest, formatDateShort } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import { FinancialRoadmapPage } from './FinancialRoadmapPage';
 
 export const GoalsPage: React.FC = () => {
+  const { balancesVisible, formatMoney } = useAuth();
   const [viewMode, setViewMode] = useState<'roadmap' | 'cards'>('roadmap');
   const [goals, setGoals] = useState<any[]>([]);
   const [celebrationMsg, setCelebrationMsg] = useState('');
@@ -30,10 +32,10 @@ export const GoalsPage: React.FC = () => {
     });
     if (res.newlyReachedMilestone) {
       setCelebrationMsg(
-        `Milestone Celebration! You reached ${res.newlyReachedMilestone}% of "${goal.title}" and AURA triggered your milestone celebration notification!`
+        `Milestone Celebration! You reached ${res.newlyReachedMilestone}% of "${goal.title}"!`
       );
     } else {
-      setCelebrationMsg(`Added ${formatInr(goal.monthlyContribution)} towards "${goal.title}".`);
+      setCelebrationMsg(`Added ${formatMoney(goal.monthlyContribution)} towards "${goal.title}".`);
     }
     await loadGoals();
   };
@@ -62,34 +64,36 @@ export const GoalsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
         <div>
-          <h2 className="text-xl font-bold text-navy-900 dark:text-white">Personal &amp; Family Financial Goals</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Track savings progress, celebrate 25% / 50% / 75% / 100% milestones, and synchronise target deadlines with your Bryntum Financial Roadmap.
+          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white">Financial Goals</h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Track your savings progress, milestones, and target deadlines.
           </p>
         </div>
 
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
           <button
+            type="button"
             onClick={() => setViewMode('roadmap')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
               viewMode === 'roadmap'
                 ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Bryntum Gantt Roadmap
+            Roadmap
           </button>
           <button
+            type="button"
             onClick={() => setViewMode('cards')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
               viewMode === 'cards'
                 ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
-            Goal Cards
+            Cards
           </button>
         </div>
       </div>
@@ -144,13 +148,13 @@ export const GoalsPage: React.FC = () => {
                   <h3 className="text-base font-bold text-navy-900 dark:text-white">{g.title}</h3>
                   <div className="flex items-baseline justify-between text-xs">
                     <span className="text-slate-500 dark:text-slate-400">
-                      Saved: <strong className="text-navy-900 dark:text-white">{formatInr(g.currentAmount)}</strong>
+                      Saved: <strong className="text-navy-900 dark:text-white">{formatMoney(g.currentAmount)}</strong>
                     </span>
                     <span className="text-slate-500 dark:text-slate-400">
-                      Target: <strong className="text-navy-900 dark:text-white">{formatInr(g.targetAmount)}</strong>
+                      Target: <strong className="text-navy-900 dark:text-white">{formatMoney(g.targetAmount)}</strong>
                     </span>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
                   </div>
 
@@ -172,9 +176,9 @@ export const GoalsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <span>Monthly Plan: {formatInr(g.monthlyContribution)}</span>
+                    <span>Monthly: {formatMoney(g.monthlyContribution)}</span>
                     <span>By {formatDateShort(g.deadline)}</span>
                   </div>
                   <button
@@ -183,7 +187,7 @@ export const GoalsPage: React.FC = () => {
                     className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white dark:disabled:text-slate-600 text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    {pct >= 100 ? 'Goal Completed!' : `Record +${formatInr(g.monthlyContribution)} Contribution`}
+                    {pct >= 100 ? 'Goal Completed!' : `Record +${formatMoney(g.monthlyContribution)} Contribution`}
                   </button>
                 </div>
               </div>

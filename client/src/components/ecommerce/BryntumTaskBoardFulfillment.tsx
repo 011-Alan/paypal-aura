@@ -126,7 +126,7 @@ export const BryntumTaskBoardFulfillment: React.FC<BryntumTaskBoardProps> = ({
           fulfillmentStatus: nextStatus,
           carrier: nextStatus === 'shipped' ? 'FedEx Express' : order.shipment?.carrier,
           trackingNumber: nextStatus === 'shipped' ? trackingNumber : order.shipment?.trackingNumber,
-          notes: `Advanced to ${nextStatus.replace('_', ' ').toUpperCase()} via Bryntum TaskBoard`,
+          notes: `Advanced to ${nextStatus.replace('_', ' ').toUpperCase()}`,
         }),
       });
 
@@ -159,13 +159,13 @@ export const BryntumTaskBoardFulfillment: React.FC<BryntumTaskBoardProps> = ({
           </div>
           <div>
             <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
-              Bryntum TaskBoard • Merchant Commerce Fulfillment
+              Order Fulfillment Pipeline
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
                 6 Stages
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Interactive kanban workflow synchronised with PayPal captures and customer shipment tracking.
+              Track order progression and advance delivery milestones.
             </p>
           </div>
         </div>

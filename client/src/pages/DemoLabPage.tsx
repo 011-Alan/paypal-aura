@@ -179,42 +179,42 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
     {
       code: 'Workflow A',
       title: 'Smart Purchase Affordability Evaluation',
-      sponsors: 'Channel3 • KERNEL • Astropods • PayPal',
+      sponsors: 'Affordability • Guardrails • Payments',
       prompt: 'Can I afford a laptop for $750?',
       desc: 'Evaluates product options against 7-factor financial guardrails with live discretionary buffer calculation.',
     },
     {
       code: 'Workflow B',
       title: 'Monthly Financial Planning & Budget Allocation',
-      sponsors: 'Python Engine • Astropods Planner • AG Grid',
+      sponsors: 'Budget Planner • 50/30/20 Allocation',
       prompt: 'Help me plan my expenses for next month.',
       desc: 'Generates 50/30/20 category budget allocations and protects essential commitments.',
     },
     {
       code: 'Workflow C',
       title: 'Anomaly Detection & Spending Workbench',
-      sponsors: 'AG Grid • Scikit-Learn IsolationForest • Elastic',
+      sponsors: 'Anomaly Detection • Activity Filters',
       prompt: 'Show my unusual spending patterns and dining expenditure over the last three months.',
-      desc: 'Projects natural language query into AG Grid filter matrix and flags statistical outliers.',
+      desc: 'Projects natural language query into activity filter matrix and flags statistical outliers.',
     },
     {
       code: 'Workflow D',
       title: 'Financial Life Calendar & Mandate Synchronization',
-      sponsors: 'Bryntum • Mandate Intelligence • Render Worker',
+      sponsors: 'Calendar Timeline • Mandate Sync',
       prompt: 'What payments and recurring commitments are coming up next week?',
-      desc: 'Synchronizes confirmed bills, EMIs, salary credits, and milestones across Bryntum calendar views.',
+      desc: 'Synchronizes confirmed bills, EMIs, salary credits, and milestones across timeline and calendar views.',
     },
     {
       code: 'Workflow E',
       title: 'Controlled PayPal Sandbox Payment Preparation',
-      sponsors: 'Financial Guardian • APIMatic • PayPal Orders v2',
+      sponsors: 'Financial Guardian • Secure Checkout',
       prompt: 'Prepare a payment of $50 to Greenwood Residency Landlords.',
       desc: 'Executes 4-rule Financial Guardian check, generates approval token, and presents user authorization card.',
     },
     {
       code: 'Workflow F',
       title: 'Financial Recovery Plan',
-      sponsors: 'Financial Recovery Agent • Python Analytics',
+      sponsors: 'Recovery Planner • Spending Balancing',
       prompt: 'I overspent on dining this month. Recommend a realistic financial recovery plan.',
       desc: 'Proposes non-judgmental spending reallocation without touching essential commitments.',
     },
@@ -543,7 +543,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                 </div>
                 <h4 className="text-sm font-bold text-navy-900">New Software Subscription Surge</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Adds a recurring Cloud AI Suite subscription. Verifies automated Bryntum Financial Calendar synchronization and notification dispatch.
+                  Adds a recurring Cloud AI Suite subscription. Verifies automated Financial Calendar synchronization and notification dispatch.
                 </p>
                 <button
                   onClick={() => handleSimulateScenario('subscription_surge')}
@@ -919,7 +919,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
                 <span className="text-xs text-slate-500 font-medium">Payment Protocol</span>
                 <div className="text-base font-bold text-navy-900">PayPal Sandbox Orders v2</div>
-                <div className="text-[11px] text-slate-400">APIMatic Schema Validated</div>
+                <div className="text-[11px] text-slate-400">Strict Schema Validated</div>
               </div>
             </div>
           </div>

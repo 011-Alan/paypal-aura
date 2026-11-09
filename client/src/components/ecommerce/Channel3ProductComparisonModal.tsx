@@ -90,7 +90,7 @@ export const Channel3ProductComparisonModal: React.FC<ProductComparisonModalProp
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-white">Channel3 Multi-Merchant Product Comparison</h3>
+                <h3 className="text-lg font-semibold text-white">Product Comparison</h3>
                 <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
                   {products.length} Products
                 </span>
@@ -317,7 +317,7 @@ export const Channel3ProductComparisonModal: React.FC<ProductComparisonModalProp
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Channel3 Live API Multi-Merchant Catalog Sync Active</span>
+            <span>Live Multi-Retailer Pricing Active</span>
           </div>
           <button
             onClick={onClose}

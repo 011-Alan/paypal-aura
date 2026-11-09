@@ -84,7 +84,7 @@ export const EcommerceCartDrawer: React.FC<EcommerceCartDrawerProps> = ({
                 </div>
                 <h3 className="text-base font-bold text-navy-900 dark:text-white">Your cart is empty</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-                  Explore genuine products in our Channel3 catalog and add them to your cart.
+                  Explore genuine products in our store catalog and add them to your cart.
                 </p>
                 <button
                   type="button"

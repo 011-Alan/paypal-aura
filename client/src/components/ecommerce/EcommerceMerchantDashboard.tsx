@@ -254,7 +254,7 @@ export const EcommerceMerchantDashboard: React.FC = () => {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          Bryntum TaskBoard Kanban
+          Fulfillment Pipeline
         </button>
 
         <button
@@ -267,7 +267,7 @@ export const EcommerceMerchantDashboard: React.FC = () => {
           }`}
         >
           <ArrowDownLeft className="w-3.5 h-3.5" />
-          AG Grid Received Payments
+          Received Payments
         </button>
 
         <button
@@ -280,7 +280,7 @@ export const EcommerceMerchantDashboard: React.FC = () => {
           }`}
         >
           <ListOrdered className="w-3.5 h-3.5" />
-          Orders Detail List
+          All Orders
         </button>
       </div>
 

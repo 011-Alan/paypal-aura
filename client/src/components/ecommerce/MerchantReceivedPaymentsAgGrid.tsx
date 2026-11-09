@@ -180,10 +180,10 @@ export const MerchantReceivedPaymentsAgGrid: React.FC = () => {
         <div>
           <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
             <ArrowDownLeft className="w-4 h-4 text-emerald-500" />
-            AG Grid Received Payments Explorer
+            Received Payments
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Audit settled incoming customer payments, PayPal transaction capture IDs, and merchant fee deductions.
+            Review incoming customer payments and transaction records.
           </p>
         </div>
 

@@ -170,7 +170,7 @@ export const ConversationalResponseRenderer: React.FC<ConversationalResponseRend
       {companionProducts.length > 0 && (
         <div className="pt-2 space-y-2">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pl-1">
-            Channel3 Verified Product Options
+            Verified Retailer Options
           </div>
           <div className="grid grid-cols-1 gap-3">
             {companionProducts.slice(0, 3).map((prod: any) => (

@@ -1,26 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { Repeat, CheckCircle2, AlertCircle, Plus, Calendar, ShieldCheck, ListOrdered, Layers } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Repeat, CheckCircle2, AlertCircle, Plus, Calendar, Clock, Layers, ListOrdered, ShieldCheck } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Tooltip } from '../components/Tooltip';
 import { FinancialSchedulerView } from '../components/FinancialSchedulerView';
 
 export const CommitmentsPage: React.FC = () => {
-  const { balancesVisible } = useAuth();
+  const { balancesVisible, formatMoney } = useAuth();
   const [viewMode, setViewMode] = useState<'scheduler' | 'list'>('scheduler');
   const [mandates, setMandates] = useState<any[]>([]);
   const [confirmedTotal, setConfirmedTotal] = useState(0);
+
+  // New mandate form
   const [title, setTitle] = useState('');
   const [merchant, setMerchant] = useState('');
   const [category, setCategory] = useState('Subscription');
   const [amount, setAmount] = useState('');
   const [dueDay, setDueDay] = useState('5');
   const [submitting, setSubmitting] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const loadMandates = async () => {
-    const res = await apiRequest('/mandates');
-    setMandates(res.mandates || []);
-    setConfirmedTotal(res.confirmedMonthlyOutflow || 0);
+    try {
+      const res = await apiRequest('/mandates');
+      setMandates(res.mandates || []);
+      setConfirmedTotal(res.confirmedMonthlyOutflow || 0);
+    } catch {
+      // Ignored
+    }
   };
 
   useEffect(() => {
@@ -53,203 +59,287 @@ export const CommitmentsPage: React.FC = () => {
       setTitle('');
       setMerchant('');
       setAmount('');
+      setShowAddForm(false);
       await loadMandates();
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Summary Metrics (Section 3.A)
+  const upcomingCommitments = useMemo(() => {
+    return mandates.filter((m) => m.category !== 'Salary');
+  }, [mandates]);
+
+  const upcomingOutflow = useMemo(() => {
+    return upcomingCommitments.reduce((s, m) => s + (m.amount || 0), 0);
+  }, [upcomingCommitments]);
+
+  const overdueCount = useMemo(() => {
+    const today = new Date().getDate();
+    return upcomingCommitments.filter((m) => m.dueDayOfMonth < today && m.status === 'inferred').length;
+  }, [upcomingCommitments]);
+
   return (
     <div className="space-y-6">
+      {/* Header & View Mode Switcher */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-navy-900 dark:text-white tracking-tight">Recurring Mandates &amp; Commitments</h2>
-            <Tooltip content="Confirmed recurring payments like Rent, Insurance, Internet, and Loan EMIs detected from bank statements or entered manually." />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Automated commitment intelligence synchronised with your Bryntum Financial Scheduler &amp; Life Calendar.
+          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white tracking-tight">
+            Bills &amp; Commitments
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Manage your recurring obligations, subscriptions, and scheduled payments.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
             <button
+              type="button"
               onClick={() => setViewMode('scheduler')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
                 viewMode === 'scheduler'
                   ? 'bg-purple-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              Bryntum Scheduler
+              Timeline
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
                 viewMode === 'list'
                   ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
               }`}
             >
               <ListOrdered className="w-3.5 h-3.5" />
-              Commitments List
+              List
             </button>
           </div>
 
-          <div className="bg-blue-50 dark:bg-blue-950/40 px-5 py-3 rounded-2xl border border-blue-100 dark:border-blue-900/60 text-right">
-            <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase flex items-center gap-1 justify-end">
-              Confirmed Outflow
-              <Tooltip content="Total sum of all recurring obligations due within each calendar cycle." />
+          <button
+            type="button"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Bill</span>
+          </button>
+        </div>
+      </div>
+
+      {/* A. Summary Metrics Strip (Section 3.A) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Upcoming Commitments</span>
+            <div className="text-2xl font-bold text-navy-900 dark:text-white mt-1">
+              {upcomingCommitments.length}
             </div>
-            <div className="text-2xl font-bold text-navy-900 dark:text-white">
-              {formatInr(confirmedTotal, !balancesVisible)}
+            <span className="text-[11px] text-slate-400 mt-0.5 block">Recurring this month</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center">
+            <Repeat className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Upcoming Outflow</span>
+            <div className="text-2xl font-bold text-navy-900 dark:text-white mt-1">
+              {!balancesVisible ? '••••••' : formatMoney(upcomingOutflow)}
             </div>
+            <span className="text-[11px] text-slate-400 mt-0.5 block">Ringfenced from monthly income</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center">
+            <Calendar className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Overdue Commitments</span>
+            <div className={`text-2xl font-bold mt-1 ${overdueCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              {overdueCount}
+            </div>
+            <span className="text-[11px] text-slate-400 mt-0.5 block">
+              {overdueCount > 0 ? 'Action required' : 'All obligations on track'}
+            </span>
+          </div>
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+            overdueCount > 0 ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-600' : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600'
+          }`}>
+            <Clock className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {viewMode === 'scheduler' ? (
-        <FinancialSchedulerView />
-      ) : (
-        <>
-
-      {/* Mandates List */}
-      {mandates.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 border border-slate-200 dark:border-slate-800 text-center transition-colors">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
-            <Repeat className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-bold text-navy-900 dark:text-white">No recurring commitments found</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
-            You don't have any recurring mandates scheduled yet. Add your fixed commitments (like Rent, EMI, or Subscriptions) below to track upcoming outflows in your calendar.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mandates.map((m) => (
-            <div
-              key={m._id}
-              className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition"
+      {/* Expandable Add Commitment Form */}
+      {showAddForm && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 animate-fadeIn">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Add Recurring Commitment</h3>
+            <button
+              type="button"
+              onClick={() => setShowAddForm(false)}
+              className="text-xs text-slate-400 hover:text-slate-600"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      {m.category}
-                    </span>
-                    {m.status === 'confirmed' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 className="w-3 h-3" /> Confirmed
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        <AlertCircle className="w-3 h-3" /> Inferred ({Math.round(m.confidenceScore * 100)}% match)
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-base font-bold text-navy-900 dark:text-white mt-2">{m.title}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Merchant: {m.merchant}</p>
-                  {m.notes && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{m.notes}</p>}
-                </div>
-                <div className="text-right">
-                  <div className={`text-xl font-bold ${m.category === 'Salary' ? 'text-emerald-600 dark:text-emerald-400' : 'text-navy-900 dark:text-white'}`}>
-                    {formatInr(m.amount, !balancesVisible)}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-end gap-1 mt-1">
-                    <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    Due {m.dueDayOfMonth}th of month
-                  </div>
-                </div>
-              </div>
+              Cancel
+            </button>
+          </div>
 
-              {m.status === 'inferred' && (
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                    Confirm this recurring commitment to sync with calendar reminders?
-                  </span>
-                  <button
-                    onClick={() => handleConfirmMandate(m._id)}
-                    className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition"
-                  >
-                    Confirm Mandate
-                  </button>
-                </div>
-              )}
+          <form onSubmit={handleCreateMandate} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Electric Bill"
+                required
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          ))}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Merchant / Payee</label>
+              <input
+                type="text"
+                value={merchant}
+                onChange={(e) => setMerchant(e.target.value)}
+                placeholder="e.g. National Grid"
+                required
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="Rent">Rent &amp; Housing</option>
+                <option value="Utilities">Utilities &amp; Bills</option>
+                <option value="Subscription">Subscription</option>
+                <option value="Insurance">Insurance</option>
+                <option value="Loan EMI">Loan Repayment</option>
+                <option value="Education">Education</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount ($)</label>
+              <input
+                type="number"
+                min="1"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="100"
+                required
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Due Day</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={dueDay}
+                  onChange={(e) => setDueDay(e.target.value)}
+                  className="w-20 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition"
+                >
+                  {submitting ? 'Adding...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Add New Mandate */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-        <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
-          <Repeat className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-          Add Custom Recurring Commitment
-        </h3>
-        <form onSubmit={handleCreateMandate} className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-          <input
-            type="text"
-            placeholder="Commitment Title (e.g. Gym Membership)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-          <input
-            type="text"
-            placeholder="Merchant Name"
-            value={merchant}
-            onChange={(e) => setMerchant(e.target.value)}
-            required
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="Rent">Rent</option>
-            <option value="Loan EMI">Loan EMI</option>
-            <option value="Insurance">Insurance</option>
-            <option value="Subscription">Subscription</option>
-            <option value="Electricity">Electricity</option>
-            <option value="Internet">Internet</option>
-            <option value="Education">Education</option>
-            <option value="Other">Other</option>
-          </select>
-          <input
-            type="number"
-            placeholder="Amount (USD)"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-          <div className="flex gap-2">
-            <input
-              type="number"
-              min={1}
-              max={31}
-              placeholder="Day (1-31)"
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-              required
-              className="w-24 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition shadow-xs"
-            >
-              Add
-            </button>
+      {/* Main Experience: Either Scheduler Timeline OR Commitments List (Never competing simultaneously) */}
+      {viewMode === 'scheduler' ? (
+        <FinancialSchedulerView />
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Scheduled Commitments</h3>
+            <span className="text-xs text-slate-400">{mandates.length} Total</span>
           </div>
-        </form>
-      </div>
-    </>
-  )}
-</div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                  <th className="py-2.5 px-3">Due Day</th>
+                  <th className="py-2.5 px-3">Title &amp; Payee</th>
+                  <th className="py-2.5 px-3">Category</th>
+                  <th className="py-2.5 px-3">Amount</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {mandates.map((m) => (
+                  <tr key={m._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                    <td className="py-3 px-3 font-semibold text-slate-500 whitespace-nowrap">
+                      {m.dueDayOfMonth}th of month
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-navy-900 dark:text-white">{m.title}</div>
+                      <div className="text-[11px] text-slate-400">{m.merchant}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {m.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-bold text-navy-900 dark:text-white whitespace-nowrap">
+                      {!balancesVisible ? '••••••' : formatMoney(m.amount)}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {m.status === 'confirmed' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle2 className="w-3 h-3" /> Confirmed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                          <AlertCircle className="w-3 h-3" /> Inferred
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      {m.status === 'inferred' && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmMandate(m._id)}
+                          className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };

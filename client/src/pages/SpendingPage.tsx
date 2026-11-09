@@ -1,52 +1,71 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { AgGridReact } from 'ag-grid-react';
-import { ColDef } from 'ag-grid-community';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
 import {
   Search,
   Sparkles,
   Filter,
   AlertTriangle,
   CheckCircle2,
-  Database,
   RotateCcw,
-  BarChart3,
+  ArrowDownLeft,
+  ArrowUpRight,
+  TrendingDown,
   Layers,
-  ArrowUpDown,
+  X,
+  CreditCard,
+  PieChart,
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Tooltip } from '../components/Tooltip';
 import { SpendingIntelligence } from '../components/SpendingIntelligence';
 
 const PRESET_NL_QUERIES = [
-  'Show my dining expenditure over the last three months.',
+  'Show my dining expenditure over the last three months',
   'How much did I spend on travel during my last holiday?',
   'Show unusual transactions above $50',
   'Show my rent and internet expenditure',
 ];
 
+interface TransactionRow {
+  id: string;
+  date: string;
+  merchant: string;
+  description: string;
+  category: string;
+  accountName: string;
+  amount: number;
+  type: 'income' | 'expense' | 'transfer';
+  status?: string;
+  isUnusual?: boolean;
+  unusualReason?: string;
+  paymentMethod?: string;
+}
+
 export const SpendingPage: React.FC = () => {
-  const { balancesVisible } = useAuth();
-  const [spendingView, setSpendingView] = useState<'intelligence' | 'aggrid'>('intelligence');
-  const [agGridData, setAgGridData] = useState<any>(null);
-  const [pythonAnalytics, setPythonAnalytics] = useState<any>(null);
+  const { balancesVisible, formatMoney } = useAuth();
+  const [spendingView, setSpendingView] = useState<'activity' | 'insights'>('activity');
+  const [rows, setRows] = useState<TransactionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [quickSearch, setQuickSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+
+  // Assistant Query
   const [nlQuery, setNlQuery] = useState('');
   const [aiExplanation, setAiExplanation] = useState('');
-  const [elasticResult, setElasticResult] = useState<any>(null);
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [accountFilter, setAccountFilter] = useState('');
-  const [onlyUnusual, setOnlyUnusual] = useState(false);
-  const [quickSearch, setQuickSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [askingAi, setAskingAi] = useState(false);
+
+  // Row Inspection Modal
+  const [selectedTx, setSelectedTx] = useState<TransactionRow | null>(null);
 
   const loadTransactions = async () => {
     setLoading(true);
     try {
       const res = await apiRequest('/transactions');
-      setAgGridData(res.agGrid);
-      setPythonAnalytics(res.pythonAnalytics);
+      const rawRows = res.agGrid?.rows || [];
+      setRows(rawRows);
     } finally {
       setLoading(false);
     }
@@ -56,399 +75,493 @@ export const SpendingPage: React.FC = () => {
     loadTransactions();
   }, []);
 
-  const handleNaturalLanguageSearch = async (queryText: string) => {
+  const handleAssistantQuery = async (queryText: string) => {
     const q = queryText.trim();
     setNlQuery(q);
     if (!q) {
       setAiExplanation('');
-      setElasticResult(null);
       await loadTransactions();
       return;
     }
 
-    setLoading(true);
+    setAskingAi(true);
     try {
-      const [aiRes, elasticRes] = await Promise.all([
+      const [aiRes] = await Promise.all([
         apiRequest('/ai/ask', {
           method: 'POST',
           body: JSON.stringify({ prompt: q }),
         }),
-        apiRequest('/elastic/search', {
-          method: 'POST',
-          body: JSON.stringify({ query: q, scope: 'transactions' }),
-        }),
       ]);
 
-      if (aiRes.agGridAnalytics) {
-        setAgGridData(aiRes.agGridAnalytics);
+      if (aiRes.agGridAnalytics?.rows) {
+        setRows(aiRes.agGridAnalytics.rows);
       }
       setAiExplanation(aiRes.explanation || '');
-      setElasticResult(elasticRes);
     } finally {
-      setLoading(false);
+      setAskingAi(false);
     }
   };
 
+  const handleResetFilters = () => {
+    setQuickSearch('');
+    setSelectedCategory('');
+    setSelectedAccount('');
+    setTypeFilter('all');
+    setNlQuery('');
+    setAiExplanation('');
+    loadTransactions();
+  };
+
+  // Filtered Rows
   const filteredRows = useMemo(() => {
-    const base = agGridData?.rows || [];
-    return base.filter((r: any) => {
-      if (categoryFilter && r.category !== categoryFilter) return false;
-      if (accountFilter && r.accountName !== accountFilter) return false;
-      if (onlyUnusual && !r.isUnusual) return false;
+    return rows.filter((r) => {
+      if (typeFilter !== 'all' && r.type !== typeFilter) return false;
+      if (selectedCategory && r.category !== selectedCategory) return false;
+      if (selectedAccount && r.accountName !== selectedAccount) return false;
       if (quickSearch.trim()) {
         const term = quickSearch.toLowerCase();
-        return (
-          r.merchant.toLowerCase().includes(term) ||
-          r.description.toLowerCase().includes(term) ||
-          r.category.toLowerCase().includes(term)
-        );
+        const matchesMerchant = r.merchant?.toLowerCase().includes(term);
+        const matchesDesc = r.description?.toLowerCase().includes(term);
+        const matchesCat = r.category?.toLowerCase().includes(term);
+        if (!matchesMerchant && !matchesDesc && !matchesCat) return false;
       }
       return true;
     });
-  }, [agGridData, categoryFilter, accountFilter, onlyUnusual, quickSearch]);
+  }, [rows, typeFilter, selectedCategory, selectedAccount, quickSearch]);
 
+  // Unique Accounts & Categories
   const uniqueCategories = useMemo(() => {
-    const set = new Set<string>((agGridData?.rows || []).map((r: any) => r.category));
-    return Array.from(set);
-  }, [agGridData]);
+    const map = new Map<string, number>();
+    rows.forEach((r) => {
+      if (r.type === 'expense') {
+        map.set(r.category, (map.get(r.category) || 0) + (r.amount || 0));
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [rows]);
 
   const uniqueAccounts = useMemo(() => {
-    const set = new Set<string>((agGridData?.rows || []).map((r: any) => r.accountName));
+    const set = new Set<string>(rows.map((r) => r.accountName).filter(Boolean));
     return Array.from(set);
-  }, [agGridData]);
+  }, [rows]);
 
-  const columnDefs = useMemo<ColDef[]>(
-    () => [
-      {
-        field: 'date',
-        headerName: 'Date',
-        sortable: true,
-        filter: true,
-        width: 125,
-      },
-      {
-        field: 'merchant',
-        headerName: 'Merchant',
-        sortable: true,
-        filter: true,
-        flex: 1.2,
-        minWidth: 170,
-        cellRenderer: (params: any) => (
-          <div className="font-semibold text-navy-900 dark:text-white">{params.value}</div>
-        ),
-      },
-      {
-        field: 'description',
-        headerName: 'Description',
-        sortable: true,
-        filter: true,
-        flex: 1.5,
-        minWidth: 200,
-      },
-      {
-        field: 'category',
-        headerName: 'Category',
-        sortable: true,
-        filter: true,
-        width: 135,
-        cellRenderer: (params: any) => (
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            {params.value}
-          </span>
-        ),
-      },
-      {
-        field: 'accountName',
-        headerName: 'Account',
-        sortable: true,
-        filter: true,
-        width: 175,
-      },
-      {
-        field: 'amount',
-        headerName: 'Amount',
-        sortable: true,
-        filter: 'agNumberColumnFilter',
-        width: 140,
-        cellRenderer: (params: any) => {
-          const isInc = params.data?.type === 'income';
-          return (
-            <span className={`font-bold ${isInc ? 'text-emerald-600 dark:text-emerald-400' : 'text-navy-900 dark:text-white'}`}>
-              {isInc ? '+' : '-'}
-              {formatInr(params.value, !balancesVisible)}
-            </span>
-          );
-        },
-      },
-      {
-        field: 'status',
-        headerName: 'Intelligence Status',
-        sortable: true,
-        width: 175,
-        cellRenderer: (params: any) => {
-          if (params.data?.isUnusual) {
-            return (
-              <span
-                title={params.data?.unusualReason}
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-              >
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Unusual Pattern
-              </span>
-            );
-          }
-          return (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Normal
-            </span>
-          );
-        },
-      },
-    ],
-    [balancesVisible]
-  );
-
+  // Summary Metrics: Exactly the 3 requested: Total Spent, Total Received, Transaction Count
   const summaryMetrics = useMemo(() => {
-    const income = filteredRows.filter((r: any) => r.type === 'income').reduce((s: number, r: any) => s + r.amount, 0);
-    const expense = filteredRows.filter((r: any) => r.type === 'expense').reduce((s: number, r: any) => s + r.amount, 0);
-    const unusual = filteredRows.filter((r: any) => r.isUnusual).length;
-    return { income, expense, net: income - expense, unusual, count: filteredRows.length };
+    const expense = filteredRows
+      .filter((r) => r.type === 'expense')
+      .reduce((s, r) => s + (r.amount || 0), 0);
+    const income = filteredRows
+      .filter((r) => r.type === 'income')
+      .reduce((s, r) => s + (r.amount || 0), 0);
+    return {
+      totalSpent: expense,
+      totalReceived: income,
+      count: filteredRows.length,
+    };
   }, [filteredRows]);
+
+  const totalAllExpense = useMemo(() => {
+    return rows.filter((r) => r.type === 'expense').reduce((s, r) => s + (r.amount || 0), 0) || 1;
+  }, [rows]);
 
   return (
     <div className="space-y-6">
-      {/* Experience Mode Switcher */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-2xl p-2 border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setSpendingView('intelligence')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              spendingView === 'intelligence'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Spending Intelligence
-          </button>
-          <button
-            onClick={() => setSpendingView('aggrid')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              spendingView === 'aggrid'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            AG Grid Transactions Explorer
-          </button>
+      {/* Header & Tab Selector */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white">
+            Transactions
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Review your activity, search records, and analyze spending patterns.
+          </p>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 pr-3">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Real-time Ledger Analysis</span>
+        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700/60 self-start sm:self-center text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setSpendingView('activity')}
+            className={`px-4 py-2 rounded-xl transition ${
+              spendingView === 'activity'
+                ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+            }`}
+          >
+            Activity &amp; Records
+          </button>
+          <button
+            type="button"
+            onClick={() => setSpendingView('insights')}
+            className={`px-4 py-2 rounded-xl transition ${
+              spendingView === 'insights'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+            }`}
+          >
+            Spending Intelligence
+          </button>
         </div>
       </div>
 
-      {/* Render View */}
-      {spendingView === 'intelligence' ? (
+      {spendingView === 'insights' ? (
         <SpendingIntelligence />
       ) : (
         <>
-          {/* Natural-Language Analytics Header (AG Grid + Gemini + Elastic) */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-bold text-navy-900 dark:text-white">
-              Interactive Spending &amp; Financial Analytics Workbench
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Powered by AG Grid Financial Analytics Engine, Elastic Financial Memory &amp; Python Anomaly Detection
-            </p>
-          </div>
-          <button
-            onClick={() => handleNaturalLanguageSearch('')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 self-start transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset All Filters
-          </button>
-        </div>
+          {/* A. Summary Metrics Strip: Total Spent, Total Received, Transaction Count */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Spent</span>
+                <div className="text-2xl font-bold text-navy-900 dark:text-white mt-1">
+                  {!balancesVisible ? '••••••' : formatMoney(summaryMetrics.totalSpent)}
+                </div>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">Outflow in selected period</span>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center">
+                <ArrowUpRight className="w-5 h-5" />
+              </div>
+            </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleNaturalLanguageSearch(nlQuery);
-          }}
-          className="flex flex-col sm:flex-row gap-2.5"
-        >
-          <div className="relative flex-1">
-            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 absolute left-3.5 top-3" />
-            <input
-              type="text"
-              value={nlQuery}
-              onChange={(e) => setNlQuery(e.target.value)}
-              placeholder='Ask in natural language: e.g. "Show my dining expenditure over the last three months."'
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition disabled:opacity-50"
-          >
-            {loading ? 'Querying...' : 'Run Natural-Language Analytics'}
-          </button>
-        </form>
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Received</span>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                  {!balancesVisible ? '••••••' : formatMoney(summaryMetrics.totalReceived)}
+                </div>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">Inflow in selected period</span>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
+                <ArrowDownLeft className="w-5 h-5" />
+              </div>
+            </div>
 
-        <div className="flex flex-wrap gap-2">
-          {PRESET_NL_QUERIES.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => handleNaturalLanguageSearch(preset)}
-              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-blue-700 dark:hover:text-blue-300 text-xs text-slate-600 dark:text-slate-300 font-medium border border-transparent hover:border-blue-200 dark:hover:border-blue-800 transition"
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Transactions</span>
+                <div className="text-2xl font-bold text-navy-900 dark:text-white mt-1">
+                  {summaryMetrics.count}
+                </div>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">Filtered records</span>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center">
+                <CreditCard className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* B. Spending Intelligence: Sleek Assistant Search */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAssistantQuery(nlQuery);
+              }}
+              className="flex items-center gap-2"
             >
-              “{preset}”
-            </button>
-          ))}
-        </div>
+              <div className="relative flex-1">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={nlQuery}
+                  onChange={(e) => setNlQuery(e.target.value)}
+                  placeholder="Ask about your spending (e.g. How much did I spend on dining?)"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={askingAi}
+                className="px-4 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold transition shrink-0"
+              >
+                {askingAi ? 'Searching...' : 'Ask'}
+              </button>
+            </form>
 
-        {aiExplanation && (
-          <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60 text-xs sm:text-sm text-navy-900 dark:text-slate-200 space-y-2 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" /> AURA Verified Findings (No Invented Figures)
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[11px] text-slate-400 mr-1">Suggestions:</span>
+              {PRESET_NL_QUERIES.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => handleAssistantQuery(preset)}
+                  className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/50 hover:text-purple-700 dark:hover:text-purple-300 text-[11px] text-slate-600 dark:text-slate-300 transition"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+
+            {aiExplanation && (
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/60 text-xs text-purple-950 dark:text-purple-200 flex items-start justify-between gap-3 mt-2">
+                <div className="space-y-1">
+                  <span className="font-bold flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
+                    <Sparkles className="w-3.5 h-3.5" /> Insight
+                  </span>
+                  <p className="leading-relaxed">{aiExplanation}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAiExplanation('')}
+                  className="p-1 rounded text-purple-400 hover:text-purple-700"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* C. Compact Category Breakdown Cards */}
+          <div>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Top Spending Categories
               </span>
-              {elasticResult && (
-                <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-                  <Database className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                  Elastic + MongoDB Verified: {formatInr(elasticResult.summary?.verifiedTotalExpense)}
-                </span>
+              {selectedCategory && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('')}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Show all categories
+                </button>
               )}
             </div>
-            <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{aiExplanation}</p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {uniqueCategories.slice(0, 6).map(([cat, total]) => {
+                const pct = Math.round((total / totalAllExpense) * 100);
+                const isSelected = selectedCategory === cat;
+
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(isSelected ? '' : cat)}
+                    className={`p-3.5 rounded-2xl border text-left transition ${
+                      isSelected
+                        ? 'border-purple-600 bg-purple-50/50 dark:bg-purple-950/40 ring-2 ring-purple-500/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-navy-900 dark:text-white truncate">
+                      {cat}
+                    </div>
+                    <div className="text-sm font-extrabold text-navy-900 dark:text-white mt-1">
+                      {!balancesVisible ? '••••••' : formatMoney(total)}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      {pct}% of spending
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Filtered Transactions</div>
-          <div className="text-xl font-bold text-navy-900 dark:text-white mt-1">{summaryMetrics.count} Records</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Filtered Expenditure</div>
-          <div className="text-xl font-bold text-navy-900 dark:text-white mt-1">{formatInr(summaryMetrics.expense)}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Filtered Income</div>
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{formatInr(summaryMetrics.income)}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Unusual Transactions</div>
-          <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">{summaryMetrics.unusual} Flagged</div>
-        </div>
-      </div>
+          {/* D. Scannable Transaction Table */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={quickSearch}
+                    onChange={(e) => setQuickSearch(e.target.value)}
+                    placeholder="Search merchant or description..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-      {/* AG Grid Interactive Toolbar & Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Quick search merchant or tag..."
-                value={quickSearch}
-                onChange={(e) => setQuickSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white text-xs placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as any)}
+                  className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Flow</option>
+                  <option value="expense">Expenses Only</option>
+                  <option value="income">Income Only</option>
+                </select>
+
+                {uniqueAccounts.length > 1 && (
+                  <select
+                    value={selectedAccount}
+                    onChange={(e) => setSelectedAccount(e.target.value)}
+                    className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Accounts</option>
+                    {uniqueAccounts.map((acc) => (
+                      <option key={acc} value={acc}>
+                        {acc}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {(quickSearch || selectedCategory || selectedAccount || typeFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-xs text-slate-500 hover:text-navy-900 dark:hover:text-white flex items-center gap-1 self-start sm:self-center"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset filters
+                </button>
+              )}
             </div>
 
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Categories</option>
-              {uniqueCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Merchant</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Category</th>
+                    <th className="py-2.5 px-3">Amount</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                        No transactions match your current filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRows.map((r) => {
+                      const isIncome = r.type === 'income';
 
-            <select
-              value={accountFilter}
-              onChange={(e) => setAccountFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs bg-slate-50 dark:bg-slate-800 text-navy-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Accounts</option>
-              {uniqueAccounts.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
+                      return (
+                        <tr
+                          key={r.id}
+                          onClick={() => setSelectedTx(r)}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
+                        >
+                          <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                            {r.date}
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-navy-900 dark:text-white">
+                            {r.merchant}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                            {r.description}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {r.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap font-bold">
+                            <span className={isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-navy-900 dark:text-white'}>
+                              {isIncome ? '+' : '-'}
+                              {!balancesVisible ? '••••••' : formatMoney(r.amount)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {r.isUnusual ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                <AlertTriangle className="w-3 h-3" /> Flagged
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <CheckCircle2 className="w-3 h-3" /> Normal
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTx(r);
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
-            <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={onlyUnusual}
-                onChange={(e) => setOnlyUnusual(e.target.checked)}
-                className="rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-blue-600"
-              />
-              <Filter className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              Only Unusual Spend
-            </label>
+      {/* Transaction Details Modal */}
+      {selectedTx && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-navy-900 dark:text-white">Transaction Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedTx(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-navy-900 dark:hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Date</span>
+                <span className="text-slate-700 dark:text-slate-300">{selectedTx.date}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Merchant</span>
+                <span className="font-bold text-navy-900 dark:text-white">{selectedTx.merchant}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Category</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedTx.category}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Account</span>
+                <span className="text-slate-700 dark:text-slate-300">{selectedTx.accountName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Amount</span>
+                <span className="font-bold text-sm text-navy-900 dark:text-white">
+                  {selectedTx.type === 'income' ? '+' : '-'}
+                  {formatMoney(selectedTx.amount)}
+                </span>
+              </div>
+              {selectedTx.unusualReason && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs">
+                  <span className="font-bold block mb-0.5">Audit Note:</span>
+                  {selectedTx.unusualReason}
+                </div>
+              )}
+              {selectedTx.description && (
+                <div className="py-1">
+                  <span className="text-slate-400 block mb-0.5">Description</span>
+                  <span className="text-slate-700 dark:text-slate-300">{selectedTx.description}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedTx(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="ag-theme-quartz w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800" style={{ height: 440 }}>
-          <AgGridReact
-            rowData={filteredRows}
-            columnDefs={columnDefs}
-            pagination={true}
-            paginationPageSize={10}
-            paginationPageSizeSelector={[10, 25, 50]}
-            animateRows={true}
-          />
-        </div>
-      </div>
-
-      {/* Category-Wise Aggregation Cards */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <h3 className="text-sm font-bold text-navy-900 dark:text-white mb-4">
-          Category-Wise Expenditure &amp; Anomaly Breakdown
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(agGridData?.categoryAggregations || []).map((cat: any) => (
-            <div
-              key={cat.category}
-              onClick={() => setCategoryFilter(cat.category === categoryFilter ? '' : cat.category)}
-              className={`p-4 rounded-2xl border cursor-pointer transition ${
-                categoryFilter === cat.category
-                  ? 'border-blue-500 dark:border-blue-400 bg-blue-50/60 dark:bg-blue-950/60'
-                  : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-navy-900 dark:text-white">{cat.category}</span>
-                <span className="text-blue-600 dark:text-blue-400 font-semibold">{cat.sharePercent}%</span>
-              </div>
-              <div className="text-lg font-bold text-navy-900 dark:text-white mt-1">{formatInr(cat.totalAmount, !balancesVisible)}</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                {cat.count} txns • Avg {formatInr(cat.avgAmount, !balancesVisible)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )}
-</div>
+      )}
+    </div>
   );
 };

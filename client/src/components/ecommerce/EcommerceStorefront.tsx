@@ -87,7 +87,7 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         setBrands(['All', ...res.brands]);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load products from Channel3 catalog.');
+      setError(err?.message || 'Failed to load products from catalog.');
     } finally {
       setLoading(false);
     }
@@ -124,15 +124,15 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         <div className="relative z-10 max-w-2xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-300">
             <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            AURA E-Commerce • Real Channel3 Catalog + PayPal Sandbox Execution
+            Curated Storefront
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            Discover Real Products with Verified PayPal Fulfillment
+            Curated Products &amp; Multi-Retailer Deals
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Shop genuine footwear, computing, audio, and mobile electronics retrieved in real-time through the Channel3 API. Complete checkout with PayPal Sandbox and follow manual merchant packaging and tracking.
+            Compare real-time offers across top merchants and checkout with secure buyer protection.
           </p>
 
           <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-300">
@@ -148,10 +148,10 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         </div>
 
         {/* Clear Storefront Notice */}
-        <div className="relative z-10 mt-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-400/20 text-xs text-amber-200 flex items-start gap-2.5">
+        <div className="relative z-10 mt-6 p-3 rounded-2xl bg-amber-500/10 border border-amber-400/20 text-xs text-amber-200 flex items-start gap-2">
           <span className="font-bold shrink-0 text-amber-300">Notice:</span>
           <span>
-            This is a simulated AURA Demo Storefront using real product information from Channel3. It is not an authorised retailer for original brand owners (Nike, Apple, Asus, etc.). Purchases run strictly through PayPal Sandbox with simulated tracking.
+            Demonstration Store: Orders run securely in sandbox mode with live multi-merchant price comparison.
           </span>
         </div>
       </div>

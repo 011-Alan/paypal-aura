@@ -169,13 +169,13 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
                 </div>
               </div>
 
-              {/* Multi-Merchant Offers from Channel3 */}
+              {/* Multi-Merchant Offers */}
               {product.merchantOffers && product.merchantOffers.length > 0 && (
                 <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                      Channel3 Verified Merchant Offers ({product.merchantOffers.length})
+                      Available Merchant Offers ({product.merchantOffers.length})
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
                       Live Multi-Retailer Prices
@@ -312,7 +312,7 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
               <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>AURA Store Disclaimer:</strong> This purchase runs on the AURA Demo Store via PayPal Sandbox. The original retailer ({product.retailerName}) does not receive this order. Sourced through Channel3.
+                  <strong>AURA Store Disclaimer:</strong> This purchase runs on the AURA Demo Store via PayPal Sandbox. The original retailer ({product.retailerName}) does not receive this order.
                 </span>
               </div>
             </div>

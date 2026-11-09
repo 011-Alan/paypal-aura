@@ -7,40 +7,57 @@ import {
   XCircle,
   KeyRound,
   ArrowRight,
-  Webhook,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  ExternalLink,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Tooltip } from '../components/Tooltip';
 
 export const PaymentsPage: React.FC = () => {
   const { balancesVisible, formatMoney, user } = useAuth();
-  const isUsd = (user?.currency || 'USD').toUpperCase() === 'USD';
   const [payments, setPayments] = useState<any[]>([]);
-  const [paypalStatus, setPaypalStatus] = useState<any>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
 
-  // Prepare form
-  const [recipientName, setRecipientName] = useState('Greenwood Residency Landlords');
+  // Form State
+  const [recipientName, setRecipientName] = useState('Greenwood Residency Properties');
   const [recipientEmail, setRecipientEmail] = useState('merchant-sandbox@paypal.com');
   const [merchantCategory, setMerchantCategory] = useState('Rent');
-  const [description, setDescription] = useState('Prepare a payment of $50 towards maintenance & utility settlement');
-  const [amountInr, setAmountInr] = useState('50');
+  const [description, setDescription] = useState('Monthly maintenance & utilities payment');
+  const [amount, setAmount] = useState('50');
+  const [sourceAccountId, setSourceAccountId] = useState('');
 
-  // Active workflow state
+  // Workflow & Active payment state
   const [activePaymentId, setActivePaymentId] = useState<string>('');
   const [pinInput, setPinInput] = useState('');
   const [approvalToken, setApprovalToken] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showSecurityDetails, setShowSecurityDetails] = useState(false);
+  const [inspectingPayment, setInspectingPayment] = useState<any | null>(null);
 
-  const loadPayments = async () => {
+  const loadData = async () => {
     try {
-      const res = await apiRequest('/payments');
-      setPayments(res.payments || []);
-      setPaypalStatus(res.paypalSandboxStatus || null);
-      if (res.payments?.length > 0 && !activePaymentId) {
-        setActivePaymentId(res.payments[0]._id);
+      const [paymentsRes, accountsRes] = await Promise.all([
+        apiRequest('/payments'),
+        apiRequest('/accounts').catch(() => ({ accounts: [] })),
+      ]);
+
+      const loadedPayments = paymentsRes.payments || [];
+      setPayments(loadedPayments);
+      const loadedAccounts = accountsRes.accounts || [];
+      setAccounts(loadedAccounts);
+
+      if (loadedAccounts.length > 0 && !sourceAccountId) {
+        setSourceAccountId(loadedAccounts[0]._id);
+      }
+      if (loadedPayments.length > 0 && !activePaymentId) {
+        setActivePaymentId(loadedPayments[0]._id);
       }
     } catch {
       // Ignored
@@ -48,12 +65,14 @@ export const PaymentsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadPayments();
+    loadData();
 
+    // Check for PayPal return params
     if (typeof window !== 'undefined' && window.location.search) {
       const params = new URLSearchParams(window.location.search);
       const checkoutStatus = params.get('status');
       const orderToken = params.get('token');
+
       if (checkoutStatus === 'approved') {
         params.delete('status');
         params.delete('token');
@@ -63,29 +82,26 @@ export const PaymentsPage: React.FC = () => {
         window.history.replaceState({}, document.title, cleanUrl);
 
         if (orderToken) {
-          setStatusMessage(`PayPal payment approved by buyer for order ${orderToken}. Capturing and settling payment with PayPal...`);
+          setStatusMessage('Payment approved by buyer. Finalizing settlement...');
           setBusy(true);
           apiRequest('/payments/capture-paypal-order', {
             method: 'POST',
             body: JSON.stringify({ orderId: orderToken }),
           })
-            .then((res: any) => {
-              const capId = res.captureResult?.captureId || res.paymentRequest?.paypalCaptureId;
-              setStatusMessage(
-                `Payment verified and captured by PayPal! Capture ID: ${capId}. AURA balance and audit log updated.`
-              );
-              loadPayments();
+            .then(() => {
+              setStatusMessage('Payment completed successfully. Balances and transaction record updated.');
+              loadData();
               window.dispatchEvent(new CustomEvent('aura-state-changed'));
             })
             .catch((err: any) => {
-              setErrorMsg(`PayPal capture failed: ${err?.message}`);
+              setErrorMsg(`Settlement processing failed: ${err?.message}`);
             })
             .finally(() => {
               setBusy(false);
             });
         }
       } else if (checkoutStatus === 'cancelled') {
-        setErrorMsg('PayPal Checkout was cancelled by the user.');
+        setErrorMsg('Payment authorization was cancelled.');
         params.delete('status');
         params.delete('token');
         const remaining = params.toString();
@@ -95,13 +111,14 @@ export const PaymentsPage: React.FC = () => {
     }
 
     const handleStateChange = () => {
-      loadPayments();
+      loadData();
     };
     window.addEventListener('aura-state-changed', handleStateChange);
     return () => window.removeEventListener('aura-state-changed', handleStateChange);
   }, []);
 
   const activePayment = payments.find((p) => p._id === activePaymentId) || payments[0];
+  const sourceAccount = accounts.find((a) => a._id === sourceAccountId) || accounts[0];
 
   const handlePrepare = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,16 +133,14 @@ export const PaymentsPage: React.FC = () => {
           recipientEmail,
           merchantCategory,
           description,
-          amountInr: Number(amountInr),
+          amountInr: Number(amount),
         }),
       });
       setActivePaymentId(res.paymentRequest._id);
       setApprovalToken('');
       setPinInput('');
-      setStatusMessage(
-        'Step 1 Complete: Payment request prepared and validated by Financial Guardian. Review and enter your PIN to authorise.'
-      );
-      await loadPayments();
+      setStatusMessage('Payment request prepared. Please review details and enter your security PIN to authorize.');
+      await loadData();
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to prepare payment');
     } finally {
@@ -133,136 +148,134 @@ export const PaymentsPage: React.FC = () => {
     }
   };
 
-  const handleVerifyPin = async (e: React.FormEvent) => {
+  const handleAuthorizeAndExecute = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activePayment) return;
+    if (!activePayment || !pinInput) return;
     setErrorMsg('');
+    setStatusMessage('');
     setBusy(true);
+
     try {
-      const res = await apiRequest(`/payments/${activePayment._id}/verify-pin`, {
+      // Step 1: Verify PIN
+      const pinRes = await apiRequest(`/payments/${activePayment._id}/verify-pin`, {
         method: 'POST',
         body: JSON.stringify({ pin: pinInput }),
       });
-      setApprovalToken(res.approvalToken);
-      setStatusMessage(
-        'Step 2 Complete: Argon2id PIN verified and short-lived cryptographic approval token issued. Ready to create PayPal Sandbox Order v2.'
-      );
-      await loadPayments();
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'PIN verification failed');
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const handleCreatePayPalOrder = async () => {
-    if (!activePayment || !approvalToken) return;
-    setErrorMsg('');
-    setBusy(true);
-    try {
-      const res = await apiRequest(`/payments/${activePayment._id}/paypal-order`, {
+      const token = pinRes.approvalToken;
+      setApprovalToken(token);
+
+      // Step 2: Create payment order with return redirects
+      const orderRes = await apiRequest(`/payments/${activePayment._id}/paypal-order`, {
         method: 'POST',
         body: JSON.stringify({
-          approvalToken,
+          approvalToken: token,
           customReturnUrl: `${window.location.origin}/payments?status=approved`,
           customCancelUrl: `${window.location.origin}/payments?status=cancelled`,
         }),
       });
-      if (res.paypalOrder?.approvalUrl) {
-        setStatusMessage(
-          `Step 3: PayPal Order v2 (${res.paypalOrder.orderId}) created! Redirecting to PayPal for buyer approval...`
-        );
-        window.location.href = res.paypalOrder.approvalUrl;
+
+      if (orderRes.paypalOrder?.approvalUrl) {
+        setStatusMessage('Payment authorized. Redirecting to complete secure buyer confirmation...');
+        window.location.href = orderRes.paypalOrder.approvalUrl;
         return;
       }
-      setStatusMessage(
-        `Step 3 Complete: PayPal Order v2 (${res.paypalOrder?.orderId}) created. Click "Approve on PayPal" to review and authorize.`
-      );
-      await loadPayments();
+
+      setStatusMessage('Payment authorized and ready for settlement.');
+      await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to create PayPal order');
+      setErrorMsg(err?.message || 'Authorization failed. Please verify your PIN.');
     } finally {
       setBusy(false);
     }
   };
 
-  const handleCaptureOrder = async () => {
+  const handleCaptureSettlement = async () => {
     if (!activePayment) return;
     setErrorMsg('');
     setBusy(true);
     try {
-      const res = await apiRequest(`/payments/${activePayment._id}/paypal-capture`, {
+      await apiRequest(`/payments/${activePayment._id}/paypal-capture`, {
         method: 'POST',
         body: JSON.stringify({ paypalOrderId: activePayment.paypalOrderId }),
       });
-      setStatusMessage(
-        `Step 4 Complete: Order captured (${res.captureResult?.captureId || activePayment.paypalCaptureId}). MongoDB balance, AG Grid history, Elastic index, and Zapier notification updated!`
-      );
-      await loadPayments();
+      setStatusMessage('Payment completed successfully. Balances and transaction history updated.');
+      await loadData();
       window.dispatchEvent(new CustomEvent('aura-state-changed'));
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Capture failed');
+      setErrorMsg(err?.message || 'Payment settlement failed.');
     } finally {
       setBusy(false);
     }
   };
 
-  const handleVerifyWebhook = async () => {
-    if (!activePayment) return;
-    setErrorMsg('');
-    setBusy(true);
-    try {
-      const res = await apiRequest('/webhooks/paypal', {
-        method: 'POST',
-        body: JSON.stringify({
-          id: `WH-SBX-${Date.now()}`,
-          event_type: 'PAYMENT.CAPTURE.COMPLETED',
-          paymentRequestId: activePayment._id,
-          paypalOrderId: activePayment.paypalOrderId,
-          resource: {
-            id: activePayment.paypalCaptureId || `CAP-${Date.now()}`,
-            status: 'COMPLETED',
-            supplementary_data: {
-              related_ids: {
-                order_id: activePayment.paypalOrderId,
-              },
-            },
-          },
-        }),
-      });
-      setStatusMessage(
-        `Step 5 Complete: PayPal Webhook (${res.eventId}) cryptographically verified (${res.verificationMode}).`
-      );
-      await loadPayments();
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Webhook verification failed');
-    } finally {
-      setBusy(false);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'captured':
+      case 'webhook_verified':
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Completed
+          </span>
+        );
+      case 'paypal_order_created':
+      case 'pin_verified':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            <Clock className="w-3.5 h-3.5" />
+            Processing
+          </span>
+        );
+      case 'guardian_approved':
+      case 'pending_approval':
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <Clock className="w-3.5 h-3.5" />
+            Awaiting Approval
+          </span>
+        );
+      case 'failed':
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+            <XCircle className="w-3.5 h-3.5" />
+            Failed
+          </span>
+        );
+      case 'refunded':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+            Refunded
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+            {status?.replace(/_/g, ' ') || 'Pending'}
+          </span>
+        );
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 transition-colors">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 lg:p-8 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900 px-3 py-1 rounded-full">
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            User Financial Authority • Argon2id PIN • PayPal Sandbox Execution
-          </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white mt-2">
-            Controlled Payment Preparation, PIN Approval &amp; PayPal Settlement
+          <h2 className="text-xl sm:text-2xl font-bold text-navy-900 dark:text-white">
+            Payments &amp; Transfers
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            No AI agent or background process can transfer funds automatically. Every payment requires Financial Guardian policy validation, explicit user approval, and Argon2id PIN verification.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Send payments with financial rule validation and security PIN verification.
           </p>
         </div>
-        {paypalStatus && (
-          <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs shrink-0">
-            <div className="font-bold text-navy-900 dark:text-white">PayPal Sandbox Active</div>
-            <div className="text-slate-500 dark:text-slate-400">APIMatic Contract Guard Verified</div>
-          </div>
-        )}
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900 self-start sm:self-center">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          Protected by Spending Rules
+        </span>
       </div>
 
       {statusMessage && (
@@ -279,259 +292,350 @@ export const PaymentsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Main Grid: Payment Form (Left) & Review / Security Approval (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Step 1: Prepare Payment Request */}
+        {/* A. Payment Form */}
         <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-          <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            1. Prepare Controlled Payment Request
-          </h3>
-          <form onSubmit={handlePrepare} className="space-y-3">
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Send Money</h3>
+          </div>
+
+          <form onSubmit={handlePrepare} className="space-y-3.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Recipient or Merchant Name</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Recipient or Merchant Name
+              </label>
               <input
                 type="text"
                 value={recipientName}
                 onChange={(e) => setRecipientName(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g. Greenwood Residency Properties"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Recipient Email
+              </label>
+              <input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                required
+                placeholder="merchant@example.com"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount</label>
-                <input
-                  type="number"
-                  value={amountInr}
-                  onChange={(e) => setAmountInr(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Amount
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">$</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    required
+                    className="w-full pl-7 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Category
+                </label>
                 <select
                   value={merchantCategory}
                   onChange={(e) => setMerchantCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="Rent">Rent &amp; Housing</option>
-                  <option value="Electronics">Electronics</option>
                   <option value="Utilities">Utilities &amp; Bills</option>
-                  <option value="Education">Education</option>
-                  <option value="General">General Merchant</option>
+                  <option value="Electronics">Electronics &amp; Gear</option>
+                  <option value="Education">Education &amp; Tuition</option>
+                  <option value="General">General Services</option>
                 </select>
               </div>
             </div>
+
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Purpose / Memo</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Source Account
+              </label>
+              <select
+                value={sourceAccountId}
+                onChange={(e) => setSourceAccountId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {accounts.map((acc) => (
+                  <option key={acc._id} value={acc._id}>
+                    {acc.name} ({formatMoney(acc.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Payment Purpose
+              </label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="What is this payment for?"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs"
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition shadow-xs pt-3"
             >
-              <span>Prepare &amp; Run Financial Guardian Check</span>
+              <span>Review Payment</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
         </div>
 
-        {/* Step 2-5: Financial Guardian Verdict, PIN Gate & PayPal Sandbox Execution */}
+        {/* B & C. Payment Review & Security Approval */}
         <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5 transition-colors">
           {!activePayment ? (
-            <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
-              Prepare a payment request on the left to begin the controlled PayPal Sandbox workflow.
+            <div className="p-12 text-center text-xs text-slate-400">
+              Prepare a payment request on the left to review details and authorize execution.
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                    Active Payment Request • {activePayment.idempotencyKey}
-                  </span>
-                  <h3 className="text-base font-bold text-navy-900 dark:text-white mt-0.5">
-                    {!balancesVisible ? '••••••' : isUsd ? formatMoney(activePayment.amountInr || activePayment.amountUsd) : `${formatMoney(activePayment.amountInr)} ($${activePayment.amountUsd?.toFixed(2)} USD)`} → {activePayment.recipientName}
-                  </h3>
+              {/* Payment Summary */}
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-navy-900 dark:text-white">Payment Review</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Verify transaction details before confirming with your security PIN.
+                    </p>
+                  </div>
+                  <div>{getStatusBadge(activePayment.status)}</div>
                 </div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 uppercase">
-                  {activePayment.status.replace(/_/g, ' ')}
-                </span>
-              </div>
 
-              {/* Financial Guardian 4-Rule Policy Evaluation */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  Financial Guardian Policy Evaluation
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {(activePayment.guardianEvaluation?.policyChecks || []).map((chk: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className={`p-3 rounded-2xl border text-xs ${
-                        chk.passed
-                          ? 'bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-300'
-                          : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-300'
-                      }`}
-                    >
-                      <div className="font-bold flex items-center gap-1.5">
-                        {chk.passed ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                        )}
-                        {chk.rule}
-                      </div>
-                      <div className="text-[11px] mt-1 opacity-90">{chk.detail}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Step 2: Argon2id PIN Verification */}
-              {activePayment.guardianEvaluation?.passed && (
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
-                      <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      Step 2: Explicit User Approval &amp; Argon2id PIN Verification
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 space-y-1">
+                    <span className="text-[11px] text-slate-400 font-medium block">Recipient</span>
+                    <span className="font-bold text-navy-900 dark:text-white text-sm block truncate">
+                      {activePayment.recipientName}
                     </span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-slate-400" />
-                      Argon2id Encrypted Protection
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block truncate">
+                      {activePayment.recipientEmail}
                     </span>
                   </div>
 
-                  <form onSubmit={handleVerifyPin} className="flex flex-wrap items-center gap-2.5">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 space-y-1">
+                    <span className="text-[11px] text-slate-400 font-medium block">Source Account</span>
+                    <span className="font-bold text-navy-900 dark:text-white text-sm block truncate">
+                      {sourceAccount?.name || 'Primary Checking'}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block">
+                      Available: {formatMoney(sourceAccount?.balance)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Amount Breakdown Table */}
+                <div className="mt-3 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-xs space-y-2">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Payment Amount:</span>
+                    <span className="font-semibold text-navy-900 dark:text-white">
+                      {!balancesVisible ? '••••••' : formatMoney(activePayment.amountInr || activePayment.amountUsd)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Processing Fee:</span>
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">$0.00</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between text-sm font-bold text-navy-900 dark:text-white">
+                    <span>Total Payable:</span>
+                    <span>
+                      {!balancesVisible ? '••••••' : formatMoney(activePayment.amountInr || activePayment.amountUsd)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Policy Evaluation Verdict */}
+              {activePayment.guardianEvaluation && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-emerald-900 dark:text-emerald-300">
+                        Evaluated by Spending Rules
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px] block">
+                        Fits within single transaction limit and discretionary budget.
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-bold">Passed</span>
+                </div>
+              )}
+
+              {/* C. Security Approval Panel */}
+              {['pending_approval', 'guardian_approved'].includes(activePayment.status) && (
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-navy-900 dark:text-white">Authorize Payment</h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Enter your 4-digit security PIN to confirm and execute this transfer.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAuthorizeAndExecute} className="flex flex-wrap items-center gap-3 pt-1">
                     <input
                       type="password"
                       maxLength={6}
-                      placeholder="Enter security PIN"
+                      placeholder="••••"
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
                       required
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono tracking-widest w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono tracking-widest w-36 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       type="submit"
-                      disabled={busy}
-                      className="px-4 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition"
+                      disabled={busy || !pinInput}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-xs transition"
                     >
                       <Lock className="w-3.5 h-3.5" />
-                      Approve &amp; Verify PIN
+                      <span>{busy ? 'Authorizing...' : 'Authorize & Pay'}</span>
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* Step 3, 4 & 5: PayPal Orders API v2 Create, User Approval, Capture & Webhook */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+              {/* Action for order created */}
+              {activePayment.status === 'paypal_order_created' && (
+                <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-blue-900 dark:text-blue-300 block">Buyer Approval Ready</span>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                      Complete final authorization in the PayPal window or confirm settlement.
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {activePayment.paypalApprovalUrl && (
+                      <a
+                        href={activePayment.paypalApprovalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 rounded-xl bg-[#003087] hover:bg-[#00256c] text-white font-bold transition flex items-center gap-1"
+                      >
+                        <span>Approve via PayPal</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCaptureSettlement}
+                      disabled={busy}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition"
+                    >
+                      Confirm Settlement
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Expandable Technical Security Details */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={handleCreatePayPalOrder}
-                  disabled={busy || (!approvalToken && activePayment.status === 'guardian_approved')}
-                  className="px-4 py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#003087] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs inline-flex items-center gap-1.5"
+                  onClick={() => setShowSecurityDetails(!showSecurityDetails)}
+                  className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white flex items-center gap-1"
                 >
-                  <span>3. Create &amp; Pay with PayPal</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <span>Security &amp; Audit Details</span>
+                  {showSecurityDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </button>
 
-                {activePayment.paypalApprovalUrl && activePayment.status === 'paypal_order_created' && (
-                  <a
-                    href={activePayment.paypalApprovalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2.5 rounded-xl bg-[#003087] hover:bg-[#00256c] text-white text-xs font-bold transition shadow-xs inline-flex items-center gap-1.5"
-                  >
-                    <span>Approve on PayPal</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
+                {showSecurityDetails && (
+                  <div className="mt-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-[11px] text-slate-500 dark:text-slate-400 space-y-1 font-mono">
+                    <div>Reference ID: {activePayment._id}</div>
+                    {activePayment.paypalOrderId && <div>Order ID: {activePayment.paypalOrderId}</div>}
+                    {activePayment.paypalCaptureId && <div>Capture ID: {activePayment.paypalCaptureId}</div>}
+                    <div>Status: {activePayment.status}</div>
+                  </div>
                 )}
-
-                <button
-                  type="button"
-                  onClick={handleCaptureOrder}
-                  disabled={
-                    busy ||
-                    !['pin_verified', 'paypal_order_created'].includes(activePayment.status)
-                  }
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-bold transition shadow-xs"
-                >
-                  4. Capture Approved PayPal Order
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleVerifyWebhook}
-                  disabled={busy || !['captured', 'webhook_verified'].includes(activePayment.status)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
-                >
-                  <Webhook className="w-3.5 h-3.5" />
-                  5. Verify PayPal Webhook Signature
-                </button>
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Payment Request History */}
+      {/* D. Payment History Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <h3 className="text-sm font-bold text-navy-900 dark:text-white mb-4">Controlled Payment Audit &amp; PayPal Order History</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-navy-900 dark:text-white">Payment History</h3>
+          <span className="text-xs text-slate-400">{payments.length} Records</span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-3">Recipient</th>
                 <th className="py-2.5 px-3">Description</th>
                 <th className="py-2.5 px-3">Amount</th>
-                <th className="py-2.5 px-3">PayPal Order ID</th>
                 <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">Webhook</th>
-                <th className="py-2.5 px-3 text-right">Select</th>
+                <th className="py-2.5 px-3 text-right">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {payments.map((p) => (
                 <tr
                   key={p._id}
-                  className={p._id === activePayment?._id ? 'bg-blue-50/40 dark:bg-blue-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}
+                  onClick={() => setInspectingPayment(p)}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
                 >
-                  <td className="py-2.5 px-3 font-semibold text-navy-900 dark:text-white">{p.recipientName}</td>
-                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{p.description}</td>
-                  <td className="py-2.5 px-3 font-bold text-navy-900 dark:text-white">
-                    {!balancesVisible ? '••••••' : formatMoney(p.amountInr || p.amountUsd)}{' '}
-                    {!balancesVisible || isUsd ? null : <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(${p.amountUsd?.toFixed(2)})</span>}
+                  <td className="py-3 px-3 text-slate-500">
+                    {new Date(p.createdAt || Date.now()).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
                   </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{p.paypalOrderId || 'Pending'}</td>
-                  <td className="py-2.5 px-3">
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 uppercase">
-                      {p.status.replace(/_/g, ' ')}
-                    </span>
+                  <td className="py-3 px-3 font-semibold text-navy-900 dark:text-white">
+                    {p.recipientName}
                   </td>
-                  <td className="py-2.5 px-3">
-                    {p.webhookVerified ? (
-                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Verified
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">Awaiting</span>
-                    )}
+                  <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                    {p.description}
                   </td>
-                  <td className="py-2.5 px-3 text-right">
+                  <td className="py-3 px-3 font-bold text-navy-900 dark:text-white">
+                    {!balancesVisible ? '••••••' : formatMoney(p.amountInr || p.amountUsd)}
+                  </td>
+                  <td className="py-3 px-3">{getStatusBadge(p.status)}</td>
+                  <td className="py-3 px-3 text-right">
                     <button
-                      onClick={() => setActivePaymentId(p._id)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInspectingPayment(p);
+                      }}
                       className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
                     >
-                      Inspect
+                      View
                     </button>
                   </td>
                 </tr>
@@ -540,6 +644,67 @@ export const PaymentsPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Record Inspection Modal */}
+      {inspectingPayment && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-navy-900 dark:text-white">Transaction Details</h3>
+              <button
+                type="button"
+                onClick={() => setInspectingPayment(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-navy-900 dark:hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Recipient</span>
+                <span className="font-bold text-navy-900 dark:text-white">{inspectingPayment.recipientName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Recipient Email</span>
+                <span className="text-slate-700 dark:text-slate-300">{inspectingPayment.recipientEmail}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Amount</span>
+                <span className="font-bold text-navy-900 dark:text-white">
+                  {formatMoney(inspectingPayment.amountInr || inspectingPayment.amountUsd)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Status</span>
+                <span>{getStatusBadge(inspectingPayment.status)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Date</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {new Date(inspectingPayment.createdAt).toLocaleString()}
+                </span>
+              </div>
+              {inspectingPayment.description && (
+                <div className="py-1">
+                  <span className="text-slate-400 block mb-0.5">Memo / Description</span>
+                  <span className="text-slate-700 dark:text-slate-300">{inspectingPayment.description}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setInspectingPayment(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

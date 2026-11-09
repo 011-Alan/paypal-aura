@@ -395,9 +395,9 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-navy-900 dark:text-white">AURA E-Commerce</h2>
+              <h2 className="text-lg font-bold text-navy-900 dark:text-white">Store &amp; Orders</h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                Channel3 + PayPal Sandbox
+                Direct Checkout &amp; Tracking
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -592,7 +592,7 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
                 Merchant Operations Hub Restricted
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed mt-1">
-                The Merchant Fulfillment Hub, AG Grid Received Payments explorer, and Bryntum TaskBoard are isolated strictly to verified Business and Merchant accounts. You are currently signed in as a <span className="font-bold text-navy-900 dark:text-white">Personal Account ({user?.email})</span>.
+                The Merchant Operations Hub and fulfillment tools are restricted to verified Business and Merchant accounts. You are currently signed in as a <span className="font-bold text-navy-900 dark:text-white">Personal Account ({user?.email})</span>.
               </p>
             </div>
 
@@ -642,13 +642,13 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
               <div>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/60 px-3 py-1 rounded-full">
                   <ShoppingBag className="w-3.5 h-3.5" />
-                  Channel3 Smart Purchase Companion + KERNEL Assisted Research
+                  Smart Purchase Companion
                 </span>
                 <h2 className="text-xl font-bold text-navy-900 dark:text-white mt-2">
-                  Intelligent Shopping &amp; 7-Factor Affordability Evaluation
+                  Affordability Evaluator
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Evaluates every product against your discretionary budget, upcoming commitments, active savings goals, and spending preferences.
+                  Evaluates purchases against your discretionary budget, upcoming commitments, and savings goals.
                 </p>
               </div>
             </div>
@@ -752,12 +752,12 @@ export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }
               </div>
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
-                  Channel3 Discovery Mode
-                  <Tooltip content="Real-time product discovery catalog powered by Channel3." />
+                  Catalog Status
+                  <Tooltip content="Real-time product discovery catalog." />
                 </div>
                 <div className="text-xs font-semibold text-navy-900 dark:text-white mt-2 flex items-center gap-1">
                   <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                  {result.liveChannel3ApiUsed ? 'Channel3 Live API' : 'Verified Reference Catalog'}
+                  {result.liveChannel3ApiUsed ? 'Live Catalog' : 'Verified Catalog'}
                 </div>
               </div>
             </div>

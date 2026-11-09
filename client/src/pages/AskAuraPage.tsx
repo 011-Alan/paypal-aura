@@ -369,7 +369,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
 
                           <p className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed font-medium">
                             AURA has prepared this payment workflow. As a strict non-negotiable security principle,{' '}
-                            <strong>AURA cannot transfer funds automatically.</strong> You must review the details and enter your Argon2id security PIN.
+                            <strong>AURA cannot transfer funds automatically.</strong> You must review the details and enter your security PIN.
                           </p>
 
                           <div className="bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 grid grid-cols-2 gap-2 text-xs">
@@ -389,19 +389,19 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                             onClick={() => onNavigate?.('payments')}
                             className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition flex items-center justify-center gap-2"
                           >
-                            <span>Open Payments Workbench to Verify PIN &amp; Execute</span>
+                            <span>Review Payment &amp; Verify PIN</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       )}
 
-                      {/* 3. Multi-Category Channel3 Product Discovery & Affordability */}
+                      {/* 3. Product Discovery & Affordability */}
                       {msg.toolAction.type === 'purchase_evaluated' && (
                         <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-left space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
                               <ShoppingBag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                              Channel3 Product Discovery &amp; Affordability
+                              Product Options &amp; Affordability
                             </span>
                             <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">
                               {msg.toolAction.details?.verdict || 'Evaluated'}
@@ -464,7 +464,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                               Calendar Reminder Synchronized
                             </span>
                             <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
-                              Bryntum Sync
+                              Calendar Synced
                             </span>
                           </div>
                           <p className="text-xs text-emerald-900 dark:text-emerald-200">

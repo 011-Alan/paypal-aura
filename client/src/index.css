@@ -15,7 +15,7 @@
   }
 }
 
-/* Clean custom styling for AG Grid inside AURA's white & navy financial theme */
+/* Clean custom styling for data grids inside AURA's white & navy financial theme */
 .ag-theme-quartz {
   --ag-background-color: #ffffff;
   --ag-header-background-color: #f8fafc;
