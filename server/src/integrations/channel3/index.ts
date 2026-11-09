@@ -508,7 +508,483 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     purchaseUrl: 'https://www.hydroflask.com/',
     supportsPayPalSandboxCheckout: true,
   },
+
+  // --- Mechanical Keyboards & Peripherals ---
+  {
+    id: 'ch3-keyboard-keychron-q1',
+    name: 'Keychron Q1 Pro Wireless Custom Mechanical Keyboard (QMK/VIA, CNC Aluminum, Banana Switches)',
+    brand: 'Keychron',
+    category: 'Keyboards & Peripherals',
+    description: 'Premium 75% layout custom wireless mechanical keyboard with CNC machined aluminum body, hot-swappable sockets, double-gasket design, and screw-in PCB stabilizers.',
+    priceInr: 16999,
+    priceUsd: 199,
+    demoPriceUsd: 199,
+    retailPriceRefUsd: 220,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1595225476474-87563907a212?auto=format&fit=crop&w=600&q=80',
+    variants: ['Carbon Black / Tactile Banana', 'Silver Grey / Linear Red', 'Shell White / Tactile Brown'],
+    availability: 'in_stock',
+    retailerName: 'Keychron Official Store Direct',
+    purchaseUrl: 'https://www.keychron.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.9,
+    reviewCount: 342,
+  },
+  {
+    id: 'ch3-keyboard-logitech-g-pro-x',
+    name: 'Logitech G PRO X TKL LIGHTSPEED Wireless Mechanical Gaming Keyboard (GX Brown Tactile)',
+    brand: 'Logitech',
+    category: 'Keyboards & Peripherals',
+    description: 'Championship-proven tenkeyless wireless mechanical keyboard designed with pro esports athletes. LIGHTSPEED wireless technology, dual-shot PBT keycaps, and LIGHTSYNC RGB.',
+    priceInr: 14999,
+    priceUsd: 179,
+    demoPriceUsd: 179,
+    retailPriceRefUsd: 199,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80',
+    variants: ['Black / GX Brown Tactile', 'White / GX Red Linear', 'Magenta / GX Blue Clicky'],
+    availability: 'in_stock',
+    retailerName: 'Logitech G Gaming Store',
+    purchaseUrl: 'https://www.logitechg.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 512,
+  },
+  {
+    id: 'ch3-keyboard-keychron-k2',
+    name: 'Keychron K2 V2 Wireless Mechanical Keyboard (75% Compact, Gateron G Pro Brown)',
+    brand: 'Keychron',
+    category: 'Keyboards & Peripherals',
+    description: 'Ultra-popular 84-key compact wireless mechanical keyboard with Mac and Windows layout keycaps, hot-swappable option, 4000mAh battery, and wireless or wired mode.',
+    priceInr: 6999,
+    priceUsd: 89,
+    demoPriceUsd: 89,
+    retailPriceRefUsd: 99,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=600&q=80',
+    variants: ['RGB Aluminum / Brown Switch', 'White Backlight / Red Switch'],
+    availability: 'in_stock',
+    retailerName: 'Keychron Official Store Direct',
+    purchaseUrl: 'https://www.keychron.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.7,
+    reviewCount: 880,
+  },
+  {
+    id: 'ch3-keyboard-razer-blackwidow',
+    name: 'Razer BlackWidow V4 Pro Mechanical Gaming Keyboard (Razer Green Clicky Switches, Chroma RGB)',
+    brand: 'Razer',
+    category: 'Keyboards & Peripherals',
+    description: 'Full-featured battlestation mechanical keyboard with Razer Command Dial, 8 dedicated macro keys, 8000Hz polling rate, magnetic plush leatherette wrist rest, and underglow.',
+    priceInr: 18999,
+    priceUsd: 229,
+    demoPriceUsd: 229,
+    retailPriceRefUsd: 249,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1541140532154-b024d705b909?auto=format&fit=crop&w=600&q=80',
+    variants: ['Razer Green Clicky', 'Razer Yellow Linear'],
+    availability: 'in_stock',
+    retailerName: 'Razer Direct Partner Store',
+    purchaseUrl: 'https://www.razer.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.7,
+    reviewCount: 290,
+  },
+
+  // --- Gaming Laptops ---
+  {
+    id: 'ch3-laptop-asus-rog-zephyrus-g16',
+    name: 'ASUS ROG Zephyrus G16 OLED Gaming Laptop (Intel Core Ultra 9, RTX 4070 8GB, 32GB RAM, 1TB SSD)',
+    brand: 'ASUS',
+    category: 'Laptops & Computers',
+    description: 'Ultra-thin premium CNC aluminum gaming powerhouse with 2.5K 240Hz ROG Nebula OLED display, NVIDIA GeForce RTX 4070 8GB GPU, and vapor chamber cooling.',
+    priceInr: 164990,
+    priceUsd: 1999,
+    demoPriceUsd: 1999,
+    retailPriceRefUsd: 2199,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1603302576837-37561b2e2302?auto=format&fit=crop&w=600&q=80',
+    variants: ['Eclipse Gray 32GB/1TB', 'Platinum White 32GB/2TB'],
+    availability: 'in_stock',
+    retailerName: 'ASUS ROG Gaming Flagship',
+    purchaseUrl: 'https://rog.asus.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.9,
+    reviewCount: 185,
+  },
+  {
+    id: 'ch3-laptop-lenovo-legion-pro-5i',
+    name: 'Lenovo Legion Pro 5i 16" Gaming Laptop (Intel Core i7-14700HX, RTX 4060, 16GB RAM, 1TB SSD, 240Hz)',
+    brand: 'Lenovo',
+    category: 'Laptops & Computers',
+    description: 'AI-tuned competitive gaming laptop with Lenovo Legion Coldfront 5.0 cooling, 16-inch WQXGA 240Hz display, and 140W max TGP RTX 4060 graphics.',
+    priceInr: 119990,
+    priceUsd: 1449,
+    demoPriceUsd: 1449,
+    retailPriceRefUsd: 1599,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1544652478-6653e09f18a2?auto=format&fit=crop&w=600&q=80',
+    variants: ['Onyx Grey 16GB/1TB', 'Onyx Grey 32GB/1TB'],
+    availability: 'in_stock',
+    retailerName: 'Lenovo Legion Direct Store',
+    purchaseUrl: 'https://www.lenovo.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 310,
+  },
+  {
+    id: 'ch3-laptop-acer-nitro-v15',
+    name: 'Acer Nitro V 15 Gaming Laptop (AMD Ryzen 7 7735HS, RTX 4050, 16GB RAM, 512GB SSD, 144Hz FHD)',
+    brand: 'Acer',
+    category: 'Laptops & Computers',
+    description: 'Value-oriented high-speed gaming laptop featuring dual-fan cooling with dual intake exhausts, NVIDIA DLSS 3, and 15.6-inch 144Hz IPS display.',
+    priceInr: 66990,
+    priceUsd: 799,
+    demoPriceUsd: 799,
+    retailPriceRefUsd: 899,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1593642702821-c8da6771f0c6?auto=format&fit=crop&w=600&q=80',
+    variants: ['Obsidian Black 16GB/512GB'],
+    availability: 'in_stock',
+    retailerName: 'Acer Official Store',
+    purchaseUrl: 'https://www.acer.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.6,
+    reviewCount: 420,
+  },
+
+  // --- Premium Wireless Headphones ---
+  {
+    id: 'ch3-headphones-sony-wh-1000xm5',
+    name: 'Sony WH-1000XM5 Wireless Industry Leading Noise Canceling Headphones',
+    brand: 'Sony',
+    category: 'Audio & Accessories',
+    description: 'Two processors and 8 microphones for unprecedented noise cancellation. Auto NC Optimizer, 30-hour battery life with quick charge, and crystal-clear hands-free calling.',
+    priceInr: 28990,
+    priceUsd: 398,
+    demoPriceUsd: 398,
+    retailPriceRefUsd: 420,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+    variants: ['Silver', 'Black', 'Midnight Blue'],
+    availability: 'in_stock',
+    retailerName: 'Sony Center Audio Hub',
+    purchaseUrl: 'https://www.sony.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.9,
+    reviewCount: 940,
+  },
+  {
+    id: 'ch3-headphones-bose-qc45',
+    name: 'Bose QuietComfort 45 Bluetooth Wireless Noise Cancelling Headphones',
+    brand: 'Bose',
+    category: 'Audio & Accessories',
+    description: 'Iconic silence, comfort, and sound. TriPort acoustic architecture, Quiet and Aware modes, 24-hour battery life, and lightweight plush synthetic leather.',
+    priceInr: 24900,
+    priceUsd: 329,
+    demoPriceUsd: 329,
+    retailPriceRefUsd: 349,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=600&q=80',
+    variants: ['Triple Black', 'White Smoke', 'Eclipse Grey'],
+    availability: 'in_stock',
+    retailerName: 'Bose Direct Partner',
+    purchaseUrl: 'https://www.bose.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 780,
+  },
+
+  // --- Smartphones (Including Under $500 Targets) ---
+  {
+    id: 'ch3-phone-google-pixel-8a',
+    name: 'Google Pixel 8a 5G (Google Tensor G3, 128GB, Unlocked, 120Hz Actua Display)',
+    brand: 'Google',
+    category: 'Smartphones',
+    description: 'The delightfully intelligent smartphone powered by Google Tensor G3. Features 64MP dual rear cameras, 7 years of OS updates, and IP67 water and dust resistance.',
+    priceInr: 39999,
+    priceUsd: 499,
+    demoPriceUsd: 499,
+    retailPriceRefUsd: 520,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=600&q=80',
+    variants: ['Obsidian 128GB', 'Porcelain 128GB', 'Bay Blue 128GB'],
+    availability: 'in_stock',
+    retailerName: 'Google Store Partner (PayPal Enabled)',
+    purchaseUrl: 'https://store.google.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 620,
+  },
+  {
+    id: 'ch3-phone-samsung-a55',
+    name: 'Samsung Galaxy A55 5G (8GB RAM, 128GB Storage, Super AMOLED 120Hz, IP67)',
+    brand: 'Samsung',
+    category: 'Smartphones',
+    description: 'Premium metal and glass build with 6.6-inch Super AMOLED 120Hz display, 50MP OIS camera, Samsung Knox Vault security, and 5000mAh two-day battery.',
+    priceInr: 31999,
+    priceUsd: 379,
+    demoPriceUsd: 379,
+    retailPriceRefUsd: 410,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=600&q=80',
+    variants: ['Awesome Navy 8GB/128GB', 'Awesome Iceblue 8GB/128GB'],
+    availability: 'in_stock',
+    retailerName: 'Samsung Direct Partner',
+    purchaseUrl: 'https://www.samsung.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.7,
+    reviewCount: 450,
+  },
+  {
+    id: 'ch3-phone-apple-iphone-se',
+    name: 'Apple iPhone SE 3rd Gen (A15 Bionic, 64GB, 5G, Midnight)',
+    brand: 'Apple',
+    category: 'Smartphones',
+    description: 'Blazing-fast A15 Bionic chip in a compact, durable pocketable design. 5G connectivity, 12MP advanced camera system, and Touch ID home button.',
+    priceInr: 34999,
+    priceUsd: 429,
+    demoPriceUsd: 429,
+    retailPriceRefUsd: 449,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=600&q=80',
+    variants: ['Midnight 64GB', 'Starlight 64GB', '(PRODUCT)RED 64GB'],
+    availability: 'in_stock',
+    retailerName: 'Apple Authorized Partner',
+    purchaseUrl: 'https://www.apple.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.6,
+    reviewCount: 510,
+  },
+
+  // --- Ergonomic Office Chairs & Furniture ---
+  {
+    id: 'ch3-furniture-herman-miller-aeron',
+    name: 'Herman Miller Aeron Ergonomic Office Chair (PostureFit SL, Fully Adjustable)',
+    brand: 'Herman Miller',
+    category: 'Furniture',
+    description: 'The world benchmark for ergonomic seating. 8Z Pellicle breathable suspension mesh, PostureFit SL sacral support, tilt limiter with seat angle, and fully adjustable arms.',
+    priceInr: 124900,
+    priceUsd: 1495,
+    demoPriceUsd: 1495,
+    retailPriceRefUsd: 1650,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1580481077195-7385f50d8857?auto=format&fit=crop&w=600&q=80',
+    variants: ['Size B Medium / Graphite', 'Size C Large / Mineral'],
+    availability: 'in_stock',
+    retailerName: 'Herman Miller Official Store',
+    purchaseUrl: 'https://www.hermanmiller.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.9,
+    reviewCount: 1120,
+  },
+  {
+    id: 'ch3-furniture-steelcase-series1',
+    name: 'Steelcase Series 1 Ergonomic Office Chair (LiveBack Technology, 4D Arms)',
+    brand: 'Steelcase',
+    category: 'Furniture',
+    description: 'Ergonomic performance office chair featuring LiveBack flexor technology, weight-activated responsive recline, pneumatic seat height adjustment, and 4D armrests.',
+    priceInr: 41900,
+    priceUsd: 495,
+    demoPriceUsd: 495,
+    retailPriceRefUsd: 540,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1505797149-43b0069ec26b?auto=format&fit=crop&w=600&q=80',
+    variants: ['Seagull Frame / Licorice Mesh', 'Black Frame / Nickel Mesh'],
+    availability: 'in_stock',
+    retailerName: 'Steelcase Direct Store',
+    purchaseUrl: 'https://store.steelcase.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 380,
+  },
+  {
+    id: 'ch3-furniture-autonomous-ergochair',
+    name: 'Autonomous ErgoChair Pro (Full Ergonomic Support, 22° Recline, 300 lbs)',
+    brand: 'Autonomous',
+    category: 'Furniture',
+    description: 'Full-body ergonomic support with adjustable height, armrest, headrest, backrest, and seat tilt. Breathable woven mesh back supports up to 300 lbs.',
+    priceInr: 32900,
+    priceUsd: 399,
+    demoPriceUsd: 399,
+    retailPriceRefUsd: 440,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1592078615290-033ee584e267?auto=format&fit=crop&w=600&q=80',
+    variants: ['All Black', 'Cool Gray', 'Black & White'],
+    availability: 'in_stock',
+    retailerName: 'Autonomous Direct Partner',
+    purchaseUrl: 'https://www.autonomous.ai/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.7,
+    reviewCount: 650,
+  },
+
+  // --- Running Shoes ---
+  {
+    id: 'ch3-sneaker-brooks-ghost-15',
+    name: 'Brooks Ghost 15 Neutral Road Running Shoes (DNA LOFT v2 Cushioning)',
+    brand: 'Brooks',
+    category: 'Footwear & Sneakers',
+    description: 'Certified carbon-neutral everyday running shoe with refined DNA LOFT v2 soft cushioning, Segmented Crash Pad for smooth transitions, and engineered air mesh upper.',
+    priceInr: 11499,
+    priceUsd: 140,
+    demoPriceUsd: 140,
+    retailPriceRefUsd: 155,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80',
+    variants: ['Black/Ebony/Blue US 9', 'Peacoat/Navy US 10'],
+    availability: 'in_stock',
+    retailerName: 'Brooks Running Official Store',
+    purchaseUrl: 'https://www.brooksrunning.com/',
+    supportsPayPalSandboxCheckout: true,
+    rating: 4.8,
+    reviewCount: 920,
+  },
 ];
+
+
+export interface ParsedSearchQuery {
+  cleanQuery: string;
+  maxPriceUsd?: number;
+  minPriceUsd?: number;
+  tokens: string[];
+}
+
+export function parseNaturalSearchQuery(rawQuery: string): ParsedSearchQuery {
+  let text = (rawQuery || '').trim();
+  let maxPriceUsd: number | undefined;
+  let minPriceUsd: number | undefined;
+
+  // Patterns like 'under $500', 'under 500', 'below $500', '< 500', '<= $500', 'less than $500'
+  const underMatch = text.match(/(?:under|below|less than|max|up to|<|<=)\s*\$?(\d+(?:\.\d+)?)/i);
+  if (underMatch) {
+    maxPriceUsd = parseFloat(underMatch[1]);
+    text = text.replace(underMatch[0], '').trim();
+  }
+
+  // Patterns like 'over $100', 'above 100', '> 100', 'min $100'
+  const overMatch = text.match(/(?:over|above|more than|min|at least|>|>=)\s*\$?(\d+(?:\.\d+)?)/i);
+  if (overMatch) {
+    minPriceUsd = parseFloat(overMatch[1]);
+    text = text.replace(overMatch[0], '').trim();
+  }
+
+  // Price range '$100 to $500' or '$100 - $500'
+  const rangeMatch = text.match(/\$?(\d+(?:\.\d+)?)\s*(?:-|to)\s*\$?(\d+(?:\.\d+)?)/i);
+  if (rangeMatch) {
+    minPriceUsd = parseFloat(rangeMatch[1]);
+    maxPriceUsd = parseFloat(rangeMatch[2]);
+    text = text.replace(rangeMatch[0], '').trim();
+  }
+
+  const clean = text.replace(/[,$\.]/g, ' ').replace(/\s+/g, ' ').trim();
+  const tokens = clean.toLowerCase().split(/\s+/).filter(Boolean);
+
+  return { cleanQuery: clean, maxPriceUsd, minPriceUsd, tokens };
+}
+
+const INTENT_CATEGORY_MAP: {
+  intent: RegExp;
+  category: string;
+  requiresToken?: string;
+  negativeCategory?: string;
+}[] = [
+  { intent: /\b(headphone|headphones|earphone|earphones|earbuds|airpod|airpods|headset|audio|bose|sony wh|over-ear|in-ear)\b/i, category: 'Audio & Accessories' },
+  { intent: /\b(keyboard|keyboards|mechanical keyboard|keychron|switches|keycaps)\b/i, category: 'Keyboards & Peripherals' },
+  { intent: /\b(gaming laptop|gaming laptops|rog zephyrus|legion|nitro)\b/i, category: 'Laptops & Computers', requiresToken: 'gaming' },
+  { intent: /\b(laptop|laptops|macbook|notebook|ultrabook)\b/i, category: 'Laptops & Computers' },
+  { intent: /\b(office chair|office chairs|ergonomic chair|desk chair|mesh chair|herman miller|aeron|steelcase|ergochair)\b/i, category: 'Furniture' },
+  { intent: /\b(running shoe|running shoes|sneaker|sneakers|footwear|trainer|trainers|pegasus|ultraboost|kayano)\b/i, category: 'Footwear & Sneakers' },
+  { intent: /\b(phone|phones|smartphone|smartphones|mobile|pixel|galaxy|iphone)\b/i, category: 'Smartphones' },
+  { intent: /\b(chair|chairs|table|desk|standing desk)\b/i, category: 'Furniture' },
+  { intent: /\b(ac|air conditioner|refrigerator|fridge|vacuum|air fryer|appliance|appliances)\b/i, category: 'Home Appliances' },
+  { intent: /\b(book|books|reading|habits)\b/i, category: 'Books & Learning' },
+  { intent: /\b(bottle|bottles|flask|hydro flask)\b/i, category: 'Kitchen & Dining' },
+];
+
+function scoreProductForSearch(
+  item: Omit<Channel3ProductItem, 'source'> | Channel3ProductItem,
+  parsed: ParsedSearchQuery,
+  maxPriceInr?: number,
+  targetCategory?: string
+): number {
+  const nameLower = item.name.toLowerCase();
+  const descLower = item.description.toLowerCase();
+  const brandLower = item.brand.toLowerCase();
+  const catLower = item.category.toLowerCase();
+  const rawQ = parsed.cleanQuery.toLowerCase();
+
+  let score = 0;
+
+  // 1. Direct targetCategory override
+  if (targetCategory && targetCategory !== 'All') {
+    if (catLower.includes(targetCategory.toLowerCase())) {
+      score += 100;
+    } else {
+      return -999;
+    }
+  }
+
+  // 2. Intent category matching
+  for (const map of INTENT_CATEGORY_MAP) {
+    if (map.intent.test(rawQ)) {
+      if (item.category === map.category) {
+        score += 150;
+        if (map.requiresToken && !nameLower.includes(map.requiresToken) && !descLower.includes(map.requiresToken)) {
+          score -= 60; // prioritize gaming models
+        }
+      } else {
+        score -= 250; // strong mismatch prevention
+      }
+      break;
+    }
+  }
+
+  // 3. Exact phrase match
+  if (rawQ && nameLower.includes(rawQ)) {
+    score += 120;
+  } else if (rawQ && descLower.includes(rawQ)) {
+    score += 40;
+  }
+
+  // 4. Token matches with stemming
+  for (const rawToken of parsed.tokens) {
+    if (rawToken.length < 2) continue;
+    const token = rawToken.toLowerCase();
+    const stem = token.endsWith('ing') && token.length > 5
+      ? token.slice(0, -3)
+      : token.endsWith('es') && token.length > 4
+      ? token.slice(0, -2)
+      : token.endsWith('s') && token.length > 3
+      ? token.slice(0, -1)
+      : token;
+
+    if (nameLower.includes(token) || nameLower.includes(stem)) score += 30;
+    if (brandLower.includes(token) || brandLower.includes(stem)) score += 30;
+    if (catLower.includes(token) || catLower.includes(stem)) score += 20;
+    if (descLower.includes(token) || descLower.includes(stem)) score += 10;
+  }
+
+  // 5. Price constraint
+  if (parsed.maxPriceUsd !== undefined) {
+    const usd = item.demoPriceUsd || item.priceUsd || Math.round(item.priceInr * (1 / 83.33));
+    if (usd <= parsed.maxPriceUsd) {
+      score += 40;
+    } else {
+      score -= 600; // exclude out-of-budget items
+    }
+  }
+
+  if (maxPriceInr !== undefined && maxPriceInr > 0) {
+    if (item.priceInr <= maxPriceInr) {
+      score += 30;
+    } else {
+      score -= 400;
+    }
+  }
+
+  return score;
+}
 
 export class Channel3IntegrationService {
   getHealthStatus() {
@@ -538,22 +1014,28 @@ export class Channel3IntegrationService {
     statusMessage: string;
     products: Channel3ProductItem[];
   }> {
-    const q = (params.query || '').toLowerCase();
+    const rawQuery = params.query || '';
+    const parsed = parseNaturalSearchQuery(rawQuery);
+    const maxPriceInr = params.maxPriceInr || (parsed.maxPriceUsd ? Math.round(parsed.maxPriceUsd / env.INR_TO_USD_RATE) : undefined);
 
     if (env.CHANNEL3_API_KEY) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const url = new URL(`${env.CHANNEL3_API_URL}/products/search`);
-        url.searchParams.set('q', params.query);
-        if (params.maxPriceInr) url.searchParams.set('max_price', String(params.maxPriceInr));
+        const baseUrl = env.CHANNEL3_API_URL.replace(/\/products\/search\/?$/, '').replace(/\/+$/, '');
+        const postUrl = baseUrl.endsWith('/search') ? baseUrl : `${baseUrl}/search`;
 
-        const response = await fetch(url.toString(), {
-          method: 'GET',
+        const response = await fetch(postUrl, {
+          method: 'POST',
           headers: {
-            Authorization: `Bearer ${env.CHANNEL3_API_KEY}`,
+            'x-api-key': env.CHANNEL3_API_KEY,
+            'Content-Type': 'application/json',
             Accept: 'application/json',
           },
+          body: JSON.stringify({
+            query: parsed.cleanQuery || rawQuery,
+            limit: 20,
+          }),
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -564,22 +1046,35 @@ export class Channel3IntegrationService {
             ? data.products || data.items || data.data
             : [];
           if (rawItems.length > 0) {
-            const mapped: Channel3ProductItem[] = rawItems.slice(0, 10).map((item: any, idx: number) => ({
-              id: String(item.id || `ch3-live-${idx}`),
-              name: sanitizeUntrustedExternalText(String(item.name || item.title || 'Product'), 160),
-              brand: sanitizeUntrustedExternalText(String(item.brand || 'Brand'), 60),
-              category: sanitizeUntrustedExternalText(String(item.category || 'General'), 60),
-              description: sanitizeUntrustedExternalText(String(item.description || ''), 300),
-              priceInr: Number(item.price_inr || item.price || 15000),
-              currency: String(item.currency || 'INR'),
-              imageUrl: String(item.image_url || item.image || REFERENCE_CATALOG[0].imageUrl),
-              variants: Array.isArray(item.variants) ? item.variants.map(String) : ['Standard'],
-              availability: 'in_stock',
-              retailerName: sanitizeUntrustedExternalText(String(item.retailer || item.merchant || 'Channel3 Merchant'), 80),
-              purchaseUrl: String(item.url || item.purchase_url || 'https://www.paypal.com'),
-              supportsPayPalSandboxCheckout: Boolean(item.supports_paypal ?? true),
-              source: 'channel3_live_api',
-            }));
+            const mapped: Channel3ProductItem[] = rawItems.slice(0, 15).map((item: any, idx: number) => {
+              const offers = Array.isArray(item.offers) ? item.offers : [];
+              const lowestOfferPrice = offers.length > 0
+                ? Math.min(...offers.map((o: any) => Number(o?.price?.amount || o?.price || 999999)))
+                : undefined;
+              const primaryImage = Array.isArray(item.images) && item.images.length > 0
+                ? item.images[0]
+                : item.image_url || item.image || REFERENCE_CATALOG[0].imageUrl;
+
+              return {
+                id: String(item.id || `ch3-live-${idx}`),
+                name: sanitizeUntrustedExternalText(String(item.name || item.title || 'Product'), 160),
+                brand: sanitizeUntrustedExternalText(String(item.brand || 'Brand'), 60),
+                category: sanitizeUntrustedExternalText(String(item.category || 'General'), 60),
+                description: sanitizeUntrustedExternalText(String(item.description || ''), 300),
+                priceInr: Number(item.price_inr || (lowestOfferPrice ? Math.round(lowestOfferPrice / env.INR_TO_USD_RATE) : 15000)),
+                priceUsd: lowestOfferPrice ? Math.round(lowestOfferPrice) : undefined,
+                demoPriceUsd: lowestOfferPrice ? Math.round(lowestOfferPrice) : undefined,
+                currency: String(item.currency || 'USD'),
+                imageUrl: String(primaryImage),
+                images: Array.isArray(item.images) ? item.images.map(String) : [String(primaryImage)],
+                variants: Array.isArray(item.variants) ? item.variants.map(String) : ['Standard'],
+                availability: 'in_stock',
+                retailerName: sanitizeUntrustedExternalText(String(offers[0]?.merchant || item.retailer || item.merchant || 'Channel3 Verified Partner'), 80),
+                purchaseUrl: String(offers[0]?.url || item.url || item.purchase_url || 'https://www.paypal.com'),
+                supportsPayPalSandboxCheckout: true,
+                source: 'channel3_live_api',
+              };
+            });
             return {
               liveApiUsed: true,
               statusMessage: 'Retrieved live product listings from Channel3 API.',
@@ -594,216 +1089,20 @@ export class Channel3IntegrationService {
       }
     }
 
-    // Direct text search across name, brand, description, and variants
-    if (q.trim()) {
-      const textMatches = REFERENCE_CATALOG.filter(
-        (item) =>
-          item.name.toLowerCase().includes(q) ||
-          item.brand.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
-          item.variants.some((v) => v.toLowerCase().includes(q))
-      );
-      if (textMatches.length > 0) {
-        let finalMatches = textMatches;
-        if (params.category && params.category !== 'All') {
-          finalMatches = finalMatches.filter((item) =>
-            item.category.toLowerCase().includes(params.category!.toLowerCase())
-          );
-        }
-        if (typeof params.maxPriceInr === 'number' && params.maxPriceInr > 0) {
-          const under = finalMatches.filter((m) => m.priceInr <= params.maxPriceInr!);
-          if (under.length > 0) finalMatches = under;
-        }
-        return {
-          liveApiUsed: false,
-          statusMessage: env.CHANNEL3_API_KEY
-            ? 'Channel3 live API temporarily unreachable — using clearly labelled reference catalog for affordability evaluation.'
-            : 'Channel3 live API key not configured — using clearly labelled reference catalog for affordability evaluation.',
-          products: finalMatches.map((item) => this.normalizeProduct(item, 'reference_catalog_fallback')),
-        };
-      }
-    }
+    // Reference Catalog Search with Intelligent Multi-Factor Scoring
+    const scored = REFERENCE_CATALOG.map((item) => ({
+      item,
+      score: scoreProductForSearch(item, parsed, maxPriceInr, params.category),
+    }));
 
-    // Filter reference catalog transparently across diverse product categories
-    let matches = REFERENCE_CATALOG.filter((item) => {
-      // Direct category override if provided
-      if (params.category && item.category.toLowerCase().includes(params.category.toLowerCase())) {
-        return true;
-      }
+    let matchingItems = scored
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
 
-      // Footwear & Sneakers
-      if (
-        q.includes('sneaker') ||
-        q.includes('shoe') ||
-        q.includes('running') ||
-        q.includes('footwear') ||
-        q.includes('trainer') ||
-        q.includes('nike') ||
-        q.includes('adidas') ||
-        q.includes('puma') ||
-        q.includes('asics')
-      ) {
-        if (item.category === 'Footwear & Sneakers') {
-          // If running specific, prefer running shoes
-          if (q.includes('running') || q.includes('sports')) {
-            return item.description.toLowerCase().includes('running') || item.name.toLowerCase().includes('running');
-          }
-          if (q.includes('casual') || q.includes('everyday')) {
-            return item.description.toLowerCase().includes('casual') || item.name.toLowerCase().includes('casual');
-          }
-          return true;
-        }
-        return false;
-      }
-
-      // Clothing & Apparel
-      if (
-        q.includes('cloth') ||
-        q.includes('apparel') ||
-        q.includes('shirt') ||
-        q.includes('tee') ||
-        q.includes('jeans') ||
-        q.includes('denim') ||
-        q.includes('jacket') ||
-        q.includes('uniqlo') ||
-        q.includes('levi')
-      ) {
-        return item.category === 'Clothing & Apparel';
-      }
-
-      // Furniture & Home Office
-      if (
-        q.includes('furniture') ||
-        q.includes('chair') ||
-        q.includes('desk') ||
-        q.includes('table') ||
-        q.includes('wakefit') ||
-        q.includes('ikea')
-      ) {
-        return item.category === 'Furniture';
-      }
-
-      // Home Appliances (Air Conditioners, Refrigerators, Vacuum, Air Fryer, etc.)
-      if (
-        q.includes('appliance') ||
-        /\bac\b|\bair conditioner\b|\bair conditioning\b|\bcooler\b/i.test(q) ||
-        /\brefrigerator\b|\bfridge\b/i.test(q) ||
-        q.includes('air fryer') ||
-        q.includes('fryer') ||
-        q.includes('vacuum') ||
-        q.includes('philips') ||
-        q.includes('dyson') ||
-        q.includes('daikin') ||
-        q.includes('voltas') ||
-        q.includes('lg')
-      ) {
-        if (item.category === 'Home Appliances') {
-          if (/\bac\b|\bair conditioner\b|\bair conditioning\b|\bcooler\b/i.test(q)) {
-            return (
-              item.id.includes('-ac') ||
-              /\b(ac|air conditioner|air conditioning)\b/i.test(item.name) ||
-              /\b(air conditioner|air conditioning)\b/i.test(item.description)
-            );
-          }
-          if (/\brefrigerator\b|\bfridge\b/i.test(q)) {
-            return item.name.toLowerCase().includes('refrigerator') || item.description.toLowerCase().includes('refrigerator');
-          }
-          if (q.includes('air fryer') || q.includes('fryer')) {
-            return item.name.toLowerCase().includes('air fryer');
-          }
-          if (q.includes('vacuum')) {
-            return item.name.toLowerCase().includes('vacuum');
-          }
-          return true;
-        }
-        return false;
-      }
-
-      // Books & Learning
-      if (
-        q.includes('book') ||
-        q.includes('read') ||
-        q.includes('habits') ||
-        q.includes('psychology of money') ||
-        q.includes('novel')
-      ) {
-        return item.category === 'Books & Learning';
-      }
-
-      // Laptops & Computers
-      if (
-        q.includes('laptop') ||
-        q.includes('macbook') ||
-        q.includes('computer') ||
-        q.includes('notebook') ||
-        q.includes('asus') ||
-        q.includes('lenovo') ||
-        q.includes('acer')
-      ) {
-        return item.category === 'Laptops & Computers';
-      }
-
-      // Smartphones
-      if (
-        q.includes('phone') ||
-        q.includes('mobile') ||
-        q.includes('smartphone') ||
-        q.includes('galaxy') ||
-        q.includes('cmf')
-      ) {
-        return item.category === 'Smartphones';
-      }
-
-      // Audio & Accessories
-      if (
-        q.includes('headphone') ||
-        q.includes('audio') ||
-        q.includes('earphone') ||
-        q.includes('airpod') ||
-        q.includes('earbud') ||
-        q.includes('sound')
-      ) {
-        return item.category === 'Audio & Accessories';
-      }
-
-      // Bottles & Kitchenware
-      if (
-        q.includes('bottle') ||
-        q.includes('flask') ||
-        q.includes('hydration') ||
-        q.includes('thermosteel') ||
-        q.includes('milton') ||
-        q.includes('cello')
-      ) {
-        return item.category === 'Kitchen & Dining';
-      }
-
-      if (!q.trim()) return true;
-
-      // General fallback keyword matching
-      return (
-        item.name.toLowerCase().includes(q) ||
-        item.brand.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q)
-      );
-    });
-
-    // If query was specific (e.g. AC or Refrigerator) but yielded no matches, do not pollute with random running shoes
-    if (matches.length === 0) {
-      const isSpecificQuery =
-        /\bac\b|\bair conditioner\b|\bfridge\b|\brefrigerator\b|\blaptop\b|\bsneaker\b|\bphone\b|\bchair\b|\bbook\b|\bbottle\b/i.test(q);
-      if (!isSpecificQuery && !q.trim()) {
-        matches = REFERENCE_CATALOG;
-      }
-    }
-
-    if (typeof params.maxPriceInr === 'number' && params.maxPriceInr > 0) {
-      const underPrice = matches.filter((m) => m.priceInr <= params.maxPriceInr!);
-      if (underPrice.length > 0) {
-        matches = underPrice;
-      }
+    // If query was empty or generic, provide full catalog
+    if (!parsed.cleanQuery && matchingItems.length === 0) {
+      matchingItems = REFERENCE_CATALOG;
     }
 
     return {
@@ -811,7 +1110,7 @@ export class Channel3IntegrationService {
       statusMessage: env.CHANNEL3_API_KEY
         ? 'Channel3 live API temporarily unreachable — using clearly labelled reference catalog for affordability evaluation.'
         : 'Channel3 live API key not configured — using clearly labelled reference catalog for affordability evaluation.',
-      products: matches.map((item) => this.normalizeProduct(item, 'reference_catalog_fallback')),
+      products: matchingItems.map((item) => this.normalizeProduct(item, 'reference_catalog_fallback')),
     };
   }
 
@@ -998,34 +1297,52 @@ export class Channel3IntegrationService {
     if (item.category.includes('Footwear') || item.category.includes('Sneakers')) {
       partnerMerchants = [
         { name: item.retailerName, priceMultiplier: 1.0, delivery: '2-3 Business Days' },
-        { name: 'VegNonVeg Direct Partner', priceMultiplier: 0.95, delivery: 'Next Day Express' },
-        { name: 'Superkicks India Store', priceMultiplier: 1.02, delivery: '2-4 Business Days' },
+        { name: "Dick's Sporting Goods Partner", priceMultiplier: 0.97, delivery: 'Next Day Express' },
+        { name: 'Amazon Prime Athletics', priceMultiplier: 1.01, delivery: '2-4 Business Days' },
+        { name: 'Fleet Feet Verified Store', priceMultiplier: 0.98, delivery: '3-5 Business Days' },
+      ];
+    } else if (item.category.includes('Keyboard') || item.category.includes('Peripherals')) {
+      partnerMerchants = [
+        { name: item.retailerName, priceMultiplier: 1.0, delivery: '2-4 Business Days' },
+        { name: 'MechanicalKeyboards.com Direct', priceMultiplier: 0.96, delivery: '2-3 Business Days' },
+        { name: 'Best Buy Gaming Hub', priceMultiplier: 0.98, delivery: 'Same Day Store Pickup' },
+        { name: 'Amazon Tech Store', priceMultiplier: 1.02, delivery: 'Next Day Prime' },
       ];
     } else if (item.category.includes('Laptop') || item.category.includes('Computers')) {
       partnerMerchants = [
         { name: item.retailerName, priceMultiplier: 1.0, delivery: '1-2 Business Days' },
-        { name: 'Reliance Digital Partner', priceMultiplier: 0.97, delivery: 'Same Day Store Pickup' },
-        { name: 'Croma Electronics Hub', priceMultiplier: 1.01, delivery: '2-3 Business Days' },
+        { name: 'Best Buy Verified Partner', priceMultiplier: 0.97, delivery: 'Same Day Store Pickup' },
+        { name: 'B&H Photo Video Direct', priceMultiplier: 0.96, delivery: '2-3 Business Days' },
+        { name: 'Newegg Tech Outlet', priceMultiplier: 1.01, delivery: '2-4 Business Days' },
       ];
     } else if (item.category.includes('Smartphone')) {
       partnerMerchants = [
         { name: item.retailerName, priceMultiplier: 1.0, delivery: '1-2 Days' },
-        { name: 'Vijay Sales Partner', priceMultiplier: 0.96, delivery: 'Express 24h Delivery' },
-        { name: 'Tata CLiQ Luxury Electronics', priceMultiplier: 1.03, delivery: '2-4 Business Days' },
+        { name: 'Target Electronics Partner', priceMultiplier: 0.98, delivery: 'Express 24h Delivery' },
+        { name: 'Best Buy Mobile Hub', priceMultiplier: 0.97, delivery: 'Same Day Store Pickup' },
+        { name: 'Amazon Prime Wireless', priceMultiplier: 1.02, delivery: 'Next Day Prime' },
       ];
     } else if (item.category.includes('Audio')) {
       partnerMerchants = [
         { name: item.retailerName, priceMultiplier: 1.0, delivery: '2-3 Days' },
-        { name: 'HeadphoneZone India Partner', priceMultiplier: 0.94, delivery: 'Next Day Air' },
-        { name: 'Croma Audio Boutique', priceMultiplier: 1.02, delivery: '2-4 Business Days' },
+        { name: 'B&H Audio Boutique', priceMultiplier: 0.95, delivery: 'Next Day Air' },
+        { name: 'Best Buy Pro Audio', priceMultiplier: 0.98, delivery: '1-2 Business Days' },
+        { name: 'Amazon Electronics Partner', priceMultiplier: 1.02, delivery: '2-4 Business Days' },
+      ];
+    } else if (item.category.includes('Furniture')) {
+      partnerMerchants = [
+        { name: item.retailerName, priceMultiplier: 1.0, delivery: '3-5 Business Days' },
+        { name: 'Design Within Reach Partner', priceMultiplier: 1.04, delivery: 'White Glove 5-7 Days' },
+        { name: 'Office Depot Business Store', priceMultiplier: 0.97, delivery: '3-5 Business Days' },
+        { name: 'Amazon Commercial Store', priceMultiplier: 0.98, delivery: '2-4 Business Days' },
       ];
     } else {
       partnerMerchants = [
         { name: item.retailerName, priceMultiplier: 1.0, delivery: '3-5 Business Days' },
-        { name: 'Tata CLiQ Direct Partner', priceMultiplier: 0.96, delivery: '2-4 Business Days' },
+        { name: 'Amazon Prime Marketplace', priceMultiplier: 0.98, delivery: '2-4 Business Days' },
+        { name: 'Target Direct Partner', priceMultiplier: 1.01, delivery: '3-5 Business Days' },
       ];
     }
-
     const merchantOffers: Channel3MerchantOffer[] = partnerMerchants.map((p, idx) => {
       const pUsd = Math.max(10, Math.round(baseUsd * p.priceMultiplier));
       const pInr = Math.round(baseInr * p.priceMultiplier);
@@ -1164,20 +1481,23 @@ export class Channel3IntegrationService {
     brands: string[];
     liveApiUsed: boolean;
   }> {
-    const q = (params.query || '').trim().toLowerCase();
+    const rawQuery = (params.query || '').trim();
+    const parsed = parseNaturalSearchQuery(rawQuery);
+    const effectiveMaxPrice = params.maxPrice !== undefined ? params.maxPrice : parsed.maxPriceUsd;
+    const effectiveMinPrice = params.minPrice !== undefined ? params.minPrice : parsed.minPriceUsd;
     const categories = this.getCategories();
 
     // Start with catalog search
     const searchRes = await this.searchProducts({
-      query: params.query || '',
+      query: rawQuery,
       category: params.category,
-      maxPriceInr: params.maxPrice ? Math.round(params.maxPrice / env.INR_TO_USD_RATE) : undefined,
+      maxPriceInr: effectiveMaxPrice ? Math.round(effectiveMaxPrice / env.INR_TO_USD_RATE) : undefined,
     });
 
     let items = searchRes.products.map((p) => this.normalizeProduct(p, p.source));
 
     // If query was empty or generic, ensure we have the full rich catalog
-    if (!q && items.length < REFERENCE_CATALOG.length) {
+    if (!rawQuery && items.length < REFERENCE_CATALOG.length) {
       const fullList = REFERENCE_CATALOG.map((p) => this.normalizeProduct(p, 'reference_catalog_fallback'));
       items = fullList;
     }
@@ -1189,11 +1509,11 @@ export class Channel3IntegrationService {
     if (params.brand && params.brand !== 'All') {
       items = items.filter((p) => p.brand.toLowerCase() === params.brand!.toLowerCase());
     }
-    if (params.minPrice !== undefined) {
-      items = items.filter((p) => (p.demoPriceUsd || 0) >= params.minPrice!);
+    if (effectiveMinPrice !== undefined) {
+      items = items.filter((p) => (p.demoPriceUsd || 0) >= effectiveMinPrice);
     }
-    if (params.maxPrice !== undefined) {
-      items = items.filter((p) => (p.demoPriceUsd || 0) <= params.maxPrice!);
+    if (effectiveMaxPrice !== undefined) {
+      items = items.filter((p) => (p.demoPriceUsd || 0) <= effectiveMaxPrice);
     }
 
     // Extract unique brands

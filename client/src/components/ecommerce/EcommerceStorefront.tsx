@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
   ShoppingBag,
@@ -13,10 +13,22 @@ import {
   Layers,
   TrendingDown,
   Building2,
+  X,
+  RotateCw,
+  ArrowUpDown,
 } from 'lucide-react';
 import { EcommerceProduct } from './EcommerceTypes';
 import { apiRequest } from '../../lib/api';
 import { Channel3ProductComparisonModal } from './Channel3ProductComparisonModal';
+
+const SUGGESTED_SEARCHES = [
+  'Wireless headphones',
+  'Gaming laptops',
+  'Smartphones under $500',
+  'Mechanical keyboards',
+  'Running shoes',
+  'Office chairs',
+];
 
 interface EcommerceStorefrontProps {
   onSelectProduct: (product: EcommerceProduct) => void;
@@ -34,9 +46,12 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
   const [brands, setBrands] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [sortBy, setSortBy] = useState<'featured' | 'price_asc' | 'price_desc' | 'rating'>('featured');
+  const searchSeqRef = useRef(0);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeQuery, setActiveQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [maxPrice, setMaxPrice] = useState<string>('');
@@ -63,8 +78,10 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
   };
 
   const fetchProducts = async (q = searchQuery, cat = selectedCategory, br = selectedBrand, price = maxPrice) => {
+    const seq = ++searchSeqRef.current;
     setLoading(true);
     setError('');
+    setActiveQuery(q.trim());
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
@@ -79,6 +96,8 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         brands: string[];
       }>(`/ecommerce/products?${params.toString()}`);
 
+      if (seq !== searchSeqRef.current) return; // Stale response guard
+
       setProducts(res.products || []);
       if (res.categories?.length) {
         setCategories(['All', ...res.categories]);
@@ -87,11 +106,28 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         setBrands(['All', ...res.brands]);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load products from catalog.');
+      if (seq !== searchSeqRef.current) return;
+      setError(err?.message || 'Failed to search products from catalog.');
     } finally {
-      setLoading(false);
+      if (seq === searchSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
+
+  const sortedProducts = useMemo(() => {
+    const list = [...products];
+    if (sortBy === 'price_asc') {
+      return list.sort((a, b) => (a.demoPriceUsd || 0) - (b.demoPriceUsd || 0));
+    }
+    if (sortBy === 'price_desc') {
+      return list.sort((a, b) => (b.demoPriceUsd || 0) - (a.demoPriceUsd || 0));
+    }
+    if (sortBy === 'rating') {
+      return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+    return list;
+  }, [products, sortBy]);
 
   useEffect(() => {
     fetchProducts();
@@ -165,9 +201,22 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search products by name, brand, or feature (e.g. Nike, Pegasus, MacBook)..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+              placeholder="Search products (e.g. Wireless headphones, Gaming laptops, Mechanical keyboards)..."
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
             />
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  fetchProducts('', selectedCategory, selectedBrand, maxPrice);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                aria-label="Clear search query"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="sm:col-span-3">
@@ -208,8 +257,30 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
           </div>
         </form>
 
-        {/* Category Pills */}
-        <div className="space-y-2">
+        {/* Quick Discovery Suggestion Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+          <span className="text-slate-400 dark:text-slate-500 font-medium text-[11px]">Popular Searches:</span>
+          {SUGGESTED_SEARCHES.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => {
+                setSearchQuery(chip);
+                fetchProducts(chip, selectedCategory, selectedBrand, maxPrice);
+              }}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition border ${
+                searchQuery.toLowerCase() === chip.toLowerCase()
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-600 dark:hover:text-blue-300'
+              }`}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+
+        {/* Category Pills & Sorting Bar */}
+        <div className="space-y-3 pt-1 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {categories.map((cat) => (
               <button
@@ -225,6 +296,32 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                 {cat}
               </button>
             ))}
+          </div>
+
+          {/* Results Summary and Sort Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1 text-xs">
+            <div className="text-slate-500 dark:text-slate-400">
+              Showing <strong className="text-navy-900 dark:text-white">{sortedProducts.length}</strong> products
+              {activeQuery && (
+                <span> for &ldquo;<strong className="text-blue-600 dark:text-blue-400">{activeQuery}</strong>&rdquo;</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1">
+                <ArrowUpDown className="w-3 h-3" /> Sort by:
+              </span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold focus:outline-none"
+              >
+                <option value="featured">Featured Relevance</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+                <option value="rating">Highest Rated</option>
+              </select>
+            </div>
           </div>
 
           {/* Brand Filter */}
@@ -252,8 +349,15 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
 
       {/* Products Grid */}
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 font-medium">
-          {error}
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300 font-medium">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => fetchProducts(searchQuery, selectedCategory, selectedBrand, maxPrice)}
+            className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold transition shrink-0 flex items-center gap-1"
+          >
+            <RotateCw className="w-3 h-3" /> Retry
+          </button>
         </div>
       )}
 
@@ -271,31 +375,55 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
             </div>
           ))}
         </div>
-      ) : products.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200 dark:border-slate-800 text-center space-y-3">
+      ) : sortedProducts.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border border-slate-200 dark:border-slate-800 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
             <ShoppingBag className="w-7 h-7" />
           </div>
-          <h3 className="text-base font-bold text-navy-900 dark:text-white">No products found</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            We could not find any products matching your current search query and filters. Try adjusting your query or resetting filters.
-          </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedCategory('All');
-              setSelectedBrand('All');
-              setMaxPrice('');
-              fetchProducts('', 'All', 'All', '');
-            }}
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
-          >
-            Show All Products
-          </button>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-navy-900 dark:text-white">No matching products found</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              We couldn&apos;t find any items matching &ldquo;{activeQuery || searchQuery}&rdquo;. Try another search term or explore one of these popular categories:
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-2 max-w-lg mx-auto pt-2">
+            {SUGGESTED_SEARCHES.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => {
+                  setSearchQuery(chip);
+                  setSelectedCategory('All');
+                  setSelectedBrand('All');
+                  setMaxPrice('');
+                  fetchProducts(chip, 'All', 'All', '');
+                }}
+                className="px-3 py-1.5 rounded-full text-xs bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-700 dark:text-slate-300 font-medium transition border border-slate-200 dark:border-slate-700"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('All');
+                setSelectedBrand('All');
+                setMaxPrice('');
+                fetchProducts('', 'All', 'All', '');
+              }}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
+            >
+              Show All Products
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products.map((product) => (
+          {sortedProducts.map((product) => (
             <div
               key={product.id}
               onClick={() => onSelectProduct(product)}

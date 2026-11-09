@@ -8,7 +8,6 @@ import {
   ArrowRight,
   RefreshCw,
   ShoppingBag,
-  Send,
 } from 'lucide-react';
 import { apiRequest, formatDateShort } from '../lib/api';
 import { NavTabId } from '../components/AppShell';
@@ -61,11 +60,6 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Quick Ask AURA prompt state
-  const [quickPrompt, setQuickPrompt] = useState('');
-  const [quickAnswer, setQuickAnswer] = useState<any>(null);
-  const [asking, setAsking] = useState(false);
-
   const loadOverview = async () => {
     try {
       const res = await apiRequest('/dashboard/overview');
@@ -87,32 +81,6 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
     window.addEventListener('aura-state-changed', handleStateChange);
     return () => window.removeEventListener('aura-state-changed', handleStateChange);
   }, []);
-
-  const handleQuickAsk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickPrompt.trim()) return;
-    setAsking(true);
-    try {
-      const res = await apiRequest('/ai/ask', {
-        method: 'POST',
-        body: JSON.stringify({ prompt: quickPrompt }),
-      });
-      setQuickAnswer(res);
-      setQuickPrompt('');
-
-      // If AURA performed an action or directed navigation
-      if (res.toolAction?.navTarget) {
-        window.dispatchEvent(
-          new CustomEvent('aura-navigate', { detail: { page: res.toolAction.navTarget } })
-        );
-      }
-      if (res.toolAction) {
-        window.dispatchEvent(new CustomEvent('aura-state-changed'));
-      }
-    } finally {
-      setAsking(false);
-    }
-  };
 
   // 1. Available to spend calculation
   const discretionaryRemaining = Math.max(
@@ -414,58 +382,23 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
       {/* Optional Merchant Reporting (toggled via FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION) */}
       {FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION && <PayPalSandboxBusinessReporting />}
 
-      {/* 5. Section 4: Prominent Ask AURA Quick Conversational Input */}
-      <div className="bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40 rounded-3xl p-6 border border-blue-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-navy-900 dark:text-white">Ask AURA Financial Companion</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Ask questions, plan budgets, or schedule reminders naturally</p>
-            </div>
+      {/* Ask AURA Dedicated Assistant Banner */}
+      <div className="bg-gradient-to-r from-blue-50/80 via-white to-indigo-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40 rounded-3xl p-5 border border-blue-100 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5" />
           </div>
-          <button
-            onClick={() => onNavigate('ask-aura')}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold"
-          >
-            Open Full Chat →
-          </button>
+          <div>
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Ask AURA Financial Companion</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Ask questions, plan budgets, or schedule reminders naturally in your dedicated assistant chat.</p>
+          </div>
         </div>
-
-        <form onSubmit={handleQuickAsk} className="flex gap-2">
-          <input
-            type="text"
-            value={quickPrompt}
-            onChange={(e) => setQuickPrompt(e.target.value)}
-            placeholder='Ask anything — e.g. "Can I afford sneakers for $120?" or "Schedule electricity bill reminder for 10th"'
-            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={asking}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold shadow-xs transition flex items-center gap-1.5 shrink-0"
-          >
-            <Send className="w-3.5 h-3.5" />
-            {asking ? 'Thinking...' : 'Ask'}
-          </button>
-        </form>
-
-        {quickAnswer && (
-          <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-blue-200 dark:border-slate-700 shadow-2xs text-xs text-navy-900 dark:text-white space-y-2">
-            <div className="font-bold text-blue-700 dark:text-blue-400 flex items-center justify-between">
-              <span>AURA Answer:</span>
-              <button
-                onClick={() => onNavigate('ask-aura')}
-                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-              >
-                Continue in Ask AURA
-              </button>
-            </div>
-            <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-normal">{quickAnswer.explanation}</p>
-          </div>
-        )}
+        <button
+          onClick={() => onNavigate('ask-aura')}
+          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center justify-center gap-1.5 shrink-0"
+        >
+          Open Assistant <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

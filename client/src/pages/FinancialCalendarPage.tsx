@@ -87,10 +87,6 @@ export const FinancialCalendarPage: React.FC = () => {
   const [newStartDate, setNewStartDate] = useState('');
   const [newAmount, setNewAmount] = useState('');
 
-  // AI calendar question
-  const [aiAnswer, setAiAnswer] = useState('');
-  const [askingAi, setAskingAi] = useState(false);
-
   const loadCalendar = async () => {
     setLoading(true);
     try {
@@ -254,19 +250,6 @@ export const FinancialCalendarPage: React.FC = () => {
     await loadCalendar();
   };
 
-  const handleAskUpcoming = async () => {
-    setAskingAi(true);
-    try {
-      const res = await apiRequest('/ai/ask', {
-        method: 'POST',
-        body: JSON.stringify({ prompt: 'What payments are coming up next week and what is the net projected cash flow?' }),
-      });
-      setAiAnswer(res.explanation);
-    } finally {
-      setAskingAi(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Workspace Header & Views */}
@@ -282,15 +265,6 @@ export const FinancialCalendarPage: React.FC = () => {
 
         {/* View Mode Selector */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleAskUpcoming}
-            disabled={askingAi}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 text-xs font-semibold transition"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            {askingAi ? 'Analyzing Schedule...' : 'Cash Flow Advice'}
-          </button>
-
           <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700/60">
             {(
               [
@@ -394,21 +368,6 @@ export const FinancialCalendarPage: React.FC = () => {
               <AlertTriangle className="w-5 h-5" />
             </div>
           </div>
-        </div>
-      )}
-
-      {/* AI Advice Banner */}
-      {aiAnswer && (
-        <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-900/60 text-xs sm:text-sm text-navy-900 dark:text-white flex items-start justify-between gap-4">
-          <div>
-            <div className="font-bold text-purple-700 dark:text-purple-300 mb-1 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4" /> AURA Financial Intelligence Insight
-            </div>
-            <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{aiAnswer}</p>
-          </div>
-          <button onClick={() => setAiAnswer('')} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-            Dismiss
-          </button>
         </div>
       )}
 

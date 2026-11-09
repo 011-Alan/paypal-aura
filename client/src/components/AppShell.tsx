@@ -22,6 +22,10 @@ import {
   ShoppingBag,
   Sun,
   Moon,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
@@ -109,6 +113,39 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Desktop Collapsible Sidebar State (persisted across sessions)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('aura_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('aura_sidebar_collapsed', String(next));
+      } catch {
+        // Ignored
+      }
+      return next;
+    });
+  };
+
+  // Lock mobile body scroll when slide-over drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
 
   // Listen for AI application control navigation events (Section 4)
   useEffect(() => {
@@ -203,35 +240,89 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex text-slate-800 dark:text-slate-100 antialiased font-sans">
       {/* Desktop Navigation Sidebar */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40">
+      <aside
+        className={`${
+          sidebarCollapsed ? 'w-20' : 'w-72'
+        } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 hidden lg:flex lg:flex-col justify-between h-screen sticky top-0 z-40 transition-[width] duration-300 ease-in-out`}
+      >
         {/* App Logo & Header */}
-        <div className="h-16 px-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-              A
-            </div>
-            <div>
-              <div className="font-bold text-base tracking-tight text-navy-900 dark:text-white leading-tight">PROJECT AURA</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">Financial Companion</div>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-            <ShieldCheck className="w-3 h-3" />
-            Secure
-          </span>
+        <div
+          className={`h-16 border-b border-slate-200 dark:border-slate-800 flex items-center ${
+            sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-5'
+          }`}
+        >
+          {sidebarCollapsed ? (
+            <button
+              onClick={toggleSidebar}
+              className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center font-bold text-base shadow-sm transition"
+              title="Expand navigation sidebar"
+              aria-label="Expand navigation sidebar"
+            >
+              <PanelLeftOpen className="w-5 h-5" />
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                  A
+                </div>
+                <div className="truncate">
+                  <div className="font-bold text-base tracking-tight text-navy-900 dark:text-white leading-tight truncate">
+                    PROJECT AURA
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">Financial Companion</div>
+                </div>
+              </div>
+              <button
+                onClick={toggleSidebar}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Grouped Navigation List */}
-        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-          {NAVIGATION_GROUPS.map((group) => (
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+          {NAVIGATION_GROUPS.map((group, gIdx) => (
             <div key={group.group}>
-              <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {group.group}
-              </div>
-              <div className="space-y-0.5">
+              {!sidebarCollapsed ? (
+                <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  {group.group}
+                </div>
+              ) : (
+                gIdx > 0 && <div className="my-2 border-t border-slate-100 dark:border-slate-800" />
+              )}
+              <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active = isTabActive(item.id);
+
+                  if (sidebarCollapsed) {
+                    return (
+                      <Tooltip key={item.id} content={item.label} position="right" className="w-full">
+                        <button
+                          onClick={() => onSelectTab(item.id)}
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl transition-colors ${
+                            active
+                              ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
+                          }`}
+                          aria-label={item.label}
+                        >
+                          <Icon
+                            className={`w-5 h-5 shrink-0 ${
+                              active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          />
+                        </button>
+                      </Tooltip>
+                    );
+                  }
+
                   return (
                     <button
                       key={item.id}
@@ -243,7 +334,11 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                       }`}
                     >
                       <div className="flex items-center gap-3 truncate">
-                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                        <Icon
+                          className={`w-4 h-4 shrink-0 ${
+                            active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        />
                         <span className="truncate">{item.label}</span>
                       </div>
                       {item.badge && (
@@ -260,73 +355,122 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
           {/* Strict Separation: Dedicated Demo Lab Navigation Item */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Testing &amp; Evaluation
-            </div>
-            <button
-              onClick={() => onSelectTab('demo-lab')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                isDemoLabActive
-                  ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
-                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 truncate">
-                <FlaskConical className={`w-4 h-4 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
-                <span className="font-semibold truncate">Demo Lab</span>
+            {!sidebarCollapsed && (
+              <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Testing &amp; Evaluation
               </div>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  isDemoLabActive ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+            )}
+            {sidebarCollapsed ? (
+              <Tooltip content="Demo Lab" position="right" className="w-full">
+                <button
+                  onClick={() => onSelectTab('demo-lab')}
+                  className={`w-full flex items-center justify-center p-2.5 rounded-xl transition-colors ${
+                    isDemoLabActive
+                      ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                  aria-label="Demo Lab"
+                >
+                  <FlaskConical className={`w-5 h-5 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
+                </button>
+              </Tooltip>
+            ) : (
+              <button
+                onClick={() => onSelectTab('demo-lab')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isDemoLabActive
+                    ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                Sim &amp; Dev
-              </span>
-            </button>
+                <div className="flex items-center gap-2.5 truncate">
+                  <FlaskConical className={`w-4 h-4 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
+                  <span className="font-semibold truncate">Demo Lab</span>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isDemoLabActive
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  Sim &amp; Dev
+                </span>
+              </button>
+            )}
           </div>
         </nav>
 
         {/* User Card */}
         {user && (
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-navy-900 dark:text-white truncate">{user.name}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</div>
+          <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80">
+            {sidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                <Tooltip content={`${user.name} (${user.email})`} position="right">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-sm">
+                    {user.name.charAt(0)}
+                  </div>
+                </Tooltip>
+                <Tooltip content="Sign Out" position="right">
+                  <button
+                    onClick={() => logout('sidebar_sign_out')}
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                    aria-label="Sign Out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </Tooltip>
               </div>
-              <button
-                onClick={() => logout('sidebar_sign_out')}
-                title="Sign Out"
-                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                aria-label="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-navy-900 dark:text-white truncate">{user.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</div>
+                  </div>
+                  <button
+                    onClick={() => logout('sidebar_sign_out')}
+                    title="Sign Out"
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                    aria-label="Sign Out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
 
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
-              <span className="flex items-center gap-1.5">
-                <span>Monthly Income</span>
-                <Tooltip content="Configured monthly baseline income used for financial calculations" />
-              </span>
-              <span className="font-semibold text-navy-900 dark:text-white">{formatMoney(user.monthlyIncome)}</span>
-            </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <span>Monthly Income</span>
+                    <Tooltip content="Configured monthly baseline income used for financial calculations" />
+                  </span>
+                  <span className="font-semibold text-navy-900 dark:text-white">{formatMoney(user.monthlyIncome)}</span>
+                </div>
+              </>
+            )}
           </div>
         )}
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0 transition-all duration-300 ease-in-out">
         {/* Top Header */}
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 lg:px-8 h-16 flex items-center justify-between">
-          {/* Left Title & Mobile Menu Button */}
+          {/* Left Title & Mobile Menu Button / Desktop Collapse Toggle */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => setMobileMenuOpen(true)}
               className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-              aria-label="Toggle navigation menu"
+              aria-label="Open navigation menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <Menu className="w-5 h-5" />
+            </button>
+            <button
+              onClick={toggleSidebar}
+              className="hidden lg:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700/60"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
             <div>
               <h1 className="text-base lg:text-lg font-bold text-navy-900 dark:text-white leading-tight">
@@ -437,78 +581,119 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           </div>
         </header>
 
-        {/* Mobile Slide-Over Menu (When Menu Button Clicked) */}
+        {/* Mobile Slide-In Navigation Drawer with Backdrop */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
-            {NAVIGATION_GROUPS.map((group) => (
-              <div key={group.group}>
-                <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  {group.group}
-                </div>
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const active = isTabActive(item.id);
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          onSelectTab(item.id);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-base font-medium transition ${
-                          active
-                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-100 dark:border-blue-900'
-                            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Icon className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                          <span>{item.label}</span>
-                        </div>
-                        {item.badge && (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="lg:hidden fixed inset-0 z-50 flex">
+            {/* Backdrop */}
+            <div
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300"
+              aria-hidden="true"
+            />
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => {
-                  onSelectTab('demo-lab');
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-semibold transition ${
-                  isDemoLabActive
-                    ? 'bg-navy-900 dark:bg-blue-600 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                <FlaskConical className="w-5 h-5 text-blue-500" />
-                <span>Demo Lab (Simulators &amp; Agents)</span>
-              </button>
-            </div>
-
-            {user && (
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-sm text-navy-900 dark:text-white">{user.name}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{user.email}</div>
+            {/* Slide-in Drawer */}
+            <div className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col justify-between z-50 transform transition-transform duration-300 ease-in-out">
+              {/* Drawer Header with Close Button */}
+              <div className="h-16 px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                    A
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-navy-900 dark:text-white leading-tight">PROJECT AURA</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">Financial Companion</div>
+                  </div>
                 </div>
                 <button
-                  onClick={() => logout()}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  aria-label="Close navigation menu"
                 >
-                  Log Out
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            )}
+
+              {/* Navigation Items */}
+              <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {NAVIGATION_GROUPS.map((group) => (
+                  <div key={group.group}>
+                    <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {group.group}
+                    </div>
+                    <div className="space-y-1">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const active = isTabActive(item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              onSelectTab(item.id);
+                              setMobileMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                              active
+                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-100 dark:border-blue-900'
+                                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Icon
+                                className={`w-4 h-4 ${
+                                  active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                                }`}
+                              />
+                              <span>{item.label}</span>
+                            </div>
+                            {item.badge && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      onSelectTab('demo-lab');
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      isDemoLabActive
+                        ? 'bg-navy-900 dark:bg-blue-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <FlaskConical className="w-4 h-4 text-blue-500" />
+                    <span>Demo Lab (Sim &amp; Dev)</span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* User footer in mobile drawer */}
+              {user && (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex items-center justify-between shrink-0">
+                  <div className="min-w-0 pr-2">
+                    <div className="font-bold text-sm text-navy-900 dark:text-white truncate">{user.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      logout();
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition shrink-0"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
