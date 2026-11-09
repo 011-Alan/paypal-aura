@@ -2830,15 +2830,16 @@ apiRouter.get('/ecommerce/merchant/orders/:orderId', requireAuth, requireMerchan
 
 apiRouter.put('/ecommerce/merchant/orders/:orderId/fulfillment', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { fulfillmentStatus, carrier, trackingNumber, shippingDate, estimatedDeliveryDate, notes } = req.body || {};
-    if (!fulfillmentStatus) {
-      return res.status(400).json({ success: false, error: 'fulfillmentStatus is required.' });
+    const { fulfillmentStatus, status, carrier, trackingNumber, shippingDate, estimatedDeliveryDate, notes } = req.body || {};
+    const targetStatus = fulfillmentStatus || status;
+    if (!targetStatus) {
+      return res.status(400).json({ success: false, error: 'fulfillmentStatus or status is required.' });
     }
     const user = await UserModel.findById(req.userId);
     const order = await ecommerceService.updateOrderFulfillment({
       orderId: req.params.orderId,
       merchantUserId: req.userId,
-      fulfillmentStatus,
+      fulfillmentStatus: targetStatus,
       carrier,
       trackingNumber,
       shippingDate,
@@ -2849,7 +2850,7 @@ apiRouter.put('/ecommerce/merchant/orders/:orderId/fulfillment', requireAuth, re
     res.json({
       success: true,
       order,
-      message: `Order fulfillment status updated to ${fulfillmentStatus}.`,
+      message: `Order fulfillment status updated to ${targetStatus}.`,
     });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });
@@ -2899,6 +2900,15 @@ apiRouter.get('/notifications', requireAuth, async (req: AuthenticatedRequest, r
 });
 
 apiRouter.patch('/notifications/:id/read', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const notif = await NotificationModel.findOneAndUpdate(
+    { _id: req.params.id, userId: req.userId },
+    { $set: { isRead: true } },
+    { new: true }
+  );
+  res.json({ success: true, notification: notif });
+});
+
+apiRouter.put('/notifications/:id/read', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const notif = await NotificationModel.findOneAndUpdate(
     { _id: req.params.id, userId: req.userId },
     { $set: { isRead: true } },

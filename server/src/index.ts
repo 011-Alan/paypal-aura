@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import fs from 'fs';
 import { env } from './config/env';
 import { logger } from './config/logger';
 import { connectDatabase } from './config/database';
@@ -44,8 +45,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', apiRateLimiter, apiRouter);
 
 // Serve static production frontend build if available
-const clientDistPath = path.resolve(process.cwd(), '../client/dist');
+const clientDistCandidates = [
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(process.cwd(), 'client/dist'),
+  path.resolve(process.cwd(), '../client/dist'),
+];
+const clientDistPath = clientDistCandidates.find((candidate) => fs.existsSync(candidate)) || clientDistCandidates[0];
 app.use(express.static(clientDistPath));
+
+app.get('*', (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  const indexPath = path.join(clientDistPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  return next();
+});
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('ExpressErrorHandler', 'Unhandled request error', { error: err?.message });

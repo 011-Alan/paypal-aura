@@ -13,6 +13,7 @@ import {
   AccountModel,
   TransactionModel,
   CalendarEventModel,
+  NotificationModel,
 } from '../../models';
 import { channel3Integration, Channel3ProductItem } from '../../integrations/channel3';
 import { paypalIntegration } from '../../integrations/paypal';
@@ -1005,6 +1006,37 @@ export class EcommerceService {
     });
 
     await order.save();
+
+    // Dispatch customer notification for live tracking and status awareness
+    try {
+      const statusLabels: Record<string, string> = {
+        order_confirmed: 'Order Confirmed',
+        processing: 'Order Processing',
+        packed: 'Order Packed',
+        shipped: 'Order Shipped',
+        out_for_delivery: 'Out for Delivery',
+        delivered: 'Order Delivered',
+        cancelled: 'Order Cancelled',
+      };
+      const label = statusLabels[params.fulfillmentStatus] || params.fulfillmentStatus;
+      await NotificationModel.create({
+        userId: order.userId,
+        type: 'payment_status',
+        title: `Order ${order.orderNumber} ${label}`,
+        message: params.notes || `Your order #${order.orderNumber} status has been updated to "${label}"${order.shipment.trackingNumber ? ` via ${order.shipment.carrier} (${order.shipment.trackingNumber})` : ''}.`,
+        severity: params.fulfillmentStatus === 'delivered' ? 'success' : 'info',
+        isRead: false,
+        metadata: {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          fulfillmentStatus: params.fulfillmentStatus,
+          carrier: order.shipment.carrier,
+          trackingNumber: order.shipment.trackingNumber,
+        },
+      });
+    } catch (notifErr: any) {
+      logger.warn('EcommerceService', 'Failed to generate customer notification', { error: notifErr?.message });
+    }
 
     logger.info('EcommerceService', `Updated order ${order.orderNumber} fulfillment status to ${params.fulfillmentStatus}`, {
       carrier: order.shipment.carrier,
