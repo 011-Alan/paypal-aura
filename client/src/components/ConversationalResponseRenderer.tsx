@@ -45,9 +45,8 @@ export const ConversationalResponseRenderer: React.FC<ConversationalResponseRend
   const segments = useMemo(() => {
     if (!content) return [];
 
-    // Clean stray escaped markdown slashes and normalize currency
+    // Clean stray escaped markdown slashes while preserving ₹ (INR) and $ (USD) currencies
     const normalized = content
-      .replace(/₹/g, '$')
       .replace(/\\\*/g, '*')
       .replace(/\\_/g, '_')
       .replace(/\\`/g, '`')
@@ -122,6 +121,14 @@ export const ConversationalResponseRenderer: React.FC<ConversationalResponseRend
 
   return (
     <div className={`space-y-3 ${className}`}>
+      {/* Action Status Indicator pill (Section 15) */}
+      {toolAction?.title && (
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/60 text-xs font-semibold text-blue-700 dark:text-blue-300 shadow-2xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+          <span>{toolAction.title}</span>
+        </div>
+      )}
+
       {segments.map((seg, idx) => {
         if (seg.type === 'code') {
           return (

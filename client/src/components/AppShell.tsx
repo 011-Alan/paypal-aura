@@ -147,7 +147,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
     };
   }, [mobileMenuOpen]);
 
-  // Listen for AI application control navigation events (Section 4)
+  // Listen for AI application control events (Navigation, Theme, Sidebar)
   useEffect(() => {
     const handleAuraNavigate = (e: any) => {
       const page = e.detail?.page;
@@ -155,9 +155,28 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         onSelectTab(page as NavTabId);
       }
     };
+    const handleAuraTheme = (e: any) => {
+      const newTheme = e.detail?.theme;
+      if (newTheme === 'dark' || newTheme === 'light') {
+        setTheme(newTheme);
+      }
+    };
+    const handleAuraSidebar = (e: any) => {
+      const action = e.detail?.action;
+      if (action === 'collapse') setSidebarCollapsed(true);
+      else if (action === 'expand') setSidebarCollapsed(false);
+      else setSidebarCollapsed((prev) => !prev);
+    };
+
     window.addEventListener('aura-navigate', handleAuraNavigate);
-    return () => window.removeEventListener('aura-navigate', handleAuraNavigate);
-  }, [onSelectTab]);
+    window.addEventListener('aura-theme-changed', handleAuraTheme);
+    window.addEventListener('aura-sidebar-toggle', handleAuraSidebar);
+    return () => {
+      window.removeEventListener('aura-navigate', handleAuraNavigate);
+      window.removeEventListener('aura-theme-changed', handleAuraTheme);
+      window.removeEventListener('aura-sidebar-toggle', handleAuraSidebar);
+    };
+  }, [onSelectTab, setTheme]);
 
   const isDemoLabActive = activeTab === 'demo-lab' || activeTab === 'automations';
 

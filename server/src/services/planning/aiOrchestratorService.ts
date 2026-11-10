@@ -26,18 +26,25 @@ import { modelRouter, ModelTaskType } from './modelRouter';
 import { GEMINI_MODEL_REGISTRY, validateModelAvailability, ModelDiagnosticResult } from './modelConfig';
 import { semanticRetrievalService } from '../ai/semanticRetrievalService';
 import { lightweightProcessingService } from '../ai/lightweightProcessingService';
+import { aiActionRegistry } from '../ai/aiActionRegistry';
 
 export interface AiToolAction {
   type:
     | 'navigation'
+    | 'theme_changed'
+    | 'sidebar_toggled'
+    | 'logout'
+    | 'external_link'
     | 'currency_updated'
     | 'profile_updated'
     | 'plan_generated'
     | 'reminder_scheduled'
+    | 'reminder_cancelled'
     | 'goal_created'
     | 'goal_updated'
     | 'purchase_evaluated'
     | 'product_discovery'
+    | 'order_prepared'
     | 'payment_prepared'
     | 'family_task'
     | 'general_knowledge'
@@ -306,6 +313,185 @@ export const GEMINI_TOOL_DECLARATIONS = {
         properties: {
           days: { type: Type.INTEGER, description: 'Number of past days to query' },
           category: { type: Type.STRING, description: 'Optional category filter' },
+        },
+      },
+    },
+    {
+      name: 'changeTheme',
+      description: 'Switch the application interface theme to dark or light mode.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          theme: { type: Type.STRING, description: '"dark" or "light"' },
+        },
+        required: ['theme'],
+      },
+    },
+    {
+      name: 'toggleSidebar',
+      description: 'Collapse, expand, or toggle the main navigation sidebar.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          action: { type: Type.STRING, description: '"collapse", "expand", or "toggle"' },
+        },
+      },
+    },
+    {
+      name: 'logoutUser',
+      description: 'Log out the user, invalidate the session, and return to the login screen.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {},
+      },
+    },
+    {
+      name: 'openExternalLink',
+      description: 'Provide an official, verified external portal link (Cybercrime portal, RBI CMS, PayPal).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          url: { type: Type.STRING, description: 'The official destination URL' },
+          label: { type: Type.STRING, description: 'Human readable label for the portal' },
+        },
+        required: ['url'],
+      },
+    },
+    {
+      name: 'prepareCommerceOrder',
+      description: 'Prepare an e-commerce order draft and navigate user to AURA Commerce checkout. Never executes payments autonomously.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          productName: { type: Type.STRING, description: 'Name of the item to order' },
+          priceInr: { type: Type.NUMBER, description: 'Item price in INR' },
+          retailer: { type: Type.STRING, description: 'Retailer merchant name' },
+        },
+        required: ['productName'],
+      },
+    },
+    {
+      name: 'analyseSpending',
+      description: 'Analyze spending by category, top areas of expenditure, and avoidable recurring expenses.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          days: { type: Type.INTEGER, description: 'Number of past days to evaluate (e.g. 30, 60, 90)' },
+        },
+      },
+    },
+    {
+      name: 'calculateSavingsPlan',
+      description: 'Generate an actionable, personal financial improvement plan with savings targets, monthly budgets, and milestones.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {},
+      },
+    },
+    {
+      name: 'simulateFinancialScenario',
+      description: 'Simulate deterministic what-if financial scenarios (saving ₹5,000/mo, cutting shopping by 15%, emergency fund timeline, postponement).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          scenario: { type: Type.STRING, description: 'The scenario to simulate' },
+        },
+      },
+    },
+    {
+      name: 'calculateLoanRepayment',
+      description: 'Calculate loan amortisation schedules, monthly EMI, total interest, and prepayment comparisons.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          principalInr: { type: Type.NUMBER, description: 'Loan principal in INR' },
+          annualInterestRatePercent: { type: Type.NUMBER, description: 'Annual interest rate percent' },
+          tenureMonths: { type: Type.INTEGER, description: 'Repayment tenure in months' },
+        },
+        required: ['principalInr'],
+      },
+    },
+    {
+      name: 'createRecurringSchedule',
+      description: 'Create a durable recurring reminder (e.g. every Sunday, 3 days before rent is due, monthly review).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: 'Title of the recurring reminder' },
+          recurrencePattern: { type: Type.STRING, description: 'e.g. "every Sunday", "3 days before rent", "monthly"' },
+        },
+        required: ['title'],
+      },
+    },
+    {
+      name: 'createConditionalAlert',
+      description: 'Create a durable financial event-driven alert (e.g. notify if shopping exceeds ₹10,000, transaction > ₹3,000, salary arrives).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: 'Alert title' },
+          triggerType: {
+            type: Type.STRING,
+            description: '"spending_threshold", "transaction_threshold", or "balance_threshold"',
+          },
+          thresholdValue: { type: Type.NUMBER, description: 'Numeric threshold limit in INR' },
+          category: { type: Type.STRING, description: 'Optional category (e.g. "Shopping", "Salary")' },
+        },
+        required: ['title', 'thresholdValue'],
+      },
+    },
+    {
+      name: 'listSchedules',
+      description: 'List all active schedules, pending reminders, and conditional alerts for the user.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {},
+      },
+    },
+    {
+      name: 'cancelSchedule',
+      description: 'Cancel a scheduled reminder or alert by its schedule ID.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          scheduleId: { type: Type.STRING, description: 'Schedule ID to cancel (e.g. "sched_123...")' },
+        },
+        required: ['scheduleId'],
+      },
+    },
+    {
+      name: 'analyseBusinessFinances',
+      description: 'Analyze merchant business performance: revenue, operating costs, profit margins, and receivables. (Business accounts only)',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {},
+      },
+    },
+    {
+      name: 'generateBusinessProjections',
+      description: 'Generate 6-month business projections under Optimistic, Expected, and Conservative scenarios. (Business accounts only)',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {},
+      },
+    },
+    {
+      name: 'assistFinancialDistress',
+      description: 'Provide empathetic, step-by-step guidance for lost money, suspected scams, or unauthorized bank transactions (Cyber helpline 1930, bank steps).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          amount: { type: Type.NUMBER, description: 'Estimated amount lost or disputed' },
+        },
+      },
+    },
+    {
+      name: 'draftEmail',
+      description: 'Draft an official bank dispute email or cybercrime statement for an unauthorized transaction.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, description: '"bank_fraud" or "cybercrime"' },
         },
       },
     },
@@ -1330,6 +1516,56 @@ Preferred Currency: ${user.currency || 'INR'}`;
   }> {
     const userObjId = new mongoose.Types.ObjectId(ctx.userId);
     const user = ctx.user;
+
+    // Check central AI Action Registry first
+    const actionNameMap: Record<string, string> = {
+      changeTheme: 'change_theme',
+      toggleSidebar: 'toggle_sidebar',
+      logoutUser: 'logout_user',
+      openExternalLink: 'open_external_link',
+      prepareCommerceOrder: 'prepare_commerce_order',
+      analyseSpending: 'analyse_spending',
+      calculateSavingsPlan: 'calculate_savings_plan',
+      simulateFinancialScenario: 'simulate_financial_scenario',
+      calculateLoanRepayment: 'calculate_loan_repayment',
+      createRecurringSchedule: 'create_recurring_schedule',
+      createConditionalAlert: 'create_conditional_alert',
+      listSchedules: 'list_schedules',
+      cancelSchedule: 'cancel_schedule',
+      analyseBusinessFinances: 'analyse_business_finances',
+      generateBusinessProjections: 'generate_business_projections',
+      assistFinancialDistress: 'assist_financial_distress',
+      draftEmail: 'draft_email',
+      navigate_to_page: 'navigate_to_page',
+      search_products: 'search_products',
+      compare_products: 'compare_products',
+      analyse_purchase_affordability: 'analyse_purchase_affordability',
+      create_reminder: 'create_reminder',
+      create_financial_goal: 'create_financial_goal',
+    };
+
+    const targetActionName = actionNameMap[toolName] || toolName;
+    const registryAction = aiActionRegistry.getAction(targetActionName);
+    if (registryAction) {
+      const execResult = await registryAction.execute(args, {
+        userId: ctx.userId,
+        user: ctx.user,
+        prompt: ctx.prompt,
+        history: ctx.history,
+        requestId: ctx.requestId,
+        conversationId: ctx.conversationId,
+      });
+
+      return {
+        resultData: execResult.data,
+        fallbackExplanation: execResult.explanation,
+        workflowType: execResult.toolAction.type || 'general_knowledge',
+        toolAction: execResult.toolAction as AiToolAction,
+        suggestedNextPrompts: execResult.suggestedNextPrompts,
+        purchaseCompanion: execResult.purchaseCompanion,
+        preparedPayment: execResult.preparedPayment,
+      };
+    }
 
     switch (toolName) {
       case 'getFinancialSummary': {

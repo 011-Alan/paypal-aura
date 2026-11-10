@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { apiRequest } from '../lib/api';
+import { apiRequest, getApiBase, getStoredToken } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { NavTabId } from '../components/AppShell';
 
@@ -362,22 +362,60 @@ export const AskAuraProvider: React.FC<{
     // 1. Navigation effect
     const targetPage = action.navTarget || (action.type === 'navigation' ? action.details?.targetTab : null);
     if (targetPage) {
-      // If currently on the full Ask AURA page, transitioning out automatically switches into the floating panel
-      if (activeTabRef.current === 'ask-aura' && targetPage !== 'ask-aura') {
+      if (targetPage === 'ask-aura') {
+        setIsFloatingOpen(false);
+      } else if (activeTabRef.current === 'ask-aura') {
+        // If transitioning out from full Ask AURA page, open floating panel to preserve the conversation
         setIsFloatingOpen(true);
       }
       onNavigate(targetPage as NavTabId);
       window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
     }
 
-    // 2. Application state changes (Currency, Income, Goals, Reminders)
+    // 2. Theme control effect
+    if (action.type === 'theme_changed' && action.details?.theme) {
+      const newTheme = action.details.theme;
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(newTheme);
+      }
+      try {
+        localStorage.setItem('aura_theme', newTheme);
+      } catch {}
+      window.dispatchEvent(new CustomEvent('aura-theme-changed', { detail: { theme: newTheme } }));
+    }
+
+    // 3. Sidebar control effect
+    if (action.type === 'sidebar_toggled') {
+      window.dispatchEvent(new CustomEvent('aura-sidebar-toggle', { detail: action.details }));
+    }
+
+    // 4. Secure Logout effect
+    if (action.type === 'logout') {
+      apiRequest('/auth/logout', { method: 'POST' }).catch(() => {});
+      try {
+        localStorage.removeItem('aura_auth_token');
+        localStorage.removeItem('token');
+      } catch {}
+      window.location.href = '/login';
+      return;
+    }
+
+    // 5. Safe External Link
+    if (action.type === 'external_link' && action.details?.url) {
+      window.open(action.details.url, '_blank', 'noopener,noreferrer');
+    }
+
+    // 6. Application state changes (Currency, Income, Goals, Reminders, Orders, Payments)
     if (
       action.type === 'currency_updated' ||
       action.type === 'profile_updated' ||
       action.type === 'income_updated' ||
       action.type === 'reminder_scheduled' ||
+      action.type === 'reminder_cancelled' ||
       action.type === 'goal_created' ||
       action.type === 'goal_updated' ||
+      action.type === 'order_prepared' ||
       action.type === 'payment_prepared'
     ) {
       window.dispatchEvent(new CustomEvent('aura-state-changed', { detail: action }));
@@ -429,8 +467,8 @@ export const AskAuraProvider: React.FC<{
       }
 
       // Try SSE streaming for real-time token reveal
-      const token = localStorage.getItem('token');
-      const streamRes = await fetch(`/api/conversations/${targetConvId}/messages/stream`, {
+      const token = getStoredToken();
+      const streamRes = await fetch(`${getApiBase()}/conversations/${targetConvId}/messages/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

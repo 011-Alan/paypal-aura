@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-function getApiBase(): string {
+export function getApiBase(): string {
   let rawUrl = (import.meta.env?.VITE_API_URL || '').trim();
   if (!rawUrl) {
     if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {

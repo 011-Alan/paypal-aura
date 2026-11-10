@@ -16,6 +16,7 @@ import {
   AuditLogModel,
   ConversationModel,
   MessageModel,
+  ScheduledTaskModel,
 } from '../models';
 import {
   AuthenticatedRequest,
@@ -43,6 +44,7 @@ import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
 import { ecommerceService } from '../services/ecommerce/ecommerceService';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
+import { durableSchedulerService } from '../services/scheduling/durableSchedulerService';
 import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import { GEMINI_MODEL_REGISTRY, validateModelAvailability } from '../services/planning/modelConfig';
 import { lightweightProcessingService } from '../services/ai/lightweightProcessingService';
@@ -3236,6 +3238,98 @@ apiRouter.post('/automations/:id/test', requireAuth, async (req: AuthenticatedRe
     res.json({ success: true, ...result });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+// ============================================================================
+// Ask AURA Durable Scheduler Endpoints
+// ============================================================================
+apiRouter.get('/schedules', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = req.query.status as string | undefined;
+    const tasks = await durableSchedulerService.listSchedules(req.userId!, status ? { status } : undefined);
+    res.json({ success: true, count: tasks.length, schedules: tasks });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/schedules', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const {
+      title,
+      message,
+      scheduleType,
+      triggerType,
+      targetDateTime,
+      timezone,
+      recurrenceRule,
+      recurrenceDayOfWeek,
+      recurrenceDayOfMonth,
+      offsetDays,
+      condition,
+      notificationPreferences,
+    } = req.body;
+
+    if (!title) {
+      res.status(400).json({ success: false, error: 'Title is required' });
+      return;
+    }
+
+    const task = await durableSchedulerService.createSchedule({
+      userId: req.userId!,
+      title,
+      message,
+      scheduleType: scheduleType || 'one_time',
+      triggerType: triggerType || 'datetime',
+      targetDateTime,
+      timezone,
+      recurrenceRule,
+      recurrenceDayOfWeek,
+      recurrenceDayOfMonth,
+      offsetDays,
+      condition,
+      notificationPreferences,
+    });
+
+    res.json({ success: true, schedule: task });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.put('/schedules/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const task = await durableSchedulerService.updateSchedule(req.userId!, req.params.id, req.body);
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Schedule not found' });
+      return;
+    }
+    res.json({ success: true, schedule: task });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/schedules/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cancelled = await durableSchedulerService.cancelSchedule(req.userId!, req.params.id);
+    if (!cancelled) {
+      res.status(404).json({ success: false, error: 'Schedule not found' });
+      return;
+    }
+    res.json({ success: true, cancelled: true, scheduleId: req.params.id });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/schedules/evaluate', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await durableSchedulerService.evaluateScheduledJobs();
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 

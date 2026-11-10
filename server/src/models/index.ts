@@ -835,6 +835,104 @@ const AutomationRuleSchema = new Schema<IAutomationRule>(
 export const AutomationRuleModel = mongoose.model<IAutomationRule>('AutomationRule', AutomationRuleSchema);
 
 // ============================================================================
+// 10B. Durable Scheduled Task & Alert Model (Ask AURA Scheduling Engine)
+// ============================================================================
+export interface IScheduledTask extends Document {
+  userId: mongoose.Types.ObjectId;
+  scheduleId: string;
+  title: string;
+  message: string;
+  scheduleType: 'one_time' | 'recurring' | 'conditional_event';
+  triggerType:
+    | 'datetime'
+    | 'transaction_threshold'
+    | 'spending_threshold'
+    | 'balance_threshold'
+    | 'mandate_due_offset';
+  targetDateTime?: Date;
+  timezone: string;
+  recurrenceRule?: 'daily' | 'weekly' | 'monthly' | 'custom_cron';
+  recurrenceDayOfWeek?: number; // 0=Sunday, 1=Monday...
+  recurrenceDayOfMonth?: number; // 1-31
+  offsetDays?: number; // e.g. 3 days before rent
+  condition?: {
+    field?: 'amount' | 'spending_month' | 'balance' | 'salary';
+    operator?: '>' | '<' | '>=' | '<=' | '==';
+    thresholdValue?: number;
+    category?: string;
+    targetMandateTitle?: string;
+  };
+  notificationPreferences: {
+    channel: 'in_app' | 'email' | 'push';
+    severity: 'info' | 'success' | 'warning' | 'urgent';
+  };
+  status: 'active' | 'completed' | 'cancelled' | 'paused';
+  lastExecutedAt?: Date;
+  nextExecutionAt?: Date;
+  executionCount: number;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ScheduledTaskSchema = new Schema<IScheduledTask>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    scheduleId: { type: String, required: true, unique: true, index: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    scheduleType: {
+      type: String,
+      enum: ['one_time', 'recurring', 'conditional_event'],
+      required: true,
+      index: true,
+    },
+    triggerType: {
+      type: String,
+      enum: [
+        'datetime',
+        'transaction_threshold',
+        'spending_threshold',
+        'balance_threshold',
+        'mandate_due_offset',
+      ],
+      required: true,
+      index: true,
+    },
+    targetDateTime: { type: Date, index: true },
+    timezone: { type: String, default: 'Asia/Kolkata' },
+    recurrenceRule: { type: String, enum: ['daily', 'weekly', 'monthly', 'custom_cron'] },
+    recurrenceDayOfWeek: { type: Number },
+    recurrenceDayOfMonth: { type: Number },
+    offsetDays: { type: Number },
+    condition: {
+      field: { type: String },
+      operator: { type: String },
+      thresholdValue: { type: Number },
+      category: { type: String },
+      targetMandateTitle: { type: String },
+    },
+    notificationPreferences: {
+      channel: { type: String, enum: ['in_app', 'email', 'push'], default: 'in_app' },
+      severity: { type: String, enum: ['info', 'success', 'warning', 'urgent'], default: 'info' },
+    },
+    status: {
+      type: String,
+      enum: ['active', 'completed', 'cancelled', 'paused'],
+      default: 'active',
+      index: true,
+    },
+    lastExecutedAt: { type: Date },
+    nextExecutionAt: { type: Date, index: true },
+    executionCount: { type: Number, default: 0 },
+    metadata: { type: Schema.Types.Mixed },
+  },
+  { timestamps: true }
+);
+
+export const ScheduledTaskModel = mongoose.model<IScheduledTask>('ScheduledTask', ScheduledTaskSchema);
+
+// ============================================================================
 // 11. Security & Financial Audit Log Model (Synced with Elastic Search)
 // ============================================================================
 export interface IAuditLog extends Document {

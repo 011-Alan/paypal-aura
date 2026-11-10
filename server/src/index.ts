@@ -10,6 +10,7 @@ import { apiRateLimiter } from './middleware/security';
 import { apiRouter } from './routes/apiRoutes';
 import { renderWorkerManager } from './workers/backgroundWorkflows';
 import { logPayPalStartupDiagnostics } from './integrations/paypal/validator';
+import { durableSchedulerService } from './services/scheduling/durableSchedulerService';
 
 export const app = express();
 
@@ -81,6 +82,9 @@ export async function startServer() {
   });
 
   if (env.ENABLE_BACKGROUND_WORKERS) {
+    // Start Ask AURA durable scheduler evaluation loop
+    durableSchedulerService.start();
+
     // Run initial background commitment check on startup
     setTimeout(() => {
       renderWorkerManager.runDailyCommitmentsWorkflow().catch((err) => {
