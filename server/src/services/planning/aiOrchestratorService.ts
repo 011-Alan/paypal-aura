@@ -779,7 +779,7 @@ export class AuraAiOrchestratorService {
       params = requestIdOrParams;
     }
 
-    const maxRetries = 4;
+    const maxRetries = 2;
     const sleep = this.customSleepFn || ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 
     let attempt = 0; // 0 = initial request
