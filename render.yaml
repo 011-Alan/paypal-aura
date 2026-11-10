@@ -54,6 +54,8 @@ services:
         sync: false
       - key: ELASTICSEARCH_API_KEY
         sync: false
+      - key: CHANNEL3_API_URL
+        value: https://api.trychannel3.com/v1
       - key: CHANNEL3_API_KEY
         sync: false
       - key: ASTROPODS_API_URL

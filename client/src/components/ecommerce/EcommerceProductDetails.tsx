@@ -154,7 +154,9 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
                 </div>
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-extrabold text-navy-900 dark:text-white">
-                    ${product.demoPriceUsd.toFixed(2)}
+                    {(product.currency || '').toUpperCase() === 'INR'
+                      ? `₹${Math.round(product.priceInr || (product.demoPriceUsd ? product.demoPriceUsd / 0.01190476 : 0)).toLocaleString('en-IN')}`
+                      : `$${(product.demoPriceUsd || (product.priceInr ? product.priceInr * 0.01190476 : 0)).toFixed(2)}`}
                   </span>
                   <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
                     10% Demo Promo
@@ -163,7 +165,9 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
                 <div className="text-xs text-slate-500 dark:text-slate-400 pt-1">
                   Original Retailer Reference:{' '}
                   <span className="line-through font-semibold text-slate-600 dark:text-slate-300">
-                    ${product.retailPriceRefUsd.toFixed(2)}
+                    {(product.currency || '').toUpperCase() === 'INR'
+                      ? `₹${Math.round((product.priceInr || (product.retailPriceRefUsd ? product.retailPriceRefUsd / 0.01190476 : 0)) * 1.05).toLocaleString('en-IN')}`
+                      : `$${(product.retailPriceRefUsd || (product.demoPriceUsd ? product.demoPriceUsd * 1.05 : 0)).toFixed(2)}`}
                   </span>{' '}
                   via {product.retailerName}
                 </div>
@@ -208,7 +212,9 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
 
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-navy-900 dark:text-white">
-                            ${offer.offerPriceUsd}
+                            {(offer.currency || product.currency || '').toUpperCase() === 'INR'
+                              ? `₹${Math.round(offer.priceInr || (offer.offerPriceUsd ? offer.offerPriceUsd / 0.01190476 : 0)).toLocaleString('en-IN')}`
+                              : `$${(offer.offerPriceUsd || offer.priceUsd || 0).toFixed(2)}`}
                           </span>
                           <a
                             href={offer.affiliateAttributionUrl || offer.purchaseUrl}
@@ -304,7 +310,9 @@ export const EcommerceProductDetails: React.FC<EcommerceProductDetailsProps> = (
                   className="py-3 px-5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs sm:text-sm font-bold transition shadow-md shadow-blue-600/20 flex items-center justify-center gap-2"
                 >
                   <CreditCard className="w-4 h-4" />
-                  Buy Now (${(product.demoPriceUsd * quantity).toFixed(2)})
+                  Buy Now ({(product.currency || '').toUpperCase() === 'INR'
+                    ? `₹${Math.round((product.priceInr || (product.demoPriceUsd ? product.demoPriceUsd / 0.01190476 : 0)) * quantity).toLocaleString('en-IN')}`
+                    : `$${((product.demoPriceUsd || (product.priceInr ? product.priceInr * 0.01190476 : 0)) * quantity).toFixed(2)}`})
                 </button>
               </div>
 

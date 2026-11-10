@@ -153,7 +153,7 @@ export const env = {
   BRYNTUM_DEFAULT_VIEW: process.env.BRYNTUM_DEFAULT_VIEW || 'month',
 
   // Sponsor 5: Channel3
-  CHANNEL3_API_URL: process.env.CHANNEL3_API_URL || 'https://api.channel3.io/v1',
+  CHANNEL3_API_URL: process.env.CHANNEL3_API_URL || 'https://api.trychannel3.com/v1',
   CHANNEL3_API_KEY: process.env.CHANNEL3_API_KEY || '',
 
   // Sponsor 6: Elastic

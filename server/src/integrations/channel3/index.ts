@@ -1724,131 +1724,497 @@ export class Channel3IntegrationService {
   }
 
   /**
-   * Retrieves products from the live Channel3 API when CHANNEL3_API_KEY is configured,
-   * or falls back transparently (without pretending to be a live API response) when unavailable.
+   * Robust parser mapping raw Channel3 API product schema into Channel3ProductItem.
+   * Handles string vs object for brands, categories, images, and offers.
+   * Ensures no [object Object] strings and guarantees valid finite numeric prices.
+   */
+  public mapRawProductToItem(item: any, idx = 0): Channel3ProductItem {
+    const rawId = String(item.id || item._id || item.productId || `ch3-prod-${idx}-${Date.now()}`);
+    const name = sanitizeUntrustedExternalText(String(item.title || item.name || 'Product'), 160);
+
+    // 1. Brand extraction
+    let brand = 'Brand';
+    if (typeof item.brand === 'string' && item.brand.trim()) {
+      brand = item.brand.trim();
+    } else if (item.brand && typeof item.brand === 'object' && item.brand.name) {
+      brand = String(item.brand.name);
+    } else if (Array.isArray(item.brands) && item.brands.length > 0) {
+      const firstBrand = item.brands[0];
+      if (typeof firstBrand === 'string') {
+        brand = firstBrand;
+      } else if (firstBrand && typeof firstBrand === 'object' && firstBrand.name) {
+        brand = String(firstBrand.name);
+      }
+    }
+    brand = sanitizeUntrustedExternalText(brand, 60);
+
+    // 2. Category extraction
+    let category = 'General';
+    if (typeof item.category === 'string' && item.category.trim()) {
+      category = item.category.trim();
+    } else if (item.category && typeof item.category === 'object') {
+      category = String(item.category.title || item.category.name || item.category.slug || 'General');
+    } else if (Array.isArray(item.categories) && item.categories.length > 0) {
+      const firstCat = item.categories[0];
+      category = typeof firstCat === 'string' ? firstCat : String(firstCat?.title || firstCat?.name || 'General');
+    }
+    category = sanitizeUntrustedExternalText(category, 60);
+
+    // 3. Description extraction
+    let description = '';
+    if (typeof item.description === 'string' && item.description.trim()) {
+      description = item.description;
+    } else if (Array.isArray(item.key_features) && item.key_features.length > 0) {
+      description = item.key_features.filter(Boolean).join('. ');
+    } else if (Array.isArray(item.features) && item.features.length > 0) {
+      description = item.features.filter(Boolean).join('. ');
+    }
+    description = sanitizeUntrustedExternalText(description, 350);
+
+    // 4. Image extraction
+    const extractedImages: string[] = [];
+    if (Array.isArray(item.images)) {
+      for (const img of item.images) {
+        if (typeof img === 'string' && img.startsWith('http')) {
+          extractedImages.push(img);
+        } else if (img && typeof img === 'object') {
+          const u = img.cleaned_url || img.url || img.src || img.image_url;
+          if (typeof u === 'string' && u.startsWith('http')) {
+            extractedImages.push(u);
+          }
+        }
+      }
+    }
+    if (typeof item.cleaned_image_url === 'string' && item.cleaned_image_url.startsWith('http')) {
+      extractedImages.unshift(item.cleaned_image_url);
+    }
+    if (typeof item.image_url === 'string' && item.image_url.startsWith('http')) {
+      extractedImages.push(item.image_url);
+    }
+    if (typeof item.image === 'string' && item.image.startsWith('http')) {
+      extractedImages.push(item.image);
+    }
+    const defaultPlaceholder = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80';
+    const primaryImage = extractedImages.length > 0 ? extractedImages[0] : defaultPlaceholder;
+    const finalImages = extractedImages.length > 0 ? Array.from(new Set(extractedImages)) : [defaultPlaceholder];
+
+    // 5. Merchant offers and pricing extraction
+    const rawOffers = Array.isArray(item.offers)
+      ? item.offers
+      : Array.isArray(item.merchant_offers)
+      ? item.merchant_offers
+      : [];
+
+    const parsedOffers: Channel3MerchantOffer[] = [];
+    let detectedCurrency = 'USD';
+
+    for (let offIdx = 0; offIdx < rawOffers.length; offIdx++) {
+      const o = rawOffers[offIdx];
+      if (!o) continue;
+
+      let offerAmount = 0;
+      let offerCurrency = 'USD';
+      if (typeof o.price === 'number') {
+        offerAmount = o.price;
+      } else if (o.price && typeof o.price === 'object') {
+        const rawAmt = o.price.price ?? o.price.amount ?? o.price.value ?? o.price.current_price;
+        offerAmount = typeof rawAmt === 'number' ? rawAmt : parseFloat(String(rawAmt)) || 0;
+        if (o.price.currency) {
+          offerCurrency = String(o.price.currency).toUpperCase();
+        }
+      }
+
+      if (offerAmount <= 0) continue;
+      detectedCurrency = offerCurrency;
+
+      let merchantName = 'Partner Retailer';
+      if (typeof o.domain === 'string' && o.domain.trim()) {
+        merchantName = o.domain.trim();
+      } else if (typeof o.merchant === 'string' && o.merchant.trim()) {
+        merchantName = o.merchant.trim();
+      } else if (o.merchant && typeof o.merchant === 'object' && o.merchant.name) {
+        merchantName = String(o.merchant.name);
+      } else if (typeof o.merchant_name === 'string' && o.merchant_name.trim()) {
+        merchantName = o.merchant_name.trim();
+      } else if (typeof o.name === 'string' && o.name.trim()) {
+        merchantName = o.name.trim();
+      }
+
+      if (merchantName.includes('.')) {
+        const domainParts = merchantName.split('.');
+        const domainBase = domainParts[0];
+        merchantName = domainBase.charAt(0).toUpperCase() + domainBase.slice(1) + '.' + domainParts.slice(1).join('.');
+      }
+
+      const offerUrl = String(o.url || o.buy_url || o.purchase_url || item.url || 'https://www.paypal.com');
+      const affParam = offerUrl.includes('?') ? '&' : '?';
+      const monetizableUrl = `${offerUrl}${affParam}channel3_ref=aura_ai&subid=sponsor_hackathon_${offIdx}`;
+
+      let pInr: number;
+      let pUsd: number;
+      if (offerCurrency === 'INR') {
+        pInr = Math.round(offerAmount);
+        pUsd = Math.round(offerAmount * env.INR_TO_USD_RATE * 100) / 100;
+      } else {
+        pUsd = Math.round(offerAmount * 100) / 100;
+        pInr = Math.round(offerAmount / env.INR_TO_USD_RATE);
+      }
+
+      parsedOffers.push({
+        merchantName: sanitizeUntrustedExternalText(merchantName, 80),
+        priceInr: pInr,
+        priceUsd: pUsd,
+        inStock: o.availability === 'in_stock' || o.availability !== 'out_of_stock',
+        offerTitle: `${merchantName} Verified Stock`,
+        url: offerUrl,
+        monetizableUrl,
+        shippingFeeInr: 0,
+        shippingFeeUsd: 0,
+        deliveryDays: '2-4 Business Days',
+        condition: o.condition ? String(o.condition) : 'Brand New, Factory Sealed',
+        isLowestPrice: false,
+      });
+    }
+
+    // If no offers in array, check top-level item.price
+    if (parsedOffers.length === 0 && item.price) {
+      let topAmount = 0;
+      let topCurrency = 'USD';
+      if (typeof item.price === 'number') {
+        topAmount = item.price;
+      } else if (typeof item.price === 'object') {
+        const a = item.price.price ?? item.price.amount ?? item.price.value;
+        topAmount = typeof a === 'number' ? a : parseFloat(String(a)) || 0;
+        if (item.price.currency) topCurrency = String(item.price.currency).toUpperCase();
+      }
+
+      if (topAmount > 0) {
+        detectedCurrency = topCurrency;
+        const retailer = sanitizeUntrustedExternalText(String(item.retailer || item.merchant || 'Channel3 Retailer'), 80);
+        const pUrl = String(item.url || item.purchase_url || item.buy_url || 'https://www.paypal.com');
+        const pInr = topCurrency === 'INR' ? Math.round(topAmount) : Math.round(topAmount / env.INR_TO_USD_RATE);
+        const pUsd = topCurrency === 'INR' ? Math.round(topAmount * env.INR_TO_USD_RATE * 100) / 100 : Math.round(topAmount * 100) / 100;
+        parsedOffers.push({
+          merchantName: retailer,
+          priceInr: pInr,
+          priceUsd: pUsd,
+          inStock: true,
+          offerTitle: `${retailer} Verified Stock`,
+          url: pUrl,
+          monetizableUrl: `${pUrl}${pUrl.includes('?') ? '&' : '?'}channel3_ref=aura_ai`,
+          shippingFeeInr: 0,
+          shippingFeeUsd: 0,
+          deliveryDays: '2-3 Business Days',
+          condition: 'Brand New, Factory Sealed',
+          isLowestPrice: true,
+        });
+      }
+    }
+
+    // Mark lowest price offer
+    if (parsedOffers.length > 0) {
+      let lowest = parsedOffers[0];
+      for (const off of parsedOffers) {
+        if (off.priceUsd < lowest.priceUsd) lowest = off;
+      }
+      lowest.isLowestPrice = true;
+    }
+
+    const lowestPriceUsd = parsedOffers.length > 0 ? Math.min(...parsedOffers.map((o) => o.priceUsd)) : 49;
+    const highestPriceUsd = parsedOffers.length > 0 ? Math.max(...parsedOffers.map((o) => o.priceUsd)) : lowestPriceUsd;
+
+    const priceUsd = lowestPriceUsd;
+    const priceInr = detectedCurrency === 'INR' && parsedOffers[0]?.priceInr
+      ? parsedOffers[0].priceInr
+      : Math.round(priceUsd / env.INR_TO_USD_RATE);
+    const demoPriceUsd = Math.max(1, Math.round(priceUsd * 100) / 100);
+    const retailPriceRefUsd = Math.max(1, Math.round(priceUsd * 1.05 * 100) / 100);
+
+    const retailerName = parsedOffers[0]?.merchantName || sanitizeUntrustedExternalText(String(item.retailer || item.merchant || 'Channel3 Retailer'), 80);
+    const purchaseUrl = parsedOffers[0]?.url || String(item.url || item.buy_url || 'https://www.paypal.com');
+
+    // Ratings
+    let rating = 4.8;
+    let reviewCount = 95;
+    if (item.ratings && typeof item.ratings === 'object') {
+      if (typeof item.ratings.value === 'number' && item.ratings.value > 0) {
+        rating = Math.round(item.ratings.value * 10) / 10;
+      }
+      if (typeof item.ratings.count === 'number' && item.ratings.count > 0) {
+        reviewCount = item.ratings.count;
+      }
+    } else if (typeof item.rating === 'number' && item.rating > 0) {
+      rating = Math.round(item.rating * 10) / 10;
+      if (typeof item.review_count === 'number') reviewCount = item.review_count;
+    }
+
+    // Variants
+    let variants = ['Standard'];
+    if (item.variants && typeof item.variants === 'object') {
+      if (Array.isArray(item.variants.options) && item.variants.options.length > 0) {
+        variants = item.variants.options.map((v: any) => String(v.name || v.title || v.value || v)).slice(0, 5);
+      } else if (Array.isArray(item.variants)) {
+        variants = item.variants.map((v: any) => String(typeof v === 'string' ? v : v.title || v.name || 'Standard')).slice(0, 5);
+      }
+    }
+
+    return {
+      id: rawId,
+      name,
+      brand,
+      category,
+      description,
+      priceInr,
+      priceUsd,
+      demoPriceUsd,
+      retailPriceRefUsd,
+      currency: detectedCurrency,
+      imageUrl: primaryImage,
+      images: finalImages,
+      variants,
+      availability: 'in_stock',
+      retailerName,
+      purchaseUrl,
+      supportsPayPalSandboxCheckout: true,
+      source: 'channel3_live_api',
+      rating,
+      reviewCount,
+      merchantOffers: parsedOffers,
+      lowestPriceUsd,
+      highestPriceUsd,
+      merchantOfferCount: parsedOffers.length,
+      specifications: {
+        Brand: brand,
+        Category: category,
+        Retailer: retailerName,
+        Currency: detectedCurrency,
+        Warranty: '1 Year Manufacturer Warranty',
+        Fulfillment: 'PayPal Orders v2 Verified Checkout',
+        Availability: 'In Stock',
+      },
+      features: [
+        'Live product discovery retrieved via Channel3 data engine',
+        'Multi-retailer price comparison and affiliate tracking',
+        'Seamless checkout powered by PayPal Orders v2 Sandbox',
+        'Verified buyer protection and secure payment capture',
+      ],
+    };
+  }
+
+  /**
+   * Retrieves products from the live Channel3 API (POST https://api.trychannel3.com/v1/search)
+   * with x-api-key authentication, structured request payload, comprehensive response mapping,
+   * accurate currency parsing, and full error diagnostics.
    */
   async searchProducts(params: {
     query: string;
     maxPriceInr?: number;
     category?: string;
+    limit?: number;
   }): Promise<{
     liveApiUsed: boolean;
     statusMessage: string;
     products: Channel3ProductItem[];
+    httpStatus?: number;
+    errorDetails?: string;
   }> {
-    const rawQuery = params.query || '';
+    const rawQuery = (params.query || '').trim();
     const parsed = parseNaturalSearchQuery(rawQuery);
-    const maxPriceInr = params.maxPriceInr || (parsed.maxPriceUsd ? Math.round(parsed.maxPriceUsd / env.INR_TO_USD_RATE) : undefined);
+    const effectiveLimit = Math.min(Math.max(Number(params.limit || 15), 1), 30);
 
-    if (env.CHANNEL3_API_KEY) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const baseUrl = env.CHANNEL3_API_URL.replace(/\/products\/search\/?$/, '').replace(/\/+$/, '');
-        const postUrl = baseUrl.endsWith('/search') ? baseUrl : `${baseUrl}/search`;
+    // If query is empty, provide initial catalog for store browsing
+    if (!rawQuery) {
+      return {
+        liveApiUsed: false,
+        statusMessage: 'Ready for search.',
+        products: REFERENCE_CATALOG.map((item) => this.normalizeProduct(item, 'reference_catalog_fallback')),
+        httpStatus: 200,
+      };
+    }
 
-        const response = await fetch(postUrl, {
+    if (!env.CHANNEL3_API_KEY) {
+      logger.warn('Channel3Integration', 'CHANNEL3_API_KEY is not configured in backend environment');
+      return {
+        liveApiUsed: false,
+        statusMessage: 'CHANNEL3_API_KEY is not configured in backend environment.',
+        errorDetails: 'Missing CHANNEL3_API_KEY environment variable.',
+        products: [],
+        httpStatus: 401,
+      };
+    }
+
+    const baseUrl = env.CHANNEL3_API_URL.replace(/\/+$/, '').replace(/\/products\/?$/, '').replace(/\/search\/?$/, '');
+    const postUrl = `${baseUrl}/search`;
+    const startTime = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      // Primary payload with India & INR locale preference
+      const primaryPayload: Record<string, any> = {
+        query: parsed.cleanQuery || rawQuery,
+        limit: effectiveLimit,
+        config: {
+          country: 'IN',
+          currency: 'INR',
+          mode: 'default',
+        },
+      };
+
+      let response = await fetch(postUrl, {
+        method: 'POST',
+        headers: {
+          'x-api-key': env.CHANNEL3_API_KEY.trim(),
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': 'AURA-Commerce/1.0',
+        },
+        body: JSON.stringify(primaryPayload),
+        signal: controller.signal,
+      });
+
+      // If rejected due to config format (400 or 422), fallback to standard query/limit payload
+      if (!response.ok && (response.status === 400 || response.status === 422)) {
+        const retryPayload = {
+          query: parsed.cleanQuery || rawQuery,
+          limit: effectiveLimit,
+        };
+        const retryResp = await fetch(postUrl, {
           method: 'POST',
           headers: {
-            'x-api-key': env.CHANNEL3_API_KEY,
+            'x-api-key': env.CHANNEL3_API_KEY.trim(),
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
-          body: JSON.stringify({
-            query: parsed.cleanQuery || rawQuery,
-            limit: 20,
-          }),
+          body: JSON.stringify(retryPayload),
           signal: controller.signal,
         });
-        clearTimeout(timeout);
-
-        if (response.ok) {
-          const data: any = await response.json();
-          const rawItems = Array.isArray(data?.products || data?.items || data?.data)
-            ? data.products || data.items || data.data
-            : [];
-          if (rawItems.length > 0) {
-            const mapped: Channel3ProductItem[] = rawItems.slice(0, 15).map((item: any, idx: number) => {
-              const offers = Array.isArray(item.offers) ? item.offers : [];
-              const lowestOfferPrice = offers.length > 0
-                ? Math.min(...offers.map((o: any) => Number(o?.price?.amount || o?.price || 999999)))
-                : undefined;
-              const primaryImage = Array.isArray(item.images) && item.images.length > 0
-                ? item.images[0]
-                : item.image_url || item.image || REFERENCE_CATALOG[0].imageUrl;
-
-              return {
-                id: String(item.id || `ch3-live-${idx}`),
-                name: sanitizeUntrustedExternalText(String(item.name || item.title || 'Product'), 160),
-                brand: sanitizeUntrustedExternalText(String(item.brand || 'Brand'), 60),
-                category: sanitizeUntrustedExternalText(String(item.category || 'General'), 60),
-                description: sanitizeUntrustedExternalText(String(item.description || ''), 300),
-                priceInr: Number(item.price_inr || (lowestOfferPrice ? Math.round(lowestOfferPrice / env.INR_TO_USD_RATE) : 15000)),
-                priceUsd: lowestOfferPrice ? Math.round(lowestOfferPrice) : undefined,
-                demoPriceUsd: lowestOfferPrice ? Math.round(lowestOfferPrice) : undefined,
-                currency: String(item.currency || 'USD'),
-                imageUrl: String(primaryImage),
-                images: Array.isArray(item.images) ? item.images.map(String) : [String(primaryImage)],
-                variants: Array.isArray(item.variants) ? item.variants.map(String) : ['Standard'],
-                availability: 'in_stock',
-                retailerName: sanitizeUntrustedExternalText(String(offers[0]?.merchant || item.retailer || item.merchant || 'Channel3 Verified Partner'), 80),
-                purchaseUrl: String(offers[0]?.url || item.url || item.purchase_url || 'https://www.paypal.com'),
-                supportsPayPalSandboxCheckout: true,
-                source: 'channel3_live_api',
-              };
-            });
-            return {
-              liveApiUsed: true,
-              statusMessage: 'Retrieved live product listings from Channel3 API.',
-              products: mapped,
-            };
-          }
+        if (retryResp.ok) {
+          response = retryResp;
         }
-      } catch (err: any) {
-        logger.warn('Channel3Integration', 'Channel3 API request failed; falling back to labelled reference catalog', {
-          error: err?.message,
-        });
       }
-    }
 
-    // Reference Catalog Search with Intelligent Multi-Factor Scoring
-    const scored = REFERENCE_CATALOG.map((item) => ({
-      item,
-      score: scoreProductForSearch(item, parsed, maxPriceInr, params.category),
-    }));
+      clearTimeout(timeout);
+      const durationMs = Date.now() - startTime;
 
-    let matchingItems = scored
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.item);
+      if (response.ok) {
+        const data: any = await response.json();
+        const rawItems = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.products)
+          ? data.products
+          : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.items)
+          ? data.items
+          : [];
 
-    // Dynamic synthesis: if reference catalog has 0 matches for a non-empty user search,
-    // fetch authentic, category-accurate products matching the user's specific query
-    if (parsed.cleanQuery && matchingItems.length === 0) {
-      const dynamicProducts = synthesizeProductsForQuery(rawQuery);
-      if (dynamicProducts.length > 0) {
-        for (const dp of dynamicProducts) {
-          this.dynamicProductCache.set(dp.id, dp);
+        logger.info('Channel3Integration', `Channel3 live search succeeded: query="${rawQuery}", status=${response.status}, returned=${rawItems.length} products, duration=${durationMs}ms`);
+
+        const mapped: Channel3ProductItem[] = rawItems.map((item: any, idx: number) => {
+          const product = this.mapRawProductToItem(item, idx);
+          this.dynamicProductCache.set(product.id, product);
+          return product;
+        });
+
+        return {
+          liveApiUsed: true,
+          statusMessage: `Retrieved ${mapped.length} live product listings from Channel3 API.`,
+          products: mapped,
+          httpStatus: response.status,
+        };
+      } else {
+        const errorText = await response.text();
+        logger.error('Channel3Integration', `Channel3 live search failed: query="${rawQuery}", status=${response.status}, duration=${durationMs}ms, error=${errorText.slice(0, 300)}`);
+
+        let friendlyError = `Channel3 API returned HTTP ${response.status}`;
+        if (response.status === 401 || response.status === 403) {
+          friendlyError = `Channel3 authentication error (${response.status}): The CHANNEL3_API_KEY is invalid, unauthorized, or lacks product search permissions.`;
+        } else if (response.status === 429) {
+          friendlyError = 'Channel3 rate limit exceeded. Please try again shortly.';
+        } else if (response.status >= 500) {
+          friendlyError = `Channel3 upstream service unavailable (${response.status}).`;
         }
+
         return {
           liveApiUsed: false,
-          statusMessage: `Discovered real-time product listings matching "${rawQuery}".`,
-          products: dynamicProducts,
+          statusMessage: friendlyError,
+          errorDetails: errorText ? errorText.slice(0, 400) : friendlyError,
+          products: [],
+          httpStatus: response.status,
         };
       }
+    } catch (err: any) {
+      const durationMs = Date.now() - startTime;
+      logger.error('Channel3Integration', `Channel3 request exception: query="${rawQuery}", duration=${durationMs}ms, error=${err?.message}`);
+      return {
+        liveApiUsed: false,
+        statusMessage: `Channel3 request failed: ${err?.message || 'Network connection error'}`,
+        errorDetails: err?.message || 'Network error',
+        products: [],
+        httpStatus: 0,
+      };
+    }
+  }
+
+  /**
+   * Diagnostic verification suite: executes the 5 required test queries and returns
+   * live HTTP status, duration, product count, sample items, and error details.
+   */
+  async runVerificationSuite(queries: string[] = [
+    'Wireless headphones',
+    'Gaming laptops',
+    'Smartphones',
+    'Mechanical keyboards',
+    'Running shoes',
+  ]) {
+    const results = [];
+    for (const q of queries) {
+      const startTime = Date.now();
+      const res = await this.searchProducts({ query: q, limit: 10 });
+      const durationMs = Date.now() - startTime;
+      const sample = res.products.slice(0, 3).map((p) => ({
+        id: p.id,
+        title: p.name,
+        brand: p.brand,
+        category: p.category,
+        image: p.imageUrl,
+        currency: p.currency,
+        priceInr: p.priceInr,
+        priceUsd: p.demoPriceUsd,
+        retailer: p.retailerName,
+        purchaseUrl: p.purchaseUrl,
+        offersCount: p.merchantOffers?.length || 0,
+        lowestPriceUsd: p.lowestPriceUsd,
+      }));
+
+      results.push({
+        query: q,
+        httpStatus: res.httpStatus ?? (res.liveApiUsed ? 200 : 0),
+        durationMs,
+        returnedProductsCount: res.products.length,
+        liveApiUsed: res.liveApiUsed,
+        statusMessage: res.statusMessage,
+        errorDetails: res.errorDetails,
+        sampleProducts: sample,
+      });
     }
 
-    // If query was empty or generic, provide full catalog
-    if (!parsed.cleanQuery && matchingItems.length === 0) {
-      matchingItems = REFERENCE_CATALOG;
-    }
+    const apiKeyConfigured = Boolean(env.CHANNEL3_API_KEY);
+    const maskedKey = env.CHANNEL3_API_KEY
+      ? `${env.CHANNEL3_API_KEY.slice(0, 4)}...${env.CHANNEL3_API_KEY.slice(-4)}`
+      : 'NOT_SET';
 
     return {
-      liveApiUsed: false,
-      statusMessage: env.CHANNEL3_API_KEY
-        ? 'Channel3 live API temporarily unreachable — using clearly labelled reference catalog for affordability evaluation.'
-        : 'Channel3 live API key not configured — using clearly labelled reference catalog for affordability evaluation.',
-      products: matchingItems.map((item) => this.normalizeProduct(item, 'reference_catalog_fallback')),
+      timestamp: new Date().toISOString(),
+      apiEndpoint: `${env.CHANNEL3_API_URL.replace(/\/+$/, '')}/search`,
+      apiKeyConfigured,
+      apiKeyLength: env.CHANNEL3_API_KEY ? env.CHANNEL3_API_KEY.length : 0,
+      apiKeyMasked: maskedKey,
+      results,
     };
   }
 
@@ -2081,25 +2447,27 @@ export class Channel3IntegrationService {
         { name: 'Target Direct Partner', priceMultiplier: 1.01, delivery: '3-5 Business Days' },
       ];
     }
-    const merchantOffers: Channel3MerchantOffer[] = partnerMerchants.map((p, idx) => {
-      const pUsd = Math.max(10, Math.round(baseUsd * p.priceMultiplier));
-      const pInr = Math.round(baseInr * p.priceMultiplier);
-      const affParam = cleanUrl.includes('?') ? '&' : '?';
-      return {
-        merchantName: p.name,
-        priceInr: pInr,
-        priceUsd: pUsd,
-        inStock: true,
-        offerTitle: `${p.name} Verified Stock`,
-        url: cleanUrl,
-        monetizableUrl: `${cleanUrl}${affParam}channel3_ref=aura_ai&subid=sponsor_hackathon_${idx}`,
-        shippingFeeInr: 0,
-        shippingFeeUsd: 0,
-        deliveryDays: p.delivery,
-        condition: 'Brand New, Factory Sealed',
-        isLowestPrice: false,
-      };
-    });
+    const merchantOffers: Channel3MerchantOffer[] = (item.merchantOffers && item.merchantOffers.length > 0)
+      ? item.merchantOffers
+      : partnerMerchants.map((p, idx) => {
+          const pUsd = Math.max(10, Math.round(baseUsd * p.priceMultiplier));
+          const pInr = Math.round(baseInr * p.priceMultiplier);
+          const affParam = cleanUrl.includes('?') ? '&' : '?';
+          return {
+            merchantName: p.name,
+            priceInr: pInr,
+            priceUsd: pUsd,
+            inStock: true,
+            offerTitle: `${p.name} Verified Stock`,
+            url: cleanUrl,
+            monetizableUrl: `${cleanUrl}${affParam}channel3_ref=aura_ai&subid=sponsor_hackathon_${idx}`,
+            shippingFeeInr: 0,
+            shippingFeeUsd: 0,
+            deliveryDays: p.delivery,
+            condition: 'Brand New, Factory Sealed',
+            isLowestPrice: false,
+          };
+        });
 
     let lowestOffer = merchantOffers[0];
     for (const off of merchantOffers) {
@@ -2147,15 +2515,20 @@ export class Channel3IntegrationService {
   async getProductById(productId: string): Promise<Channel3ProductItem | null> {
     if (!productId) return null;
 
+    if (this.dynamicProductCache.has(productId)) {
+      return this.dynamicProductCache.get(productId)!;
+    }
+
     if (env.CHANNEL3_API_KEY) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000);
-        const url = `${env.CHANNEL3_API_URL}/products/${encodeURIComponent(productId)}`;
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const baseUrl = env.CHANNEL3_API_URL.replace(/\/+$/, '').replace(/\/products\/?$/, '').replace(/\/search\/?$/, '');
+        const url = `${baseUrl}/products/${encodeURIComponent(productId)}`;
         const response = await fetch(url, {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${env.CHANNEL3_API_KEY}`,
+            'x-api-key': env.CHANNEL3_API_KEY.trim(),
             Accept: 'application/json',
           },
           signal: controller.signal,
@@ -2165,29 +2538,14 @@ export class Channel3IntegrationService {
         if (response.ok) {
           const data: any = await response.json();
           const p = data?.product || data;
-          if (p && p.name) {
-            return this.normalizeProduct(
-              {
-                id: String(p.id || productId),
-                name: sanitizeUntrustedExternalText(String(p.name || p.title), 160),
-                brand: sanitizeUntrustedExternalText(String(p.brand || 'Brand'), 60),
-                category: sanitizeUntrustedExternalText(String(p.category || 'General'), 60),
-                description: sanitizeUntrustedExternalText(String(p.description || ''), 400),
-                priceInr: Number(p.price_inr || p.price || 12000),
-                currency: String(p.currency || 'INR'),
-                imageUrl: String(p.image_url || p.image || REFERENCE_CATALOG[0].imageUrl),
-                variants: Array.isArray(p.variants) ? p.variants.map(String) : ['Standard'],
-                availability: 'in_stock',
-                retailerName: sanitizeUntrustedExternalText(String(p.retailer || p.merchant || 'Channel3 Retailer'), 80),
-                purchaseUrl: String(p.url || p.purchase_url || 'https://www.paypal.com'),
-                supportsPayPalSandboxCheckout: true,
-              },
-              'channel3_live_api'
-            );
+          if (p && (p.name || p.title)) {
+            const mapped = this.mapRawProductToItem(p, 0);
+            this.dynamicProductCache.set(mapped.id, mapped);
+            return mapped;
           }
         }
       } catch (err: any) {
-        logger.warn('Channel3Integration', `Failed to lookup product ${productId} via live API; falling back to reference catalog`, {
+        logger.warn('Channel3Integration', `Failed to lookup product ${productId} via live API`, {
           error: err?.message,
         });
       }
@@ -2196,10 +2554,6 @@ export class Channel3IntegrationService {
     const ref = REFERENCE_CATALOG.find((p) => p.id === productId);
     if (ref) {
       return this.normalizeProduct(ref, 'reference_catalog_fallback');
-    }
-
-    if (this.dynamicProductCache.has(productId)) {
-      return this.dynamicProductCache.get(productId)!;
     }
 
     // If product ID is a dynamic or knowledge product, regenerate and cache
@@ -2234,40 +2588,45 @@ export class Channel3IntegrationService {
     categories: string[];
     brands: string[];
     liveApiUsed: boolean;
+    statusMessage?: string;
+    error?: string;
+    httpStatus?: number;
   }> {
     const rawQuery = (params.query || '').trim();
-    const parsed = parseNaturalSearchQuery(rawQuery);
-    const effectiveMaxPrice = params.maxPrice !== undefined ? params.maxPrice : parsed.maxPriceUsd;
-    const effectiveMinPrice = params.minPrice !== undefined ? params.minPrice : parsed.minPriceUsd;
     const categories = this.getCategories();
 
     // Start with catalog search
     const searchRes = await this.searchProducts({
       query: rawQuery,
       category: params.category,
-      maxPriceInr: effectiveMaxPrice ? Math.round(effectiveMaxPrice / env.INR_TO_USD_RATE) : undefined,
+      maxPriceInr: params.maxPrice ? Math.round(params.maxPrice / env.INR_TO_USD_RATE) : undefined,
+      limit: params.limit || 20,
     });
 
-    let items = searchRes.products.map((p) => this.normalizeProduct(p, p.source));
+    let items: Channel3ProductItem[] = [];
 
-    // If query was empty or generic, ensure we have the full rich catalog
-    if (!rawQuery && items.length < REFERENCE_CATALOG.length) {
-      const fullList = REFERENCE_CATALOG.map((p) => this.normalizeProduct(p, 'reference_catalog_fallback'));
-      items = fullList;
+    if (searchRes.liveApiUsed) {
+      items = searchRes.products;
+    } else if (!rawQuery) {
+      // Empty query browse mode: provide full reference catalog
+      items = REFERENCE_CATALOG.map((p) => this.normalizeProduct(p, 'reference_catalog_fallback'));
+    } else {
+      // Live search failed or not configured; do not fabricate fake results for a real search query
+      items = [];
     }
 
-    // Apply additional filters
+    // Apply additional storefront filters
     if (params.category && params.category !== 'All') {
       items = items.filter((p) => p.category.toLowerCase().includes(params.category!.toLowerCase()));
     }
     if (params.brand && params.brand !== 'All') {
       items = items.filter((p) => p.brand.toLowerCase() === params.brand!.toLowerCase());
     }
-    if (effectiveMinPrice !== undefined) {
-      items = items.filter((p) => (p.demoPriceUsd || 0) >= effectiveMinPrice);
+    if (params.minPrice !== undefined) {
+      items = items.filter((p) => (p.demoPriceUsd || 0) >= params.minPrice!);
     }
-    if (effectiveMaxPrice !== undefined) {
-      items = items.filter((p) => (p.demoPriceUsd || 0) <= effectiveMaxPrice);
+    if (params.maxPrice !== undefined) {
+      items = items.filter((p) => (p.demoPriceUsd || 0) <= params.maxPrice!);
     }
 
     // Extract unique brands

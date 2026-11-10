@@ -2544,7 +2544,46 @@ apiRouter.get('/ecommerce/products', async (req: Request, res: Response) => {
     });
     res.json({ success: true, ...result });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err?.message });
+    res.status(500).json({ success: false, error: err?.message || 'Product search failed' });
+  }
+});
+
+// Channel3 Diagnostic Health & Configuration Check
+apiRouter.get('/ecommerce/channel3/diagnostics', async (_req: Request, res: Response) => {
+  try {
+    const health = channel3Integration.getHealthStatus();
+    const apiKeyConfigured = Boolean(env.CHANNEL3_API_KEY);
+    const maskedKey = env.CHANNEL3_API_KEY
+      ? `${env.CHANNEL3_API_KEY.slice(0, 4)}...${env.CHANNEL3_API_KEY.slice(-4)}`
+      : 'NOT_SET';
+
+    res.json({
+      success: true,
+      service: 'Channel3 Product Search & Discovery',
+      apiEndpoint: `${env.CHANNEL3_API_URL.replace(/\/+$/, '')}/search`,
+      apiKeyConfigured,
+      apiKeyLength: env.CHANNEL3_API_KEY ? env.CHANNEL3_API_KEY.length : 0,
+      apiKeyMasked: maskedKey,
+      authHeader: 'x-api-key',
+      health,
+      preferredLocale: {
+        country: 'IN',
+        currency: 'INR',
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// Channel3 Verification Suite for 5 Real Queries
+apiRouter.get('/ecommerce/channel3/verify-searches', async (req: Request, res: Response) => {
+  try {
+    const customQuery = req.query.q ? [String(req.query.q)] : undefined;
+    const suiteResult = await channel3Integration.runVerificationSuite(customQuery);
+    res.json({ success: true, ...suiteResult });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 

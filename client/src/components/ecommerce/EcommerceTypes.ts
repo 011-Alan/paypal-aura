@@ -1,13 +1,20 @@
 export interface Channel3MerchantOffer {
-  retailerName: string;
-  offerPriceUsd: number;
-  currency: string;
+  retailerName?: string;
+  merchantName?: string;
+  offerPriceUsd?: number;
+  priceUsd?: number;
+  priceInr?: number;
+  currency?: string;
   inStock: boolean;
-  purchaseUrl: string;
+  purchaseUrl?: string;
+  url?: string;
   deliveryTimeframe?: string;
+  deliveryDays?: string;
   condition?: string;
   isLowestPrice?: boolean;
   affiliateAttributionUrl?: string;
+  monetizableUrl?: string;
+  offerTitle?: string;
 }
 
 export interface EcommerceProduct {

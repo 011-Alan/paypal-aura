@@ -184,11 +184,15 @@ export const Channel3ProductComparisonModal: React.FC<ProductComparisonModalProp
                     {/* Pricing Block */}
                     <div className="mt-3 flex items-baseline gap-2">
                       <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                        ${product.demoPriceUsd}
+                        {(product.currency || '').toUpperCase() === 'INR'
+                          ? `₹${Math.round(product.priceInr || (product.demoPriceUsd ? product.demoPriceUsd / 0.01190476 : 0)).toLocaleString('en-IN')}`
+                          : `$${(product.demoPriceUsd || (product.priceInr ? product.priceInr * 0.01190476 : 0)).toFixed(2)}`}
                       </span>
                       {product.retailPriceRefUsd > product.demoPriceUsd && (
                         <span className="text-xs text-slate-400 dark:text-slate-500 line-through">
-                          ${product.retailPriceRefUsd}
+                          {(product.currency || '').toUpperCase() === 'INR'
+                            ? `₹${Math.round((product.priceInr || (product.retailPriceRefUsd / 0.01190476)) * 1.05).toLocaleString('en-IN')}`
+                            : `$${(product.retailPriceRefUsd || (product.demoPriceUsd * 1.05)).toFixed(2)}`}
                         </span>
                       )}
                     </div>
@@ -196,7 +200,7 @@ export const Channel3ProductComparisonModal: React.FC<ProductComparisonModalProp
                     {hasMultiOffers && (
                       <span className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                         <TrendingDown className="w-3 h-3" />
-                        From ${lowestOfferPrice} across {product.merchantOffers?.length} merchants
+                        From {(product.currency || '').toUpperCase() === 'INR' ? `₹${Math.round(lowestOfferPrice / 0.01190476).toLocaleString('en-IN')}` : `$${lowestOfferPrice}`} across {product.merchantOffers?.length} merchants
                       </span>
                     )}
 
@@ -248,7 +252,11 @@ export const Channel3ProductComparisonModal: React.FC<ProductComparisonModalProp
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-900 dark:text-white">${offer.offerPriceUsd}</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">
+                              {(offer.currency || product.currency || '').toUpperCase() === 'INR'
+                                ? `₹${Math.round(offer.priceInr || (offer.offerPriceUsd || offer.priceUsd || 0) / 0.01190476).toLocaleString('en-IN')}`
+                                : `$${(offer.offerPriceUsd || offer.priceUsd || 0).toFixed(2)}`}
+                            </span>
                             <a
                               href={offer.affiliateAttributionUrl || offer.purchaseUrl}
                               target="_blank"

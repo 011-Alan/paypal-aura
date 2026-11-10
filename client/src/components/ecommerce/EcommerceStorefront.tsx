@@ -94,11 +94,19 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         products: EcommerceProduct[];
         categories: string[];
         brands: string[];
+        liveApiUsed?: boolean;
+        statusMessage?: string;
+        error?: string;
       }>(`/ecommerce/products?${params.toString()}`);
 
       if (seq !== searchSeqRef.current) return; // Stale response guard
 
-      setProducts(res.products || []);
+      if (res.error && (!res.products || res.products.length === 0)) {
+        setError(res.error);
+        setProducts([]);
+      } else {
+        setProducts(res.products || []);
+      }
       if (res.categories?.length) {
         setCategories(['All', ...res.categories]);
       }
@@ -492,7 +500,9 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-lg font-extrabold text-navy-900 dark:text-white">
-                        ${product.demoPriceUsd.toFixed(2)}
+                        {(product.currency || '').toUpperCase() === 'INR'
+                          ? `₹${Math.round(product.priceInr || (product.demoPriceUsd ? product.demoPriceUsd / 0.01190476 : 0)).toLocaleString('en-IN')}`
+                          : `$${(product.demoPriceUsd || (product.priceInr ? product.priceInr * 0.01190476 : 0)).toFixed(2)}`}
                       </span>
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
                         AURA Demo Price
@@ -500,7 +510,9 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                     </div>
 
                     <div className="text-[11px] text-slate-400 dark:text-slate-500 line-through">
-                      Retail Ref: ${product.retailPriceRefUsd.toFixed(2)} ({product.retailerName})
+                      Retail Ref: {(product.currency || '').toUpperCase() === 'INR'
+                        ? `₹${Math.round((product.priceInr || (product.retailPriceRefUsd ? product.retailPriceRefUsd / 0.01190476 : 0)) * 1.05).toLocaleString('en-IN')}`
+                        : `$${(product.retailPriceRefUsd || (product.demoPriceUsd ? product.demoPriceUsd * 1.05 : 0)).toFixed(2)}`} ({product.retailerName})
                     </div>
 
                     {/* Multi-Merchant Offers Pill */}
@@ -508,7 +520,9 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
                       <div className="pt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                         <TrendingDown className="w-3 h-3" />
                         <span>
-                          Available at {product.merchantOffers.length} retailers (from ${product.lowestPriceUsd || product.demoPriceUsd})
+                          Available at {product.merchantOffers.length} retailers (from {(product.currency || '').toUpperCase() === 'INR'
+                            ? `₹${Math.round(product.merchantOffers[0].priceInr || (product.lowestPriceUsd || product.demoPriceUsd) / 0.01190476).toLocaleString('en-IN')}`
+                            : `$${((product.lowestPriceUsd || product.demoPriceUsd) || 0).toFixed(2)}`})
                         </span>
                       </div>
                     )}
