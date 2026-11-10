@@ -138,7 +138,30 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
   }, [products, sortBy]);
 
   useEffect(() => {
-    fetchProducts();
+    // Check if navigation passed a search query (e.g. from Ask AURA navigation)
+    let initialQuery = '';
+    try {
+      const storedQuery = sessionStorage.getItem('aura_commerce_search_query');
+      if (storedQuery) {
+        sessionStorage.removeItem('aura_commerce_search_query');
+        initialQuery = storedQuery;
+        setSearchQuery(storedQuery);
+      }
+    } catch {}
+
+    fetchProducts(initialQuery || searchQuery);
+
+    const handleAuraSearch = (e: any) => {
+      const q = e?.detail?.query;
+      if (q) {
+        setSearchQuery(q);
+        fetchProducts(q, 'All', 'All', '');
+      }
+    };
+    window.addEventListener('aura-commerce-search', handleAuraSearch);
+    return () => {
+      window.removeEventListener('aura-commerce-search', handleAuraSearch);
+    };
   }, [selectedCategory, selectedBrand]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {

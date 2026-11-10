@@ -10,6 +10,7 @@ import {
   GoalModel,
   CalendarEventModel,
   FamilyGroupModel,
+  ICommerceContext,
 } from '../../models';
 import { astropodsIntegration } from '../../integrations/astropods';
 import { agGridIntegration } from '../../integrations/ag-grid';
@@ -27,6 +28,8 @@ import { GEMINI_MODEL_REGISTRY, validateModelAvailability, ModelDiagnosticResult
 import { semanticRetrievalService } from '../ai/semanticRetrievalService';
 import { lightweightProcessingService } from '../ai/lightweightProcessingService';
 import { aiActionRegistry } from '../ai/aiActionRegistry';
+import { commerceIntentRouter } from '../ai/commerceIntentRouter';
+import { commerceIntelligenceService } from '../ecommerce/commerceIntelligenceService';
 
 export interface AiToolAction {
   type:
@@ -119,6 +122,7 @@ export interface ProcessConversationalQueryResult {
   kernelResearch?: any;
   pythonAnalytics?: any;
   observability?: AiObservabilityTrace | null;
+  commerceContext?: ICommerceContext | null;
   timestamp: string;
 }
 
@@ -155,8 +159,46 @@ export function calculateEmiSchedule(
   });
 }
 
+export function formatCommerceContextForPrompt(ctx?: ICommerceContext | null): string {
+  if (!ctx || !ctx.products || ctx.products.length === 0) return '';
+  const lines = [
+    `\n--- ACTIVE COMMERCE CONTEXT ---`,
+    `Last Search Query: "${ctx.lastSearchQuery || ''}"`,
+    `Recommended / Active Product ID: "${ctx.recommendedProductId || ctx.selectedProductId || ctx.products[0]?.id}"`,
+    `Products currently in conversation:`,
+  ];
+  ctx.products.forEach((p, i) => {
+    const isRec = p.id === (ctx.recommendedProductId || ctx.selectedProductId) ? ' [ACTIVE / RECOMMENDED]' : '';
+    lines.push(
+      `${i + 1}. [ID: ${p.id}] ${p.name}${isRec} | Price: ₹${p.priceInr?.toLocaleString('en-IN')} | Brand: ${p.brand} | Retailer: ${p.retailerName} | URL: ${p.purchaseUrl}`
+    );
+    const specs = Object.entries(p.specifications || {})
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ');
+    if (specs) {
+      lines.push(`   Specs: ${specs}`);
+    }
+  });
+  if (ctx.alternativeProducts && ctx.alternativeProducts.length > 0) {
+    lines.push(`Alternative Products in conversation:`);
+    ctx.alternativeProducts.forEach((p, i) => {
+      lines.push(
+        `ALT ${i + 1}. [ID: ${p.id}] ${p.name} | Price: ₹${p.priceInr?.toLocaleString('en-IN')} | Brand: ${p.brand} | Retailer: ${p.retailerName} | URL: ${p.purchaseUrl}`
+      );
+      const specs = Object.entries(p.specifications || {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      if (specs) {
+        lines.push(`   Specs: ${specs}`);
+      }
+    });
+  }
+  lines.push(`--- END COMMERCE CONTEXT ---\n`);
+  return lines.join('\n');
+}
+
 /**
- * 13 Gemini Function Declarations for AURA Backend Tools
+ * 16 Gemini Function Declarations for AURA Backend Tools
  */
 export const GEMINI_TOOL_DECLARATIONS = {
   functionDeclarations: [
@@ -182,28 +224,65 @@ export const GEMINI_TOOL_DECLARATIONS = {
     },
     {
       name: 'searchProducts',
-      description: 'Discover and search verified catalog products (appliances, bottles, electronics, laptops, footwear) with live prices in INR and merchant details.',
+      description: 'Discover and search verified catalog products (laptops, appliances, electronics, footwear) with live prices in INR and merchant details.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          query: { type: Type.STRING, description: 'The product search term, e.g. "water bottle", "air conditioner", "laptop", "sneakers"' },
+          query: { type: Type.STRING, description: 'The product search term, e.g. "ASUS Vivobook 14", "Lenovo alternative", "water bottle", "sneakers"' },
           category: { type: Type.STRING, description: 'Optional product category: "Kitchen & Dining", "Home Appliances", "Laptops & Computers", "Footwear & Sneakers"' },
           maxPriceInr: { type: Type.NUMBER, description: 'Optional maximum price ceiling in INR' },
+          isAlternative: { type: Type.BOOLEAN, description: 'Set to true if searching for an alternative to previously recommended products' },
         },
         required: ['query'],
       },
     },
     {
-      name: 'analyseAffordability',
-      description: 'Perform a deterministic 7-factor financial affordability evaluation of a specific product or purchase amount against income, remaining discretionary budget, ringfenced upcoming commitments, and savings goals.',
+      name: 'recommendProduct',
+      description: 'Evaluate previously retrieved products in context and recommend the best option with detailed reasoning based on verified hardware specifications.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          productName: { type: Type.STRING, description: 'The product name or type, e.g. "Water Bottle", "Air Conditioner", "Laptop"' },
-          priceInr: { type: Type.NUMBER, description: 'The purchase amount in INR to evaluate' },
+          criteria: { type: Type.STRING, description: 'Optional user priority, e.g. "budget", "performance", "battery", "display", "value"' },
+          productId: { type: Type.STRING, description: 'Optional specific product ID to focus recommendation on' },
+        },
+      },
+    },
+    {
+      name: 'convertCurrency',
+      description: 'Convert product prices or monetary amounts between currencies (e.g. INR to USD, EUR, GBP) using authentic exchange rates with formula, rate timestamp, and fee disclaimer.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          amount: { type: Type.NUMBER, description: 'Amount to convert. If omitted, converts active product price from context.' },
+          fromCurrency: { type: Type.STRING, description: 'Source currency ISO code, default "INR"' },
+          toCurrency: { type: Type.STRING, description: 'Target currency ISO code, e.g. "USD"' },
+          productId: { type: Type.STRING, description: 'Optional ID of product whose price is being converted' },
+        },
+        required: ['toCurrency'],
+      },
+    },
+    {
+      name: 'evaluateProductDetail',
+      description: 'Answer specific product hardware questions (battery life, display, RAM/storage, processor, graphics, ports, weight) using verified specifications from previous search results.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING, description: 'Feature or question being asked about (e.g. "battery life", "RAM upgradeability", "OLED display")' },
+          productId: { type: Type.STRING, description: 'Optional product ID to evaluate' },
+        },
+        required: ['question'],
+      },
+    },
+    {
+      name: 'analyseAffordability',
+      description: 'Perform a deterministic 7-factor financial affordability evaluation of a specific product or purchase amount against income, remaining discretionary budget, ringfenced upcoming commitments, and savings goals. Can read price directly from active product context.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          productName: { type: Type.STRING, description: 'The product name or type, e.g. "ASUS Vivobook 14", "Water Bottle", "Air Conditioner"' },
+          priceInr: { type: Type.NUMBER, description: 'The purchase amount in INR to evaluate. If omitted, uses active product price from context.' },
           category: { type: Type.STRING, description: 'Optional category of the purchase' },
         },
-        required: ['priceInr'],
       },
     },
     {
@@ -220,14 +299,14 @@ export const GEMINI_TOOL_DECLARATIONS = {
     },
     {
       name: 'compareProducts',
-      description: 'Generate a side-by-side specification, pricing, and energy/feature comparison table between products.',
+      description: 'Generate a side-by-side specification, pricing, and feature comparison between products from previous search results or category.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          category: { type: Type.STRING, description: 'Product category or query to compare, e.g. "air conditioner", "laptop"' },
+          category: { type: Type.STRING, description: 'Optional product category or query to compare' },
           productNames: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Optional list of product names to compare' },
+          productIds: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Optional list of product IDs to compare' },
         },
-        required: ['category'],
       },
     },
     {
@@ -282,13 +361,17 @@ export const GEMINI_TOOL_DECLARATIONS = {
     },
     {
       name: 'navigateApplication',
-      description: 'Navigate the application interface to a specific tab or dashboard view.',
+      description: 'Navigate the application interface to a specific tab or dashboard view, optionally passing a search query for Commerce.',
       parameters: {
         type: Type.OBJECT,
         properties: {
           targetTab: {
             type: Type.STRING,
             description: 'Target section: "overview", "transactions", "calendar", "smart-purchases", "payments", "financial-health", "family-vault", "settings"',
+          },
+          searchQuery: {
+            type: Type.STRING,
+            description: 'Optional query to automatically search when navigating to smart-purchases (e.g. "Vivobook 14")',
           },
         },
         required: ['targetTab'],
@@ -940,6 +1023,7 @@ export class AuraAiOrchestratorService {
     includeKernelResearch?: boolean;
     conversationId?: string;
     requiredCapability?: string;
+    commerceContext?: ICommerceContext | null;
   }): Promise<ProcessConversationalQueryResult> {
     const startTime = Date.now();
     const requestId = `gemini-req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -997,19 +1081,20 @@ export class AuraAiOrchestratorService {
         userId: params.userId,
       });
 
+      const FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE =
+        "I'm having a little trouble connecting to my AI engine right now. Your information is safe. Please try again in a moment.";
+
       return {
         success: false,
         serviceUnavailable: true,
         code: 'GEMINI_NOT_CONFIGURED',
-        error: 'Google Gemini AI is not configured. Please configure GEMINI_API_KEY in the backend environment.',
+        error: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
         canRetry: false,
         retryAfterSeconds: null,
         prompt,
         workflowType: 'service_unavailable',
-        explanation:
-          'Google Gemini AI service is currently unavailable because GEMINI_API_KEY is not configured in the backend environment. Please configure GEMINI_API_KEY in server/.env to enable genuine conversational intelligence.',
-        answer:
-          'Google Gemini AI service is currently unavailable because GEMINI_API_KEY is not configured in the backend environment. Please configure GEMINI_API_KEY in server/.env to enable genuine conversational intelligence.',
+        explanation: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
+        answer: FRIENDLY_SERVICE_UNAVAILABLE_MESSAGE,
         toolAction: {
           type: 'general_knowledge' as const,
           title: 'AI Service Unavailable',
@@ -1019,6 +1104,7 @@ export class AuraAiOrchestratorService {
         suggestedNextPrompts: [],
         astropodsOrchestration: null,
         observability: trace,
+        commerceContext: params.commerceContext || null,
         timestamp: new Date().toISOString(),
       };
     }
@@ -1069,6 +1155,7 @@ export class AuraAiOrchestratorService {
         includeKernelResearch: Boolean(params.includeKernelResearch),
         startTime,
         requiredCapability: params.requiredCapability,
+        commerceContext: params.commerceContext,
       });
 
       // Cache safe general-knowledge answers (non-personal)
@@ -1107,25 +1194,35 @@ export class AuraAiOrchestratorService {
     includeKernelResearch: boolean;
     startTime: number;
     requiredCapability?: string;
+    commerceContext?: ICommerceContext | null;
   }) {
     const { user, prompt, history, requestId, conversationId, startTime } = ctx;
     const t0 = Date.now();
 
+    const commerceContextText = formatCommerceContextForPrompt(ctx.commerceContext);
     const systemInstruction = `You are AURA, an intelligent, empathetic, versatile financial companion and general-purpose AI assistant.
 Core Behavioral Principles:
 1. You are a versatile conversational AI: answer questions on everyday knowledge, programming, science, career, interview preparation, geography, language, and culture naturally and directly. Never force non-financial questions into a financial context.
-2. For ambiguous purchase inquiries (e.g., "Can I buy a bottle?", "I want sneakers"), ask a natural, friendly clarification question (asking what style, type, brand or budget they are considering). Do NOT execute financial evaluations or product search without knowing what the user wants.
-3. For product discovery (e.g., "What kind of bottles are available?", "Show me running shoes"), invoke the searchProducts tool. Do not evaluate 7-factor financial affordability unless the user explicitly asks whether they can afford it or specifies a price.
-4. For explicit financial questions (e.g., "What is my balance?", "What are my upcoming commitments?", "Can I afford a ₹35,000 AC?", "What if I buy on EMI?"), invoke the relevant financial tools (getFinancialSummary, getUpcomingCommitments, analyseAffordability, calculateEmiOptions).
-5. For scheduling reminders (e.g. "Remind me to pay rent next Monday"), invoke createReminder.
-6. For payments (e.g. "Pay Rahul ₹5,000"), invoke preparePayment. Always remind the user that payments are prepared for their review and require explicit security PIN authorization on the Payments screen. AI never moves money autonomously.
+2. For ambiguous purchase inquiries without specifics (e.g., "Can I buy a bottle?", "I want sneakers"), ask a natural, friendly clarification question (asking what style, type, brand or budget they are considering). Do NOT execute financial evaluations or product search without knowing what the user wants.
+3. For product discovery or searching new items/alternatives (e.g., "I want to buy an ASUS Vivobook 14", "Find me a cheaper Lenovo alternative", "Show me running shoes"), invoke the searchProducts tool.
+4. COMMERCE FOLLOW-UPS & ACTIVE CONTEXT:
+   - When products are ALREADY in the active context (listed below), DO NOT execute a new searchProducts call unless the user specifically asks for different products or new brands!
+   - When the user asks for a recommendation (e.g. "Which one would you recommend?", "Can you recommend one of these and give me the price in USD?"), invoke recommendProduct.
+   - When the user asks for currency conversion (e.g. "Give me the price in USD"), invoke convertCurrency.
+   - When the user asks "Can I afford it?" or "Can I buy it?", invoke analyseAffordability. It will automatically evaluate against their verified financial accounts and the active product price.
+   - When the user asks to compare products (e.g. "Compare the first two", "Compare it with the ASUS you recommended"), invoke compareProducts.
+   - When the user asks specific hardware questions (e.g. "What about its battery life?", "Does it have OLED?"), invoke evaluateProductDetail.
+   - When the user asks to search or view in AURA Commerce (e.g. "Search Vivobook 14 in AURA Commerce", "Go to Commerce"), invoke navigateApplication with targetTab: "smart-purchases" and searchQuery.
+5. For explicit financial questions (e.g., "What is my balance?", "What are my upcoming commitments?", "What if I buy on EMI?"), invoke the relevant financial tools (getFinancialSummary, getUpcomingCommitments, calculateEmiOptions).
+6. For scheduling reminders (e.g. "Remind me to pay rent next Monday"), invoke createReminder.
+7. For payments (e.g. "Pay Rahul ₹5,000"), invoke preparePayment. Always remind the user that payments are prepared for their review and require explicit security PIN authorization on the Payments screen. AI never moves money autonomously.
 User Name: ${user.name}
-Preferred Currency: ${user.currency || 'INR'}`;
+Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + commerceContextText : ''}`;
 
-    const maxHistory = env.GEMINI_MAX_HISTORY_TURNS || 6;
+    const maxHistory = env.GEMINI_MAX_HISTORY_TURNS || 8;
     const formattedHistory = history.slice(-maxHistory).map((h) => ({
       role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.content.length > 500 ? h.content.slice(0, 500) + '...' : h.content }],
+      parts: [{ text: h.content.length > 2500 ? h.content.slice(0, 2500) + '...' : h.content }],
     }));
 
     const contents = [...formattedHistory, { role: 'user', parts: [{ text: prompt }] }];
@@ -1295,6 +1392,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
             'Can you explain that more simply?',
           ],
           observability: trace,
+          commerceContext: ctx.commerceContext || null,
         });
       }
 
@@ -1312,9 +1410,16 @@ Preferred Currency: ${user.currency || 'INR'}`;
         args: call.args,
       });
 
+      let activeCommerceContext = ctx.commerceContext || null;
       let execution: any = null;
       try {
-        execution = await this.dispatchBackendTool(toolName, call.args || {}, ctx);
+        execution = await this.dispatchBackendTool(toolName, call.args || {}, {
+          ...ctx,
+          commerceContext: activeCommerceContext,
+        });
+        if (execution?.commerceContext) {
+          activeCommerceContext = execution.commerceContext;
+        }
         toolExecutionStatus[toolName] = 'success';
       } catch (toolErr: any) {
         toolExecutionStatus[toolName] = 'failed';
@@ -1350,7 +1455,6 @@ Preferred Currency: ${user.currency || 'INR'}`;
       // Deterministic tools (balance, recent transactions, navigation, currency, reminders, goals, payments, product cards)
       // return a complete, verified, human-friendly explanation immediately, saving ~50% of API calls.
       const REQUIRES_FOLLOW_UP_AI_SYNTHESIS = new Set([
-        'analyseAffordability',
         'researchMarketRates',
       ]);
 
@@ -1427,6 +1531,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         purchaseCompanion: execution.purchaseCompanion,
         preparedPayment: execution.preparedPayment,
         observability: trace,
+        commerceContext: activeCommerceContext,
       });
     } catch (apiErr: any) {
       const totalLatencyMs = Date.now() - t0;
@@ -1486,6 +1591,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         suggestedNextPrompts: ['Retry request'],
         astropodsOrchestration: null,
         observability: trace,
+        commerceContext: ctx.commerceContext || null,
         timestamp: new Date().toISOString(),
       };
     }
@@ -1504,6 +1610,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
       history?: ConversationTurn[];
       requestId: string;
       conversationId: string;
+      commerceContext?: ICommerceContext | null;
     }
   ): Promise<{
     resultData: any;
@@ -1513,6 +1620,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
     suggestedNextPrompts: string[];
     purchaseCompanion?: any;
     preparedPayment?: any;
+    commerceContext?: ICommerceContext | null;
   }> {
     const userObjId = new mongoose.Types.ObjectId(ctx.userId);
     const user = ctx.user;
@@ -1537,11 +1645,25 @@ Preferred Currency: ${user.currency || 'INR'}`;
       assistFinancialDistress: 'assist_financial_distress',
       draftEmail: 'draft_email',
       navigate_to_page: 'navigate_to_page',
+      navigateApplication: 'navigate_to_page',
+      navigateToPage: 'navigate_to_page',
       search_products: 'search_products',
+      searchProducts: 'search_products',
+      recommend_product: 'recommend_product',
+      recommendProduct: 'recommend_product',
+      convert_currency: 'convert_currency',
+      convertCurrency: 'convert_currency',
+      evaluate_product_detail: 'evaluate_product_detail',
+      evaluateProductDetail: 'evaluate_product_detail',
       compare_products: 'compare_products',
+      compareProducts: 'compare_products',
       analyse_purchase_affordability: 'analyse_purchase_affordability',
+      analyseAffordability: 'analyse_purchase_affordability',
       create_reminder: 'create_reminder',
+      createReminder: 'create_reminder',
       create_financial_goal: 'create_financial_goal',
+      createOrUpdateSavingsGoal: 'create_financial_goal',
+      preparePayment: 'prepare_payment',
     };
 
     const targetActionName = actionNameMap[toolName] || toolName;
@@ -1554,6 +1676,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         history: ctx.history,
         requestId: ctx.requestId,
         conversationId: ctx.conversationId,
+        commerceContext: ctx.commerceContext,
       });
 
       return {
@@ -1564,6 +1687,7 @@ Preferred Currency: ${user.currency || 'INR'}`;
         suggestedNextPrompts: execResult.suggestedNextPrompts,
         purchaseCompanion: execResult.purchaseCompanion,
         preparedPayment: execResult.preparedPayment,
+        commerceContext: execResult.commerceContext || ctx.commerceContext,
       };
     }
 
@@ -2267,6 +2391,7 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
     observability?: AiObservabilityTrace;
     modelUsed?: string;
     fallbackOccurred?: boolean;
+    commerceContext?: ICommerceContext | null;
   }): ProcessConversationalQueryResult {
     const primaryAgent =
       options.workflowType === 'purchase_evaluation'
@@ -2306,6 +2431,7 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
       kernelResearch: options.kernelResearch || null,
       pythonAnalytics: options.pythonAnalytics || null,
       observability: options.observability || null,
+      commerceContext: options.commerceContext || null,
       timestamp: new Date().toISOString(),
     };
   }
@@ -2320,6 +2446,7 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
       conversationHistory?: ConversationTurn[];
       includeKernelResearch?: boolean;
       conversationId?: string;
+      commerceContext?: ICommerceContext | null;
     },
     onChunk: (chunk: { delta: string }) => void,
     onFinish: (result: any) => void

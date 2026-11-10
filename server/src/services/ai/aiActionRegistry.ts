@@ -9,10 +9,14 @@ import {
   FamilyGroupModel,
   NotificationModel,
   IScheduledTask,
+  ICommerceContext,
+  CommerceContextProduct,
 } from '../../models';
 import { channel3Integration } from '../../integrations/channel3';
 import { paymentGuardianService } from '../payments/paymentGuardianService';
 import { durableSchedulerService } from '../scheduling/durableSchedulerService';
+import { exchangeRateService } from '../finance/exchangeRateService';
+import { commerceIntelligenceService } from '../ecommerce/commerceIntelligenceService';
 import { logger } from '../../config/logger';
 
 export type ActionClassification = 'READ' | 'NAVIGATION' | 'PREPARATION' | 'WRITE' | 'SENSITIVE';
@@ -33,6 +37,7 @@ export interface ActionExecutionContext {
   history?: { role: string; content: string }[];
   requestId: string;
   conversationId: string;
+  commerceContext?: ICommerceContext | null;
 }
 
 export interface ActionResult {
@@ -50,6 +55,7 @@ export interface ActionResult {
   suggestedNextPrompts: string[];
   purchaseCompanion?: any;
   preparedPayment?: any;
+  commerceContext?: ICommerceContext;
 }
 
 export class AiActionRegistry {
@@ -123,16 +129,22 @@ export class AiActionRegistry {
           };
         }
 
+        const searchQuery = args.searchQuery || args.query || '';
+        const explanation =
+          matched.tab === 'smart-purchases' && searchQuery
+            ? `Navigating you directly to **AURA E-Commerce** and searching for "${searchQuery}"...`
+            : `Taking you directly to **${matched.title}**.`;
+
         return {
           success: true,
-          data: { targetPage: matched.tab, title: matched.title },
-          explanation: `Taking you directly to **${matched.title}**.`,
+          data: { targetPage: matched.tab, title: matched.title, searchQuery },
+          explanation,
           toolAction: {
             type: 'navigation',
             title: `Navigating to ${matched.title}`,
             status: 'completed',
             navTarget: matched.tab,
-            details: { targetTab: matched.tab, title: matched.title },
+            details: { targetTab: matched.tab, title: matched.title, searchQuery },
           },
           suggestedNextPrompts: ['Show my current balance', 'What are my upcoming commitments?', 'Take me to settings'],
         };
@@ -249,7 +261,7 @@ export class AiActionRegistry {
       name: 'search_products',
       classification: 'READ',
       description: 'Search real, verified products across merchants via Channel3 with live pricing.',
-      execute: async (args) => {
+      execute: async (args, ctx) => {
         const query = args.query || args.productName || 'wireless headphones';
         const category = args.category;
         const maxPriceInr = args.maxPriceInr ? parseFloat(args.maxPriceInr) : undefined;
@@ -261,38 +273,103 @@ export class AiActionRegistry {
         });
 
         const products = searchRes.products || [];
-        const productList = products
+        const mappedContextProducts: CommerceContextProduct[] = products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          title: p.title || p.name,
+          brand: p.brand,
+          category: p.category,
+          description: p.description,
+          priceInr: p.priceInr,
+          priceUsd: p.priceUsd || Math.round(p.priceInr * (1 / 84.5) * 100) / 100,
+          demoPriceUsd: p.demoPriceUsd,
+          demoPriceInr: p.demoPriceInr || p.priceInr,
+          currency: p.currency || 'INR',
+          imageUrl: p.imageUrl,
+          retailerName: p.retailerName,
+          purchaseUrl: p.purchaseUrl,
+          specifications: commerceIntelligenceService.extractSpecifications(p),
+          features: p.features,
+          availability: p.availability,
+          variants: p.variants,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+        }));
+
+        const isAlternative =
+          /\b(alternative|cheaper|instead|other)\b/i.test(ctx.prompt) ||
+          Boolean(args.isAlternative);
+
+        // Keep previously recommended product if doing an alternative search
+        let updatedContext: ICommerceContext;
+        if (isAlternative && ctx.commerceContext?.products && ctx.commerceContext.products.length > 0) {
+          const prevRecommended =
+            ctx.commerceContext.products.find(
+              (p) => p.id === ctx.commerceContext?.recommendedProductId
+            ) || ctx.commerceContext.products[0];
+
+          updatedContext = {
+            lastSearchQuery: query,
+            lastSearchTimestamp: new Date(),
+            products: ctx.commerceContext.products,
+            recommendedProductId: prevRecommended.id,
+            alternativeProducts: mappedContextProducts,
+          };
+        } else {
+          updatedContext = {
+            lastSearchQuery: query,
+            lastSearchTimestamp: new Date(),
+            products: mappedContextProducts,
+            recommendedProductId: mappedContextProducts[0]?.id,
+            alternativeProducts: [],
+          };
+        }
+
+        const productList = mappedContextProducts
           .slice(0, 3)
-          .map(
-            (p, i) =>
-              `${i + 1}. **${p.name}** — ₹${(p.priceInr || 0).toLocaleString('en-IN')} ($${(p.priceUsd || 0).toFixed(
-                2
-              )} USD)\n   • *Brand:* ${p.brand || 'Verified'}\n   • *Retailer:* ${p.retailerName || 'Channel3 Partner'}\n   • [View Offer](${p.purchaseUrl || (p as any).buyUrl || '#'})`
-          )
+          .map((p, i) => {
+            const specs = p.specifications || {};
+            const specSummary = [
+              specs.Processor,
+              specs.RAM,
+              specs.Storage,
+              specs.Display,
+            ]
+              .filter(Boolean)
+              .join(' • ');
+
+            return `${i + 1}. **${p.name}** — ₹${p.priceInr.toLocaleString('en-IN')} (~$${(
+              p.priceUsd || 0
+            ).toFixed(2)} USD)\n   • *Specs:* ${specSummary || p.description.slice(0, 100)}\n   • *Retailer:* ${
+              p.retailerName
+            }\n   • [View Offer](${p.purchaseUrl || '#'})`;
+          })
           .join('\n\n');
 
         const explanation =
           products.length > 0
-            ? `I discovered **${products.length} live product listings** for "${query}":\n\n${productList}\n\nWould you like me to evaluate how one of these fits into your current monthly budget or compare them side-by-side?`
+            ? `I discovered **${products.length} live product listings** for "${query}":\n\n${productList}\n\nWould you like me to evaluate how one of these fits into your current monthly budget, convert the price to USD, or compare specifications?`
             : `I searched the live catalog for "${query}", but no exact products matched your criteria. Try adjusting your search query or price ceiling.`;
 
         return {
           success: true,
-          data: { query, totalFound: products.length, products: products.slice(0, 5) },
+          data: { query, totalFound: products.length, products: mappedContextProducts },
           explanation,
+          commerceContext: updatedContext,
           toolAction: {
             type: 'product_discovery',
             title: `Channel3 Products: "${query}"`,
             status: 'informational',
-            details: { query, count: products.length, products: products.slice(0, 5) },
+            details: { query, count: products.length, products: mappedContextProducts },
           },
           suggestedNextPrompts: [
-            `Can I afford the first ${query}?`,
+            `Which one would you recommend?`,
+            `Give me the price in USD`,
+            `Can I afford this?`,
             `Compare the top options`,
-            `Go to AURA Commerce`,
           ],
           purchaseCompanion: {
-            productOptions: products.map((p) => ({
+            productOptions: mappedContextProducts.map((p) => ({
               id: p.id,
               name: p.name,
               price: p.priceInr,
@@ -308,47 +385,221 @@ export class AiActionRegistry {
     });
 
     this.registerAction({
-      name: 'compare_products',
+      name: 'recommend_product',
       classification: 'READ',
-      description: 'Perform a structured side-by-side product comparison with actual prices, retailers, and budget fit.',
-      execute: async (args) => {
-        const query = args.category || args.query || 'laptops';
-        const ch3Search = await channel3Integration.searchProducts({ query });
-        const p1 = ch3Search.products[0] || {
-          name: 'Primary Option',
-          priceInr: 35000,
-          priceUsd: 416,
-          brand: 'Leading Brand',
-          retailerName: 'Verified Partner',
+      description:
+        'Evaluate products in active conversation context and recommend the best option with detailed trade-off analysis.',
+      execute: async (args, ctx) => {
+        const products = ctx.commerceContext?.products || [];
+        if (products.length === 0) {
+          return {
+            success: false,
+            data: { error: 'NO_PRODUCTS_IN_CONTEXT' },
+            explanation:
+              'I do not have any products saved from a previous search to evaluate. Please search for a product first (e.g. "Find me an ASUS Vivobook 14"), and I will be happy to recommend the best option for you.',
+            toolAction: {
+              type: 'clarification_needed',
+              title: 'Product Search Required',
+              status: 'informational',
+            },
+            suggestedNextPrompts: ['Find me an ASUS Vivobook 14', 'Show me laptops under ₹50,000'],
+          };
+        }
+
+        const recommendation = commerceIntelligenceService.recommendProduct(products, args.criteria);
+        if (!recommendation) {
+          return {
+            success: false,
+            data: { error: 'RECOMMENDATION_FAILED' },
+            explanation: 'Unable to evaluate products in context. Please try searching again.',
+            toolAction: {
+              type: 'general_knowledge',
+              title: 'Recommendation Error',
+              status: 'informational',
+            },
+            suggestedNextPrompts: ['Search Vivobook in AURA Commerce'],
+          };
+        }
+
+        const recProduct = recommendation.recommendedProduct;
+        let explanation = `${recommendation.explanation}\n\n${recommendation.tradeOffAnalysis}`;
+
+        // Check if user also asked for price in USD in prompt
+        const promptLower = ctx.prompt.toLowerCase();
+        let fxConversion: any = null;
+        if (promptLower.includes('usd') || promptLower.includes('dollar') || promptLower.includes('convert')) {
+          fxConversion = exchangeRateService.convert(recProduct.priceInr, 'INR', 'USD');
+          explanation += `\n\n### Currency Conversion\n${fxConversion.formattedText}`;
+        }
+
+        const updatedContext: ICommerceContext = {
+          ...(ctx.commerceContext || { products }),
+          recommendedProductId: recProduct.id,
+          selectedProductId: recProduct.id,
         };
-        const p2 = ch3Search.products[1] || {
-          name: 'Alternative Option',
-          priceInr: 28000,
-          priceUsd: 333,
-          brand: 'Value Brand',
-          retailerName: 'Verified Partner',
-        };
-
-        const diff = Math.abs((p1.priceInr || 0) - (p2.priceInr || 0));
-        const cheaper = (p1.priceInr || 0) <= (p2.priceInr || 0) ? p1 : p2;
-
-        const explanation = `Here is a side-by-side comparison based on live product data:
-
-| Metric | **${p1.name}** | **${p2.name}** |
-| :--- | :--- | :--- |
-| **Brand** | ${p1.brand || 'Verified'} | ${p2.brand || 'Verified'} |
-| **Retailer** | ${p1.retailerName || 'Verified Merchant'} | ${p2.retailerName || 'Verified Merchant'} |
-| **Price (INR)** | ₹${(p1.priceInr || 0).toLocaleString('en-IN')} | ₹${(p2.priceInr || 0).toLocaleString('en-IN')} |
-| **Price (USD)** | $${(p1.priceUsd || 0).toFixed(2)} | $${(p2.priceUsd || 0).toFixed(2)} |
-| **Budget Recommendation** | ${(p1.priceInr || 0) > 40000 ? 'Requires 6-mo EMI' : 'Fits monthly buffer'} | ${(p2.priceInr || 0) > 40000 ? 'Requires 6-mo EMI' : 'Fits monthly buffer'} |
-
-**AURA Analysis:** Choosing **${cheaper.name}** saves you **₹${diff.toLocaleString(
-          'en-IN'
-        )}** upfront while delivering comparable core specifications.`;
 
         return {
           success: true,
-          data: { product1: p1, product2: p2, diffInr: diff },
+          data: {
+            recommendedProduct: recProduct,
+            fxConversion,
+            allProductsConsidered: recommendation.allProductsConsidered,
+          },
+          explanation,
+          commerceContext: updatedContext,
+          toolAction: {
+            type: 'product_discovery',
+            title: `Recommended: ${recProduct.name}`,
+            status: 'informational',
+            details: {
+              recommendedProduct: recProduct,
+              fxConversion,
+            },
+          },
+          suggestedNextPrompts: [
+            'Can I afford it?',
+            'Find me a cheaper Lenovo alternative',
+            'Search in AURA Commerce',
+          ],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'convert_currency',
+      classification: 'READ',
+      description:
+        'Convert the price of a product in context or a specified amount into another currency (e.g. USD, EUR, GBP) using verified exchange rates.',
+      execute: async (args, ctx) => {
+        const toCurrency = (args.toCurrency || 'USD').toUpperCase().trim();
+        const fromCurrency = (args.fromCurrency || 'INR').toUpperCase().trim();
+
+        // Determine amount to convert
+        let amount = args.amount ? parseFloat(args.amount) : undefined;
+        let targetProduct: CommerceContextProduct | undefined;
+
+        if (!amount && ctx.commerceContext?.products && ctx.commerceContext.products.length > 0) {
+          targetProduct =
+            ctx.commerceContext.products.find(
+              (p) => p.id === ctx.commerceContext?.recommendedProductId
+            ) || ctx.commerceContext.products[0];
+          amount = targetProduct.priceInr;
+        }
+
+        if (!amount || isNaN(amount)) {
+          return {
+            success: false,
+            data: { error: 'NO_AMOUNT_TO_CONVERT' },
+            explanation:
+              'Please specify an amount or product to convert (e.g. "Convert ₹47,990 to USD").',
+            toolAction: {
+              type: 'currency_updated',
+              title: 'Currency Conversion Incomplete',
+              status: 'informational',
+            },
+            suggestedNextPrompts: ['Show me laptops under ₹50,000'],
+          };
+        }
+
+        const fx = exchangeRateService.convert(amount, fromCurrency, toCurrency);
+
+        let explanation = '';
+        if (targetProduct) {
+          explanation = `### Price Conversion for **${targetProduct.name}**\n\n${fx.formattedText}`;
+        } else {
+          explanation = `### Currency Conversion\n\n${fx.formattedText}`;
+        }
+
+        return {
+          success: true,
+          data: {
+            fx,
+            targetProduct,
+          },
+          explanation,
+          toolAction: {
+            type: 'currency_updated',
+            title: `Currency Conversion (${fromCurrency} → ${toCurrency})`,
+            status: 'completed',
+            details: {
+              ...fx,
+              productName: targetProduct?.name,
+            },
+          },
+          suggestedNextPrompts: [
+            'Can I afford it?',
+            'Compare it with Lenovo',
+            'Take me to AURA Commerce',
+          ],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'compare_products',
+      classification: 'READ',
+      description:
+        'Perform a structured side-by-side product comparison using verified specifications and pricing.',
+      execute: async (args, ctx) => {
+        const products = ctx.commerceContext?.products || [];
+        const altProducts = ctx.commerceContext?.alternativeProducts || [];
+
+        let p1: CommerceContextProduct | undefined;
+        let p2: CommerceContextProduct | undefined;
+
+        // 1. If alternative products exist and we have a recommended product, compare those
+        if (altProducts.length > 0) {
+          p2 = altProducts[0];
+          p1 =
+            products.find((p) => p.id === ctx.commerceContext?.recommendedProductId) || products[0];
+        } else if (products.length >= 2) {
+          p1 = products[0];
+          p2 = products[1];
+        }
+
+        // 2. Fallback to searching Channel3 if context is completely empty
+        if (!p1 || !p2) {
+          const query = args.category || args.query || 'laptops';
+          const ch3Search = await channel3Integration.searchProducts({ query });
+          const rawItems = ch3Search.products || [];
+          if (rawItems.length >= 2) {
+            p1 = {
+              ...rawItems[0],
+              specifications: commerceIntelligenceService.extractSpecifications(rawItems[0]),
+            };
+            p2 = {
+              ...rawItems[1],
+              specifications: commerceIntelligenceService.extractSpecifications(rawItems[1]),
+            };
+          }
+        }
+
+        if (!p1 || !p2) {
+          return {
+            success: false,
+            data: { error: 'NOT_ENOUGH_PRODUCTS_TO_COMPARE' },
+            explanation:
+              'I need at least two products to compare. Please search for products first (e.g. "Find me an ASUS Vivobook 14" then "Find me a cheaper Lenovo alternative").',
+            toolAction: {
+              type: 'product_discovery',
+              title: 'Comparison Incomplete',
+              status: 'informational',
+            },
+            suggestedNextPrompts: ['Find me an ASUS Vivobook 14', 'Show me Lenovo alternatives'],
+          };
+        }
+
+        const comparison = commerceIntelligenceService.compareProducts(p1, p2);
+        const explanation = `### Side-by-Side Product Comparison\n\n${comparison.markdownTable}\n\n${comparison.verdict}`;
+
+        return {
+          success: true,
+          data: {
+            product1: p1,
+            product2: p2,
+            markdownTable: comparison.markdownTable,
+            verdict: comparison.verdict,
+          },
           explanation,
           toolAction: {
             type: 'purchase_evaluated',
@@ -357,9 +608,57 @@ export class AiActionRegistry {
             details: { p1, p2 },
           },
           suggestedNextPrompts: [
-            `Can I afford ${cheaper.name}?`,
-            'What if I buy on EMI?',
-            'Go to AURA Commerce',
+            `Can I afford the ${p1.name.slice(0, 20)}?`,
+            `Can I afford the ${p2.name.slice(0, 20)}?`,
+            'Take me to AURA Commerce',
+          ],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'evaluate_product_detail',
+      classification: 'READ',
+      description:
+        'Answer specific hardware or specification questions (battery, RAM, display, build) regarding the active product in context.',
+      execute: async (args, ctx) => {
+        const products = ctx.commerceContext?.products || [];
+        const targetProduct =
+          products.find((p) => p.id === ctx.commerceContext?.recommendedProductId) ||
+          products[0];
+
+        if (!targetProduct) {
+          return {
+            success: false,
+            data: { error: 'NO_PRODUCT_IN_CONTEXT' },
+            explanation:
+              'No product is currently selected in conversation context to evaluate. Please search for a product first.',
+            toolAction: {
+              type: 'clarification_needed',
+              title: 'Product Selection Required',
+              status: 'informational',
+            },
+            suggestedNextPrompts: ['Find me an ASUS Vivobook 14'],
+          };
+        }
+
+        const question = args.question || ctx.prompt;
+        const res = commerceIntelligenceService.answerProductQuestion(targetProduct, question);
+
+        return {
+          success: true,
+          data: { product: targetProduct, feature: res.feature, answer: res.answer },
+          explanation: res.answer,
+          toolAction: {
+            type: 'product_discovery',
+            title: `Product Detail: ${res.feature}`,
+            status: 'informational',
+            details: { productId: targetProduct.id, feature: res.feature },
+          },
+          suggestedNextPrompts: [
+            'Can I afford it?',
+            'Give me the price in USD',
+            'Compare with Lenovo',
           ],
         };
       },
@@ -368,7 +667,8 @@ export class AiActionRegistry {
     this.registerAction({
       name: 'analyse_purchase_affordability',
       classification: 'READ',
-      description: 'Deterministic 7-factor financial affordability evaluation using verified bank balances, PayPal funds, and upcoming bills.',
+      description:
+        'Deterministic 7-factor financial affordability evaluation using verified bank balances, PayPal funds, and upcoming bills.',
       execute: async (args, ctx) => {
         const userObjId = new mongoose.Types.ObjectId(ctx.userId);
         const accounts = await AccountModel.find({ userId: userObjId, status: 'active' });
@@ -379,7 +679,9 @@ export class AiActionRegistry {
           .filter((a) => a.type === 'checking' || a.type === 'savings')
           .reduce((s, a) => s + (a.balance || 0), 0);
 
-        const paypalAccount = accounts.find((a) => a.institution?.toLowerCase().includes('paypal') || a.type === 'wallet');
+        const paypalAccount = accounts.find(
+          (a) => a.institution?.toLowerCase().includes('paypal') || a.type === 'wallet'
+        );
         const paypalBalance = paypalAccount ? paypalAccount.balance : 0;
 
         const nonSalaryMandates = mandates.filter((m) => m.category !== 'Salary');
@@ -387,10 +689,26 @@ export class AiActionRegistry {
         const activeGoalsMonthly = goals.reduce((s, g) => s + g.monthlyContribution, 0);
         const monthlyDiscretionaryCap = ctx.user.financialPolicy?.discretionaryMonthlyCap || 18000;
 
-        // Parse price from arguments or prompt
-        const priceMatch = (ctx.prompt + ' ' + (args.prompt || '')).match(/(?:₹|inr|rs\.?|for|costing|under)\s*([\d,]+)/i);
-        const priceInr = args.priceInr || (priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 15000);
-        const productName = args.productName || 'Purchase';
+        // Parse price from arguments, prompt, or active commerceContext
+        const contextProduct =
+          ctx.commerceContext?.products?.find(
+            (p) => p.id === ctx.commerceContext?.recommendedProductId
+          ) || ctx.commerceContext?.products?.[0];
+
+        const priceMatch = (ctx.prompt + ' ' + (args.prompt || '')).match(
+          /(?:₹|inr|rs\.?|for|costing|under)\s*([\d,]+)/i
+        );
+
+        const priceInr =
+          args.priceInr ||
+          (priceMatch
+            ? parseFloat(priceMatch[1].replace(/,/g, ''))
+            : contextProduct
+            ? contextProduct.priceInr
+            : 15000);
+
+        const productName =
+          args.productName || (contextProduct ? contextProduct.name : 'Purchase');
 
         // Calculation
         const remainingBuffer = Math.max(0, monthlyDiscretionaryCap - priceInr);

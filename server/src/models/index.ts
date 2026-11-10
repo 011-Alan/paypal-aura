@@ -966,10 +966,48 @@ export const AuditLogModel = mongoose.model<IAuditLog>('AuditLog', AuditLogSchem
 // ============================================================================
 // 12. Persistent Conversation & Message Models (Ask AURA Memory)
 // ============================================================================
+export interface CommerceContextProduct {
+  id: string;
+  name: string;
+  title?: string;
+  brand: string;
+  category: string;
+  description: string;
+  priceInr: number;
+  priceUsd?: number;
+  demoPriceUsd?: number;
+  demoPriceInr?: number;
+  currency: string;
+  imageUrl: string;
+  retailerName: string;
+  purchaseUrl: string;
+  specifications?: Record<string, string>;
+  features?: string[];
+  availability?: string;
+  variants?: string[];
+  rating?: number;
+  reviewCount?: number;
+}
+
+export interface ICommerceContext {
+  lastSearchQuery?: string;
+  lastSearchTimestamp?: Date;
+  products: CommerceContextProduct[];
+  recommendedProductId?: string;
+  selectedProductId?: string;
+  alternativeProducts?: CommerceContextProduct[];
+  activeComparison?: {
+    productAId: string;
+    productBId: string;
+    summary?: string;
+  };
+}
+
 export interface IConversation extends Document {
   userId: mongoose.Types.ObjectId;
   title: string;
   conversationSummary?: string;
+  commerceContext?: ICommerceContext;
   lastMessageAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -980,6 +1018,7 @@ const ConversationSchema = new Schema<IConversation>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     title: { type: String, required: true, default: 'New Conversation', trim: true },
     conversationSummary: { type: String },
+    commerceContext: { type: Schema.Types.Mixed, default: null },
     lastMessageAt: { type: Date, default: Date.now, index: true },
   },
   { timestamps: true }
@@ -993,6 +1032,7 @@ export interface IMessage extends Document {
   role: 'user' | 'assistant' | 'system';
   content: string;
   toolAction?: any;
+  commerceContext?: ICommerceContext;
   suggestedNextPrompts?: string[];
   createdAt: Date;
 }
@@ -1004,6 +1044,7 @@ const MessageSchema = new Schema<IMessage>(
     role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
     content: { type: String, required: true },
     toolAction: { type: Schema.Types.Mixed },
+    commerceContext: { type: Schema.Types.Mixed, default: null },
     suggestedNextPrompts: { type: [String], default: [] },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

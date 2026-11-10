@@ -159,6 +159,87 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
   },
   // --- Laptops & Computers ---
   {
+    id: 'ch3-laptop-asus-vivobook-14-i5',
+    name: 'ASUS Vivobook 14 (12th Gen Intel Core i5-1235U, 16GB RAM, 512GB NVMe SSD, 14" FHD)',
+    brand: 'ASUS',
+    category: 'Laptops & Computers',
+    description: '14-inch compact productivity laptop featuring 12th Gen Intel Core i5-1235U (10 cores, up to 4.4GHz), 16GB RAM, 512GB NVMe SSD, and 1.4kg ultra-portable chassis with 42Wh battery.',
+    priceInr: 47990,
+    priceUsd: 568,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&q=80',
+    variants: ['16GB / 512GB Quiet Blue', '16GB / 512GB Transparent Silver'],
+    availability: 'in_stock',
+    retailerName: 'TechDirect India (PayPal Supported Partner)',
+    purchaseUrl: 'https://www.paypal.com/in/webapps/mpp/home',
+    supportsPayPalSandboxCheckout: true,
+    specifications: {
+      Processor: '12th Gen Intel Core i5-1235U (10 Cores, 12 Threads, up to 4.4GHz)',
+      RAM: '16GB DDR4 3200MHz (8GB Onboard + 8GB SO-DIMM)',
+      Storage: '512GB M.2 NVMe PCIe 3.0 SSD',
+      Display: '14.0-inch FHD (1920 x 1080) 16:9, Anti-glare, 250 nits',
+      Battery: '42Wh 3-cell Li-ion (approx. 6.5 hours productivity)',
+      Weight: '1.40 kg (Ultra-portable)',
+      Graphics: 'Integrated Intel Iris Xe Graphics',
+      Retailer: 'TechDirect India',
+      Warranty: '1 Year On-site Manufacturer Warranty',
+    },
+  },
+  {
+    id: 'ch3-laptop-asus-vivobook-14-oled',
+    name: 'ASUS Vivobook S 14 OLED (Intel Core i5-13500H, 16GB LPDDR5, 512GB Gen4 SSD, 2.8K 90Hz)',
+    brand: 'ASUS',
+    category: 'Laptops & Computers',
+    description: 'Premium creator laptop with 14-inch 2.8K 90Hz OLED display (600 nits HDR, 100% DCI-P3), high-performance Intel Core i5-13500H, and 75Wh battery.',
+    priceInr: 62990,
+    priceUsd: 745,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?auto=format&fit=crop&w=600&q=80',
+    variants: ['Solar Blue 16GB/512GB', 'Midnight Black 16GB/512GB'],
+    availability: 'in_stock',
+    retailerName: 'ASUS India E-Shop (PayPal Partner)',
+    purchaseUrl: 'https://www.asus.com/in/',
+    supportsPayPalSandboxCheckout: true,
+    specifications: {
+      Processor: '13th Gen Intel Core i5-13500H (12 Cores, 16 Threads, up to 4.7GHz)',
+      RAM: '16GB LPDDR5 4800MHz Onboard',
+      Storage: '512GB M.2 NVMe PCIe 4.0 SSD',
+      Display: '14.0-inch 2.8K (2880 x 1800) OLED 90Hz, 600 nits HDR, 100% DCI-P3',
+      Battery: '75Wh 3-cell Li-ion (approx. 8.5 hours productivity)',
+      Weight: '1.50 kg',
+      Graphics: 'Intel Iris Xe Graphics',
+      Retailer: 'ASUS India E-Shop',
+      Warranty: '1 Year Official ASUS Warranty',
+    },
+  },
+  {
+    id: 'ch3-laptop-asus-vivobook-14-i3',
+    name: 'ASUS Vivobook 14 (12th Gen Intel Core i3-1215U, 8GB RAM, 512GB SSD, 14" FHD)',
+    brand: 'ASUS',
+    category: 'Laptops & Computers',
+    description: 'Budget-friendly 14-inch daily productivity laptop with Intel Core i3-1215U, 8GB RAM (expandable), and 512GB SSD in a slim 1.4kg chassis.',
+    priceInr: 35990,
+    priceUsd: 426,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80',
+    variants: ['8GB / 512GB Quiet Blue'],
+    availability: 'in_stock',
+    retailerName: 'Croma Electronics Partner',
+    purchaseUrl: 'https://www.croma.com/',
+    supportsPayPalSandboxCheckout: false,
+    specifications: {
+      Processor: '12th Gen Intel Core i3-1215U (6 Cores, 8 Threads, up to 4.4GHz)',
+      RAM: '8GB DDR4 (Upgradeable to 16GB via SO-DIMM slot)',
+      Storage: '512GB M.2 NVMe PCIe 3.0 SSD',
+      Display: '14.0-inch FHD (1920 x 1080) Anti-glare, 250 nits',
+      Battery: '42Wh 3-cell Li-ion (approx. 6 hours)',
+      Weight: '1.40 kg',
+      Graphics: 'Intel UHD Graphics',
+      Retailer: 'Croma Electronics Partner',
+      Warranty: '1 Year Manufacturer Warranty',
+    },
+  },
+  {
     id: 'ch3-laptop-asus-vivobook-16',
     name: 'ASUS VivoBook 16 (Intel Core i5-13500H, 16GB RAM, 512GB NVMe SSD)',
     brand: 'ASUS',
@@ -172,6 +253,17 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     retailerName: 'TechDirect India (PayPal Supported Partner)',
     purchaseUrl: 'https://www.paypal.com/in/webapps/mpp/home',
     supportsPayPalSandboxCheckout: true,
+    specifications: {
+      Processor: '13th Gen Intel Core i5-13500H (12 Cores, up to 4.7GHz)',
+      RAM: '16GB DDR4 3200MHz',
+      Storage: '512GB M.2 NVMe PCIe 3.0 SSD',
+      Display: '16.0-inch WUXGA (1920 x 1200) 16:10, Anti-glare, 300 nits',
+      Battery: '50Wh 3-cell Li-ion',
+      Weight: '1.88 kg',
+      Graphics: 'Intel Iris Xe Graphics',
+      Retailer: 'TechDirect India',
+      Warranty: '1 Year Manufacturer Warranty',
+    },
   },
   {
     id: 'ch3-laptop-lenovo-ideapad-slim3',
@@ -180,6 +272,7 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     category: 'Laptops & Computers',
     description: 'Lightweight 15.6-inch everyday laptop with Ryzen 5 7000 series processor, Dolby Audio, and Rapid Charge Boost.',
     priceInr: 42990,
+    priceUsd: 509,
     currency: 'INR',
     imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80',
     variants: ['Arctic Grey 16GB/512GB', 'Abyss Blue 8GB/512GB'],
@@ -187,6 +280,44 @@ const REFERENCE_CATALOG: Omit<Channel3ProductItem, 'source'>[] = [
     retailerName: 'Lenovo Authorized Online Store',
     purchaseUrl: 'https://www.lenovo.com/in/en/',
     supportsPayPalSandboxCheckout: true,
+    specifications: {
+      Processor: 'AMD Ryzen 5 7530U (6 Cores, 12 Threads, up to 4.5GHz)',
+      RAM: '16GB DDR4 3200MHz Soldered',
+      Storage: '512GB M.2 NVMe PCIe 4.0 SSD',
+      Display: '15.6-inch FHD (1920 x 1080) IPS, 300 nits Anti-glare',
+      Battery: '47Wh with Rapid Charge Boost (2 hours in 15 mins)',
+      Weight: '1.62 kg',
+      Graphics: 'Integrated AMD Radeon Graphics',
+      Retailer: 'Lenovo Authorized Online Store',
+      Warranty: '1 Year Courier or Carry-in Warranty',
+    },
+  },
+  {
+    id: 'ch3-laptop-lenovo-v15',
+    name: 'Lenovo V15 G3 (Intel Core i3-1215U, 8GB RAM, 512GB SSD, 15.6" FHD)',
+    brand: 'Lenovo',
+    category: 'Laptops & Computers',
+    description: 'Affordable Lenovo commercial laptop engineered for everyday office, accounting, and learning tasks.',
+    priceInr: 33990,
+    priceUsd: 402,
+    currency: 'INR',
+    imageUrl: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80',
+    variants: ['Iron Grey 8GB/512GB'],
+    availability: 'in_stock',
+    retailerName: 'Lenovo Commercial Hub',
+    purchaseUrl: 'https://www.lenovo.com/in/en/',
+    supportsPayPalSandboxCheckout: true,
+    specifications: {
+      Processor: '12th Gen Intel Core i3-1215U (6 Cores, up to 4.4GHz)',
+      RAM: '8GB DDR4 (Upgradeable to 16GB)',
+      Storage: '512GB M.2 NVMe PCIe SSD',
+      Display: '15.6-inch FHD (1920 x 1080) Anti-glare',
+      Battery: '38Wh (approx. 5.5 hours)',
+      Weight: '1.70 kg',
+      Graphics: 'Intel UHD Graphics',
+      Retailer: 'Lenovo Commercial Hub',
+      Warranty: '1 Year Onsite Warranty',
+    },
   },
   {
     id: 'ch3-laptop-acer-aspire-lite',
@@ -932,7 +1063,7 @@ const INTENT_CATEGORY_MAP: {
   { intent: /\b(headphone|headphones|earphone|earphones|earbuds|airpod|airpods|headset|audio|bose|sony wh|over-ear|in-ear)\b/i, category: 'Audio & Accessories' },
   { intent: /\b(keyboard|keyboards|mechanical keyboard|keychron|switches|keycaps)\b/i, category: 'Keyboards & Peripherals' },
   { intent: /\b(gaming laptop|gaming laptops|rog zephyrus|legion|nitro)\b/i, category: 'Laptops & Computers', requiresToken: 'gaming' },
-  { intent: /\b(laptop|laptops|macbook|notebook|ultrabook)\b/i, category: 'Laptops & Computers' },
+  { intent: /\b(laptop|laptops|macbook|notebook|ultrabook|vivobook|ideapad|thinkpad|zenbook|inspiron|surface)\b/i, category: 'Laptops & Computers' },
   { intent: /\b(office chair|office chairs|ergonomic chair|desk chair|mesh chair|herman miller|aeron|steelcase|ergochair)\b/i, category: 'Furniture' },
   { intent: /\b(running shoe|running shoes|sneaker|sneakers|footwear|trainer|trainers|pegasus|ultraboost|kayano)\b/i, category: 'Footwear & Sneakers' },
   { intent: /\b(phone|phones|smartphone|smartphones|mobile|pixel|galaxy|iphone)\b/i, category: 'Smartphones' },
@@ -2077,12 +2208,23 @@ export class Channel3IntegrationService {
     if (!env.CHANNEL3_API_KEY) {
       logger.warn('Channel3Integration', 'CHANNEL3_API_KEY is not configured in backend environment; searching reference catalog fallback');
       const qLower = (parsed.cleanQuery || rawQuery).toLowerCase();
-      const matched = REFERENCE_CATALOG.filter(
-        (p) =>
-          p.name.toLowerCase().includes(qLower) ||
-          p.category.toLowerCase().includes(qLower) ||
-          p.description.toLowerCase().includes(qLower)
-      ).map((item) => this.normalizeProduct(item, 'reference_catalog_fallback'));
+      const tokens = qLower.split(/\s+/).filter((t) => t.length > 2);
+      const matched = REFERENCE_CATALOG.filter((p) => {
+        const pName = p.name.toLowerCase();
+        const pBrand = p.brand.toLowerCase();
+        const pCategory = p.category.toLowerCase();
+        const pDesc = p.description.toLowerCase();
+        const combined = `${pName} ${pBrand} ${pCategory} ${pDesc}`;
+
+        if (combined.includes(qLower)) return true;
+        if (tokens.length > 0 && tokens.every((t) => combined.includes(t))) return true;
+        if (tokens.some((t) => pBrand === t || pBrand.includes(t))) {
+          if (qLower.includes('laptop') && pCategory.includes('laptop')) return true;
+          if (qLower.includes('phone') && pCategory.includes('phone')) return true;
+          if (qLower.includes('headphone') && pCategory.includes('audio')) return true;
+        }
+        return false;
+      }).map((item) => this.normalizeProduct(item, 'reference_catalog_fallback'));
 
       return {
         liveApiUsed: false,

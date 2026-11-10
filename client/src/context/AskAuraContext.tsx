@@ -368,6 +368,16 @@ export const AskAuraProvider: React.FC<{
         // If transitioning out from full Ask AURA page, open floating panel to preserve the conversation
         setIsFloatingOpen(true);
       }
+      if (action.details?.searchQuery) {
+        try {
+          sessionStorage.setItem('aura_commerce_search_query', action.details.searchQuery);
+        } catch {}
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('aura-commerce-search', { detail: { query: action.details.searchQuery } })
+          );
+        }, 150);
+      }
       onNavigate(targetPage as NavTabId);
       window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
     }

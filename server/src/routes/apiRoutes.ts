@@ -2168,7 +2168,12 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       conversationHistory,
       includeKernelResearch: Boolean(includeKernelResearch),
       conversationId: String(conversation._id),
+      commerceContext: (conversation as any).commerceContext || null,
     });
+
+    if (aiResult.commerceContext) {
+      (conversation as any).commerceContext = aiResult.commerceContext;
+    }
 
     // 3. Save assistant message (preserving error notice if service unavailable)
     const assistantMsg = await MessageModel.create({
@@ -2177,6 +2182,7 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       role: 'assistant',
       content: aiResult.explanation || aiResult.answer || (aiResult.serviceUnavailable ? aiResult.error : ''),
       toolAction: aiResult.toolAction,
+      commerceContext: aiResult.commerceContext || (conversation as any).commerceContext || null,
       suggestedNextPrompts: aiResult.suggestedNextPrompts || [],
     });
 
@@ -2196,6 +2202,7 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       toolAction: aiResult.toolAction,
       suggestedNextPrompts: aiResult.suggestedNextPrompts,
       purchaseCompanion: aiResult.purchaseCompanion,
+      commerceContext: aiResult.commerceContext || (conversation as any).commerceContext || null,
       serviceUnavailable: Boolean(aiResult.serviceUnavailable),
       error: aiResult.error,
       canRetry: aiResult.canRetry,
@@ -2254,17 +2261,24 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
         prompt: content,
         conversationHistory,
         includeKernelResearch: Boolean(includeKernelResearch),
+        conversationId: String(conversation._id),
+        commerceContext: (conversation as any).commerceContext || null,
       },
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
       },
       async (finalResult) => {
+        if (finalResult?.commerceContext) {
+          (conversation as any).commerceContext = finalResult.commerceContext;
+        }
+
         const assistantMsg = await MessageModel.create({
           conversationId: conversation._id,
           userId,
           role: 'assistant',
           content: finalResult.explanation || finalResult.answer,
           toolAction: finalResult.toolAction,
+          commerceContext: finalResult?.commerceContext || (conversation as any).commerceContext || null,
           suggestedNextPrompts: finalResult.suggestedNextPrompts || [],
         });
 
@@ -2280,6 +2294,7 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
             type: 'finish',
             userMessage: userMsg,
             assistantMessage: assistantMsg,
+            commerceContext: finalResult?.commerceContext || (conversation as any).commerceContext || null,
             result: finalResult,
           })}\n\n`
         );
@@ -2300,15 +2315,24 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
 // ============================================================================
 apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { prompt, includeKernelResearch } = req.body || {};
+    const { prompt, includeKernelResearch, conversationId, commerceContext } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ success: false, error: 'A natural-language prompt is required.' });
       return;
+    }
+    let loadedContext = commerceContext || null;
+    if (!loadedContext && conversationId && mongoose.Types.ObjectId.isValid(conversationId)) {
+      const conv = await ConversationModel.findOne({ _id: conversationId, userId: req.userId });
+      if (conv?.commerceContext) {
+        loadedContext = conv.commerceContext;
+      }
     }
     const response = await auraAiOrchestrator.processConversationalQuery({
       userId: req.userId!,
       prompt,
       includeKernelResearch: Boolean(includeKernelResearch),
+      conversationId,
+      commerceContext: loadedContext,
     });
     if (response.serviceUnavailable) {
       res.status(503).json(response);
@@ -2322,10 +2346,18 @@ apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Re
 
 apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { prompt, includeKernelResearch } = req.body || {};
+    const { prompt, includeKernelResearch, conversationId, commerceContext } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ success: false, error: 'A natural-language prompt is required.' });
       return;
+    }
+
+    let loadedContext = commerceContext || null;
+    if (!loadedContext && conversationId && mongoose.Types.ObjectId.isValid(conversationId)) {
+      const conv = await ConversationModel.findOne({ _id: conversationId, userId: req.userId });
+      if (conv?.commerceContext) {
+        loadedContext = conv.commerceContext;
+      }
     }
 
     res.writeHead(200, {
@@ -2341,6 +2373,8 @@ apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, 
         userId: req.userId!,
         prompt,
         includeKernelResearch: Boolean(includeKernelResearch),
+        conversationId,
+        commerceContext: loadedContext,
       },
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
