@@ -724,6 +724,25 @@ export class ApplicationIntentClassifier {
     }
 
     // =========================================================================
+    // 13b. BUSINESS FINANCIAL INTELLIGENCE & PROJECTIONS
+    // e.g. "Analyze my business finances", "How is my business doing?", "Business projections"
+    // =========================================================================
+    const isBusinessQuery =
+      /\b(business\s*(?:finances?|performance|analytics?|cash\s*flow|revenue|projections?|margins?)|how\s*is\s*my\s*business\s*doing|business\s*operating\s*metrics)\b/i.test(
+        pLower
+      );
+
+    if (isBusinessQuery) {
+      return {
+        domain: 'BUSINESS_OPERATIONS',
+        intent: 'BUSINESS_ANALYTICS',
+        confidence: 0.95,
+        shouldNavigate: false,
+        reason: 'User requested business financial performance and analytics.',
+      };
+    }
+
+    // =========================================================================
     // 14. EXPLICIT APPLICATION NAVIGATION
     // e.g. "Take me to Transactions", "Open Financial Planning", "Go to Settings", "Now take me to Settings"
     // =========================================================================

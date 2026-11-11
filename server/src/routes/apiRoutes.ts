@@ -506,55 +506,51 @@ apiRouter.post('/auth/demo-switch', async (req: Request, res: Response) => {
 apiRouter.post('/auth/account-type', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { accountType } = req.body || {};
-    if (!accountType || !['personal', 'business'].includes(accountType)) {
+    if (!accountType || !['personal', 'business', 'PERSONAL', 'BUSINESS'].includes(accountType)) {
       return res.status(400).json({ success: false, error: 'Invalid accountType. Must be "personal" or "business".' });
     }
+    const normalizedType = accountType.toLowerCase() as 'personal' | 'business';
     const user = await UserModel.findById(req.userId);
     if (!user) return res.status(404).json({ success: false, error: 'User not found.' });
 
-    if (accountType === 'business') {
-      // MANDATORY VERIFICATION: Never trust self-declared role/accountType values
-      const eligibility = merchantVerificationService.evaluateAccountEligibility(user);
-      if (!eligibility.merchantAccessEnabled) {
-        user.auraAccountType = 'UNVERIFIED';
-        user.merchantVerificationStatus = eligibility.merchantVerificationStatus;
-        user.merchantAccessEnabled = false;
-        user.accountType = 'personal';
-        await user.save();
-        return res.status(403).json({
-          success: false,
-          error:
-            'Self-declaration prohibited: A verified PayPal Business account is required to enable business merchant status. Please complete business verification in Settings.',
-          code: 'BUSINESS_VERIFICATION_REQUIRED',
-          eligibility,
-          user: sanitizeUser(user),
-        });
-      }
-
-      user.auraAccountType = 'BUSINESS';
-      user.paypalAccountType = 'BUSINESS';
-      user.merchantVerificationStatus = 'VERIFIED';
-      user.merchantAccessEnabled = true;
+    if (normalizedType === 'business') {
       user.accountType = 'business';
-      user.role = 'merchant';
+      user.auraAccountType = 'BUSINESS';
 
-      const existingAccount = await AccountModel.findOne({ userId: user._id, name: /Merchant/i });
-      if (!existingAccount) {
-        await AccountModel.create({
-          userId: user._id,
-          name: `${user.name} Merchant Settlement`,
-          institution: 'PayPal Sandbox Business Account',
-          type: 'checking',
-          accountNumberMasked: user.email,
-          balance: 0,
-          currency: 'USD',
-          isSharedWithFamily: false,
-          status: 'active',
-        });
+      // Evaluate actual PayPal Business credentials separately
+      // AURA operating mode does NOT independently grant PayPal seller verification
+      const eligibility = merchantVerificationService.evaluateAccountEligibility(user);
+      if (eligibility.merchantAccessEnabled) {
+        user.paypalAccountType = 'BUSINESS';
+        user.merchantVerificationStatus = 'VERIFIED';
+        user.merchantAccessEnabled = true;
+        user.role = 'merchant';
+
+        const existingAccount = await AccountModel.findOne({ userId: user._id, name: /Merchant/i });
+        if (!existingAccount) {
+          await AccountModel.create({
+            userId: user._id,
+            name: `${user.name} Merchant Settlement`,
+            institution: 'PayPal Sandbox Business Account',
+            type: 'checking',
+            accountNumberMasked: user.email,
+            balance: 0,
+            currency: 'USD',
+            isSharedWithFamily: false,
+            status: 'active',
+          });
+        }
+      } else {
+        // Operating in Business mode without verified PayPal seller credentials
+        // Privileged merchant settlements remain disabled until verified
+        user.merchantAccessEnabled = false;
+        if (!user.merchantVerificationStatus || user.merchantVerificationStatus === 'NOT_STARTED') {
+          user.merchantVerificationStatus = 'UNVERIFIED';
+        }
       }
     } else {
-      user.auraAccountType = 'PERSONAL';
       user.accountType = 'personal';
+      user.auraAccountType = 'PERSONAL';
       user.merchantAccessEnabled = false;
       user.merchantVerificationStatus = 'NOT_STARTED';
       if (user.role === 'merchant') {
@@ -565,7 +561,7 @@ apiRouter.post('/auth/account-type', requireAuth, async (req: AuthenticatedReque
 
     res.json({
       success: true,
-      message: `Account type successfully updated to ${accountType}.`,
+      message: `Account type successfully updated to ${normalizedType === 'business' ? 'Business' : 'Personal'} Account.`,
       user: sanitizeUser(user),
     });
   } catch (err: any) {
@@ -1161,10 +1157,19 @@ apiRouter.get('/profile', requireAuth, async (req: AuthenticatedRequest, res: Re
 apiRouter.put('/profile', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = req.user!;
-    const { name, monthlyIncome, currency, spendingPreferences } = req.body || {};
+    const { name, monthlyIncome, currency, spendingPreferences, accountType } = req.body || {};
     if (name) user.name = String(name).trim();
     if (typeof monthlyIncome === 'number' && monthlyIncome > 0) user.monthlyIncome = monthlyIncome;
     if (currency) user.currency = String(currency).toUpperCase().trim();
+    if (accountType && ['personal', 'business', 'PERSONAL', 'BUSINESS'].includes(accountType)) {
+      const norm = accountType.toLowerCase() as 'personal' | 'business';
+      user.accountType = norm;
+      user.auraAccountType = norm === 'business' ? 'BUSINESS' : 'PERSONAL';
+      if (norm === 'personal') {
+        user.merchantAccessEnabled = false;
+        if (user.role === 'merchant') user.role = 'family_admin';
+      }
+    }
     if (spendingPreferences && typeof spendingPreferences === 'object') {
       user.spendingPreferences = {
         ...user.spendingPreferences,

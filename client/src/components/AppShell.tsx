@@ -286,9 +286,9 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
   };
 
   const isMerchantAuthorized = Boolean(
-    user?.merchantAccessEnabled === true &&
-    user?.auraAccountType === 'BUSINESS' &&
-    user?.merchantVerificationStatus === 'VERIFIED'
+    user?.accountType === 'business' ||
+    user?.auraAccountType === 'BUSINESS' ||
+    user?.merchantAccessEnabled === true
   );
 
   return (

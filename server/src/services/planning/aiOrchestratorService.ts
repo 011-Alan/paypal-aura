@@ -1889,6 +1889,24 @@ export class AuraAiOrchestratorService {
       });
     }
 
+    // 16d. Business Financial Intelligence & Projections
+    if (intent.intent === 'BUSINESS_ANALYTICS') {
+      const isProjection = promptLower.includes('projection') || promptLower.includes('forecast');
+      const actionName = isProjection ? 'generate_business_projections' : 'analyse_business_finances';
+      const tool = aiActionRegistry.getAction(actionName);
+      if (tool) {
+        const exec = await tool.execute({}, { userId: params.userId, user, prompt, history, requestId, conversationId });
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'business_intelligence',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
     // 17. Application Navigation ("Take me to Transactions", "Go to Goals", etc.) - ONLY when pure navigation
     if (intent.intent === 'APP_NAVIGATION') {
       let targetPage = intent.navTarget || 'overview';
@@ -2100,7 +2118,13 @@ Core Behavioral Principles:
 9. EXECUTION OVER NAVIGATION SUGGESTIONS (CRITICAL):
    - When the user asks you to navigate to a page and perform an operation (e.g. "Take me to Commerce and search for ASUS Vivobook 14", "Open Transactions and show purchases above ₹5,000", "Open Calendar and schedule a monthly savings review"), execute the actual operation using appropriate tools.
    - NEVER output markdown links or URLs telling the user to click or navigate themselves (e.g., NEVER say "[Click here to view Commerce](/smart-purchases)"). Always confirm execution directly.
+10. ACCOUNT OPERATING MODE:
+   - Operating Mode: ${user.accountType === 'business' ? 'BUSINESS ACCOUNT (Commercial Operations, Merchant Management, Cash Flow, Revenue Projections)' : 'PERSONAL ACCOUNT (Personal Consumer, Household Budgeting, Savings Goals, Smart Purchases)'}
+   - When Operating in Business Mode: Provide business-oriented financial insights (cash flow, commercial margins, business projections, merchant operations) tailored to their business.
+   - When Operating in Personal Mode: Provide personal budgeting, household savings, and consumer discretionary spending guidance.
+   - Strict Isolation: Never disclose or mix financial records from another account or persona.
 User Name: ${user.name}
+Account Type: ${user.accountType === 'business' ? 'Business' : 'Personal'}
 Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + commerceContextText : ''}${gridSelectionText ? '\n' + gridSelectionText : ''}`;
 
     const maxHistory = env.GEMINI_MAX_HISTORY_TURNS || 8;

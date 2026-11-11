@@ -1792,24 +1792,25 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
       classification: 'READ',
       description: 'Analyze merchant business cash flow, revenue, margins, and operating metrics. Requires business authorization.',
       execute: async (_args, ctx) => {
-        // Enforce Merchant Hub security boundaries
-        const isMerchantVerified =
-          ctx.user.merchantAccessEnabled === true &&
-          ctx.user.auraAccountType === 'BUSINESS' &&
-          ctx.user.merchantVerificationStatus === 'VERIFIED';
+        // Enforce Business mode / Merchant security boundaries
+        const isBusinessUser =
+          ctx.user.accountType === 'business' ||
+          ctx.user.auraAccountType === 'BUSINESS' ||
+          ctx.user.role === 'merchant' ||
+          ctx.user.merchantAccessEnabled === true;
 
-        if (!isMerchantVerified) {
+        if (!isBusinessUser) {
           return {
             success: false,
-            data: { error: 'UNAUTHORIZED_MERCHANT_ACCESS' },
+            data: { error: 'BUSINESS_ACCOUNT_REQUIRED' },
             explanation:
-              'Business financial analytics are exclusively available to verified PayPal Business accounts. Your account does not have merchant entitlement. Please complete business verification in Settings.',
+              'Business financial analytics are tailored for Business accounts. You are currently operating in Personal Account mode. You can switch your account type to Business Account in Settings.',
             toolAction: {
               type: 'clarification_needed',
               title: 'Business Account Required',
               status: 'informational',
             },
-            suggestedNextPrompts: ['Check Business Eligibility in Settings', 'Show my personal financial summary'],
+            suggestedNextPrompts: ['Go to Settings', 'Show my personal financial summary'],
           };
         }
 

@@ -23,6 +23,7 @@ import { Tooltip } from '../components/Tooltip';
 import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
 import { PayPalSandboxBusinessReporting } from '../components/PayPalSandboxBusinessReporting';
 import { AccountTypeVerificationSection } from '../components/AccountTypeVerificationSection';
+import { AccountTypeSelectorSection } from '../components/AccountTypeSelectorSection';
 import { FEATURE_FLAGS } from '../config/features';
 import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
@@ -627,7 +628,10 @@ export const SettingsPage: React.FC = () => {
         </form>
       </div>
 
-      {/* 4. Account Type & Business Verification Section */}
+      {/* 4. Account Type Selection (Personal vs Business Operating Mode) */}
+      <AccountTypeSelectorSection />
+
+      {/* 4b. Account Type & Business Verification Section */}
       <AccountTypeVerificationSection />
 
       {/* 5. PayPal Identity & Connected Account Section (Personal) */}
