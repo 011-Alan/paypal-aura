@@ -136,11 +136,17 @@ export class AgGridIntegrationService {
       cmd.groupBy = 'month';
     }
 
-    // Match threshold amounts like "above 5000" or "over ₹2,000"
-    const overMatch = q.match(/(?:above|over|more than|greater than)\s*(?:₹|inr|rs\.?)?\s*([\d,]+)/i);
+    // Match threshold amounts like "above 5000" or "over $100" or "over ₹2,000"
+    const overMatch = q.match(/(?:above|over|more than|greater than)\s*(?:₹|\$|usd|inr|rs\.?)?\s*([\d,]+)/i);
     if (overMatch) {
       const parsed = parseFloat(overMatch[1].replace(/,/g, ''));
       if (!isNaN(parsed)) cmd.minAmount = parsed;
+    }
+
+    const underMatch = q.match(/(?:below|under|less than)\s*(?:₹|\$|usd|inr|rs\.?)?\s*([\d,]+)/i);
+    if (underMatch) {
+      const parsed = parseFloat(underMatch[1].replace(/,/g, ''));
+      if (!isNaN(parsed)) cmd.maxAmount = parsed;
     }
 
     logger.info('AGGridIntegration', 'Translated NL query into AG Grid filter command', { query, cmd });

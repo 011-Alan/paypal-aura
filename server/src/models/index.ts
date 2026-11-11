@@ -1396,3 +1396,41 @@ export const EcommerceOrderModel = mongoose.model<IEcommerceOrder>(
   'EcommerceOrder',
   EcommerceOrderSchema
 );
+
+// ============================================================================
+// 19. AG Grid Saved Views Model (Per-User Preferences & Filters)
+// ============================================================================
+export interface IGridSavedView extends Document {
+  userId: mongoose.Types.ObjectId;
+  gridId: string;
+  name: string;
+  description?: string;
+  filterModel: Record<string, any>;
+  sortModel: Array<{ colId: string; sort: 'asc' | 'desc' }>;
+  columnVisibility?: Record<string, boolean>;
+  isDefault?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const GridSavedViewSchema = new Schema<IGridSavedView>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    gridId: { type: String, required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    filterModel: { type: Schema.Types.Mixed, default: {} },
+    sortModel: { type: Schema.Types.Mixed, default: [] },
+    columnVisibility: { type: Schema.Types.Mixed, default: {} },
+    isDefault: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+GridSavedViewSchema.index({ userId: 1, gridId: 1, name: 1 }, { unique: true });
+
+export const GridSavedViewModel = mongoose.model<IGridSavedView>(
+  'GridSavedView',
+  GridSavedViewSchema
+);
+

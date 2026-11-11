@@ -19,6 +19,7 @@ import { FamilyPage } from './pages/FamilyPage';
 import { AskAuraPage } from './pages/AskAuraPage';
 import { DemoLabPage } from './pages/DemoLabPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { DeveloperPortalPage } from './pages/DeveloperPortalPage';
 
 function resolveInitialTab(): NavTabId {
   if (typeof window !== 'undefined') {
@@ -33,6 +34,7 @@ function resolveInitialTab(): NavTabId {
     }
 
     const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
+    if (path === 'developer' || path === 'dev-portal') return 'developer';
     if (path === 'smart-purchases' || path === 'smart-purchase') return 'smart-purchases';
     if (path === 'payments') return 'payments';
     if (path === 'family') return 'family';
@@ -115,6 +117,7 @@ const MainRouter: React.FC = () => {
         {activeTab === 'family' && <FamilyPage />}
         {activeTab === 'payments' && <PaymentsPage />}
         {activeTab === 'settings' && <SettingsPage />}
+        {(activeTab === 'developer' || activeTab === 'dev-portal') && <DeveloperPortalPage />}
         {(activeTab === 'demo-lab' || activeTab === 'automations') && (
           <DemoLabPage onNavigateToProduct={handleNavigate} />
         )}

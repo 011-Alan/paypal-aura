@@ -45,6 +45,8 @@ export const FloatingChatPanel: React.FC = () => {
     isListening,
     toggleSpeechRecognition,
     voiceNotice,
+    attachedSelectionContext,
+    clearSelectionContext,
   } = useAskAura();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -612,6 +614,22 @@ export const FloatingChatPanel: React.FC = () => {
 
       {/* Message Input Area */}
       <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+        {attachedSelectionContext && (
+          <div className="mb-2 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 flex items-center justify-between text-xs animate-in fade-in">
+            <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 font-medium truncate">
+              <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="truncate">Attached: {attachedSelectionContext.previewText || `${attachedSelectionContext.count} selected ${attachedSelectionContext.source}`}</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearSelectionContext}
+              className="p-0.5 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500 dark:text-blue-400"
+              title="Remove attached selection"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();

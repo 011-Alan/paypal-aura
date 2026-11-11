@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { ColDef } from 'ag-grid-community';
 import {
   Search,
   Sparkles,
@@ -17,6 +18,7 @@ import {
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SpendingIntelligence } from '../components/SpendingIntelligence';
+import { AuraDataGrid } from '../components/grid/AuraDataGrid';
 
 interface TransactionRow {
   id: string;
@@ -122,6 +124,107 @@ export const SpendingPage: React.FC = () => {
   const totalAllExpense = useMemo(() => {
     return rows.filter((r) => r.type === 'expense').reduce((s, r) => s + (r.amount || 0), 0) || 1;
   }, [rows]);
+
+  const columnDefs: ColDef<TransactionRow>[] = useMemo(() => [
+    {
+      field: 'date',
+      headerName: 'Date',
+      filter: 'agDateColumnFilter',
+      sortable: true,
+      width: 130,
+    },
+    {
+      field: 'merchant',
+      headerName: 'Merchant',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      flex: 1,
+      minWidth: 150,
+      cellRenderer: (params: any) => (
+        <span className="font-semibold text-navy-900 dark:text-white">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      flex: 1.5,
+      minWidth: 180,
+      cellRenderer: (params: any) => (
+        <span className="text-slate-600 dark:text-slate-300 truncate block">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'category',
+      headerName: 'Category',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 140,
+      cellRenderer: (params: any) => (
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'amount',
+      headerName: 'Amount',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 130,
+      cellRenderer: (params: any) => {
+        const isIncome = params.data?.type === 'income';
+        return (
+          <span className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-navy-900 dark:text-white'}`}>
+            {isIncome ? '+' : '-'}
+            {!balancesVisible ? '••••••' : formatMoney(params.value)}
+          </span>
+        );
+      },
+    },
+    {
+      field: 'isUnusual',
+      headerName: 'Status',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 120,
+      cellRenderer: (params: any) => {
+        const isUnusual = params.value;
+        return isUnusual ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="w-3 h-3" /> Flagged
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <CheckCircle2 className="w-3 h-3" /> Normal
+          </span>
+        );
+      },
+    },
+    {
+      headerName: 'Action',
+      width: 90,
+      sortable: false,
+      filter: false,
+      cellRenderer: (params: any) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedTx(params.data);
+          }}
+          className="text-blue-600 dark:text-blue-400 hover:underline font-semibold text-xs"
+        >
+          View
+        </button>
+      ),
+    },
+  ], [balancesVisible, formatMoney]);
 
   return (
     <div className="space-y-6">
@@ -310,86 +413,17 @@ export const SpendingPage: React.FC = () => {
               )}
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Merchant</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">Amount</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
-                        No transactions match your current filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredRows.map((r) => {
-                      const isIncome = r.type === 'income';
-
-                      return (
-                        <tr
-                          key={r.id}
-                          onClick={() => setSelectedTx(r)}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
-                        >
-                          <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
-                            {r.date}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-navy-900 dark:text-white">
-                            {r.merchant}
-                          </td>
-                          <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-xs truncate">
-                            {r.description}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                              {r.category}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 whitespace-nowrap font-bold">
-                            <span className={isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-navy-900 dark:text-white'}>
-                              {isIncome ? '+' : '-'}
-                              {!balancesVisible ? '••••••' : formatMoney(r.amount)}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 whitespace-nowrap">
-                            {r.isUnusual ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                <AlertTriangle className="w-3 h-3" /> Flagged
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                <CheckCircle2 className="w-3 h-3" /> Normal
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedTx(r);
-                              }}
-                              className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            {/* AG Grid Data Table */}
+            <div className="mt-4">
+              <AuraDataGrid
+                gridId="transactions-grid"
+                source="transactions"
+                rowData={filteredRows}
+                columnDefs={columnDefs}
+                quickSearch={quickSearch}
+                onRowClicked={(row: any) => setSelectedTx(row)}
+                height="540px"
+              />
             </div>
           </div>
         </>

@@ -110,7 +110,9 @@ export interface ProcessConversationalQueryResult {
   workflowType: string;
   explanation: string;
   answer: string;
+  response?: string;
   toolAction: AiToolAction | null;
+  executedAction?: any;
   suggestedNextPrompts: string[];
   astropodsOrchestration?: any;
   agGridAnalytics?: any;
@@ -194,6 +196,23 @@ export function formatCommerceContextForPrompt(ctx?: ICommerceContext | null): s
     });
   }
   lines.push(`--- END COMMERCE CONTEXT ---\n`);
+  return lines.join('\n');
+}
+
+export function formatGridSelectionContextForPrompt(ctx?: any): string {
+  if (!ctx || !ctx.records || ctx.records.length === 0) return '';
+  const lines = [
+    `\n--- ACTIVE AG GRID SELECTION CONTEXT ---`,
+    `Source: ${ctx.source} | Grid: ${ctx.gridId} | Selected Items Count: ${ctx.totalSelected}`,
+    `Total Amount: $${ctx.summary?.totalAmount?.toFixed(2)} | Currency: ${ctx.summary?.currency || 'USD'}`,
+    `Selected Records:`,
+  ];
+  ctx.records.slice(0, 15).forEach((r: any, i: number) => {
+    lines.push(
+      `${i + 1}. [ID: ${r.id}] ${r.date || ''} | ${r.merchant || r.billerName || r.customerName || r.title} | Amount: $${r.amount || r.totalAmount || r.targetAmount} | Category: ${r.category || ''} | Status: ${r.status || r.fulfillmentStatus || ''} ${r.isRecurring ? '[RECURRING]' : ''} ${r.isUnusual ? '[ANOMALY: ' + r.unusualReason + ']' : ''}`
+    );
+  });
+  lines.push(`--- END AG GRID SELECTION CONTEXT ---\n`);
   return lines.join('\n');
 }
 
@@ -575,6 +594,121 @@ export const GEMINI_TOOL_DECLARATIONS = {
         type: Type.OBJECT,
         properties: {
           type: { type: Type.STRING, description: '"bank_fraud" or "cybercrime"' },
+        },
+      },
+    },
+    {
+      name: 'gridApplyFilters',
+      description: 'Filter rows in an AG Grid financial table (e.g. transactions above $100, shopping expenses, specific date ranges).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid, e.g. "transactions-grid", "merchant-orders-grid"' },
+          query: { type: Type.STRING, description: 'Natural language filter instruction, e.g. "shopping expenses above $200 from last month"' },
+          filters: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                field: { type: Type.STRING, description: 'Field name (amount, category, merchant, date, type)' },
+                operator: { type: Type.STRING, description: 'greaterThan, lessThan, equals, contains' },
+                value: { type: Type.STRING, description: 'Filter value' },
+              },
+            },
+            description: 'Structured filter criteria list',
+          },
+        },
+      },
+    },
+    {
+      name: 'gridClearFilters',
+      description: 'Clear all active filters on the AG Grid financial table.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+        },
+      },
+    },
+    {
+      name: 'gridApplySorting',
+      description: 'Sort an AG Grid table by a column in ascending or descending order (e.g. sort by amount desc, date desc).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          field: { type: Type.STRING, description: 'Column to sort by (amount, date, merchant, category)' },
+          direction: { type: Type.STRING, description: '"asc" or "desc"' },
+        },
+        required: ['field'],
+      },
+    },
+    {
+      name: 'gridSetColumnVisibility',
+      description: 'Show or hide specific columns in the AG Grid financial table.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          hideColumns: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Columns to hide' },
+          showColumns: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Columns to show' },
+        },
+      },
+    },
+    {
+      name: 'gridSelectRows',
+      description: 'Select rows in the AG Grid table (e.g. top 5 largest transactions).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          criteria: { type: Type.STRING, description: '"top_largest", "bottom_smallest", or "by_ids"' },
+          count: { type: Type.INTEGER, description: 'Number of rows to select' },
+        },
+      },
+    },
+    {
+      name: 'gridUndoAction',
+      description: 'Undo the previous AG Grid filter or sorting change.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+        },
+      },
+    },
+    {
+      name: 'gridSaveView',
+      description: 'Save the current AG Grid view layout and filters with a custom name.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          name: { type: Type.STRING, description: 'Name of the view, e.g. "Monthly Expenses", "Large Purchases"' },
+        },
+        required: ['name'],
+      },
+    },
+    {
+      name: 'gridRestoreView',
+      description: 'Restore a previously saved AG Grid view by name.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          name: { type: Type.STRING, description: 'Name of the view to restore' },
+        },
+      },
+    },
+    {
+      name: 'gridAnalyseSelection',
+      description: 'Perform deep financial intelligence analysis on selected AG Grid transactions or business orders.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          source: { type: Type.STRING, description: '"transactions", "orders", "commitments", or "goals"' },
+          gridId: { type: Type.STRING, description: 'Target grid ID' },
+          question: { type: Type.STRING, description: 'Specific question about the selected records' },
         },
       },
     },
@@ -1024,6 +1158,7 @@ export class AuraAiOrchestratorService {
     conversationId?: string;
     requiredCapability?: string;
     commerceContext?: ICommerceContext | null;
+    gridSelectionContext?: any;
   }): Promise<ProcessConversationalQueryResult> {
     const startTime = Date.now();
     const requestId = `gemini-req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -1053,6 +1188,284 @@ export class AuraAiOrchestratorService {
       geminiConfigured: Boolean(this.geminiClient),
       model: env.GEMINI_MODEL,
     });
+
+    // -------------------------------------------------------------------------
+    // 1.5 DETERMINISTIC GRID ACTION & SELECTION ROUTING
+    // -------------------------------------------------------------------------
+    const promptLower = prompt.toLowerCase();
+    const hasSelection = Boolean(
+      (params.gridSelectionContext?.records && params.gridSelectionContext.records.length > 0) ||
+      (params.gridSelectionContext?.selectedIds && params.gridSelectionContext.selectedIds.length > 0) ||
+      (params.gridSelectionContext?.totalSelected && params.gridSelectionContext.totalSelected > 0)
+    );
+
+    // If records are selected, analyze the selected records
+    if (hasSelection) {
+      const tool = aiActionRegistry.getAction('grid_analyse_selection');
+      if (tool) {
+        const resolvedIds =
+          params.gridSelectionContext.selectedIds ||
+          params.gridSelectionContext.records?.map((r: any) => r.id || r._id) ||
+          [];
+        const exec = await tool.execute(
+          {
+            source: params.gridSelectionContext.source || 'transactions',
+            selectedIds: resolvedIds,
+            gridId: params.gridSelectionContext.gridId || 'transactions-grid',
+          },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+            gridSelectionContext: params.gridSelectionContext,
+          }
+        );
+
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_selection_analysis',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Undo filter/sorting
+    if (promptLower.includes('undo') || promptLower.includes('revert')) {
+      const tool = aiActionRegistry.getAction('grid_undo_action');
+      if (tool) {
+        const exec = await tool.execute(
+          { gridId: 'transactions-grid' },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+          }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Natural Language Grid Filtering commands
+    if (
+      promptLower.includes('filter') ||
+      promptLower.includes('show my transactions above') ||
+      promptLower.includes('show transactions above') ||
+      promptLower.includes('show shopping expenses') ||
+      promptLower.includes('transactions above') ||
+      promptLower.includes('expenses above')
+    ) {
+      const tool = aiActionRegistry.getAction('grid_apply_filters');
+      if (tool) {
+        const exec = await tool.execute(
+          { query: prompt, gridId: 'transactions-grid' },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+          }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Clear filters
+    if (
+      promptLower.includes('clear all filters') ||
+      promptLower.includes('clear filters') ||
+      promptLower.includes('reset filters') ||
+      promptLower.includes('reset grid filters')
+    ) {
+      const tool = aiActionRegistry.getAction('grid_clear_filters');
+      if (tool) {
+        const exec = await tool.execute(
+          { gridId: 'transactions-grid' },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+          }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Sort grid
+    if (
+      promptLower.includes('sort') &&
+      (promptLower.includes('expensive') ||
+        promptLower.includes('amount') ||
+        promptLower.includes('date') ||
+        promptLower.includes('highest') ||
+        promptLower.includes('lowest'))
+    ) {
+      const tool = aiActionRegistry.getAction('grid_apply_sorting');
+      if (tool) {
+        const isDesc =
+          promptLower.includes('highest to lowest') ||
+          promptLower.includes('desc') ||
+          (promptLower.includes('highest') && !promptLower.includes('lowest to highest')) ||
+          promptLower.includes('most expensive');
+        const isAsc =
+          !isDesc &&
+          (promptLower.includes('least') ||
+            promptLower.includes('lowest') ||
+            promptLower.includes('asc') ||
+            promptLower.includes('cheapest'));
+        const isDate = promptLower.includes('date') || promptLower.includes('recent');
+        const exec = await tool.execute(
+          {
+            gridId: 'transactions-grid',
+            field: isDate ? 'date' : 'amount',
+            direction: isAsc ? 'asc' : 'desc',
+          },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+          }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Select rows
+    if (
+      promptLower.includes('select') &&
+      (promptLower.includes('largest') ||
+        promptLower.includes('top') ||
+        promptLower.includes('five') ||
+        promptLower.includes('5') ||
+        promptLower.includes('three') ||
+        promptLower.includes('3'))
+    ) {
+      const countMatch = prompt.match(/\b(\d+)\b/);
+      const count = countMatch ? parseInt(countMatch[1], 10) : promptLower.includes('five') ? 5 : promptLower.includes('three') ? 3 : 5;
+      const tool = aiActionRegistry.getAction('grid_select_rows');
+      if (tool) {
+        const exec = await tool.execute(
+          {
+            gridId: 'transactions-grid',
+            criteria: 'top_largest',
+            count,
+          },
+          {
+            userId: params.userId,
+            user,
+            prompt,
+            history,
+            requestId,
+            conversationId,
+          }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // Navigation intent
+    if (
+      promptLower.includes('take me to') ||
+      promptLower.includes('go to') ||
+      promptLower.startsWith('open ')
+    ) {
+      let targetPage = 'overview';
+      if (promptLower.includes('transaction') || promptLower.includes('spending')) targetPage = 'transactions';
+      else if (promptLower.includes('bill') || promptLower.includes('commitment')) targetPage = 'commitments';
+      else if (promptLower.includes('plan')) targetPage = 'financial-planning';
+      else if (promptLower.includes('goal')) targetPage = 'goals';
+      else if (promptLower.includes('account')) targetPage = 'accounts';
+      else if (promptLower.includes('calendar')) targetPage = 'calendar';
+      else if (promptLower.includes('commerce') || promptLower.includes('shop') || promptLower.includes('store')) targetPage = 'smart-purchases';
+      else if (promptLower.includes('merchant')) targetPage = 'merchant-hub';
+      else if (promptLower.includes('setting')) targetPage = 'settings';
+      else if (promptLower.includes('developer')) targetPage = 'developer';
+
+      const navTool = aiActionRegistry.getAction('navigate_to_page');
+      if (navTool) {
+        const exec = await navTool.execute(
+          { page: targetPage },
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'navigation',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+        });
+      }
+    }
+
+    // Affordability evaluation fallback
+    if (promptLower.includes('afford')) {
+      const tool = aiActionRegistry.getAction('analyse_purchase_affordability');
+      if (tool) {
+        const exec = await tool.execute(
+          { productPrice: 200 },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'purchase_affordability',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
 
     // -------------------------------------------------------------------------
     // 2. CHECK GEMINI CONFIGURATION STATUS
@@ -1156,6 +1569,7 @@ export class AuraAiOrchestratorService {
         startTime,
         requiredCapability: params.requiredCapability,
         commerceContext: params.commerceContext,
+        gridSelectionContext: params.gridSelectionContext,
       });
 
       // Cache safe general-knowledge answers (non-personal)
@@ -1195,11 +1609,13 @@ export class AuraAiOrchestratorService {
     startTime: number;
     requiredCapability?: string;
     commerceContext?: ICommerceContext | null;
+    gridSelectionContext?: any;
   }) {
     const { user, prompt, history, requestId, conversationId, startTime } = ctx;
     const t0 = Date.now();
 
     const commerceContextText = formatCommerceContextForPrompt(ctx.commerceContext);
+    const gridSelectionText = formatGridSelectionContextForPrompt(ctx.gridSelectionContext);
     const systemInstruction = `You are AURA, an intelligent, empathetic, versatile financial companion and general-purpose AI assistant.
 Core Behavioral Principles:
 1. You are a versatile conversational AI: answer questions on everyday knowledge, programming, science, career, interview preparation, geography, language, and culture naturally and directly. Never force non-financial questions into a financial context.
@@ -1216,8 +1632,18 @@ Core Behavioral Principles:
 5. For explicit financial questions (e.g., "What is my balance?", "What are my upcoming commitments?", "What if I buy on EMI?"), invoke the relevant financial tools (getFinancialSummary, getUpcomingCommitments, calculateEmiOptions).
 6. For scheduling reminders (e.g. "Remind me to pay rent next Monday"), invoke createReminder.
 7. For payments (e.g. "Pay Rahul ₹5,000"), invoke preparePayment. Always remind the user that payments are prepared for their review and require explicit security PIN authorization on the Payments screen. AI never moves money autonomously.
+8. AG GRID FINANCIAL WORKSPACE & INTERACTIVE DATA EXPLORATION:
+   - When the user asks to filter financial tables (e.g. "Show my transactions above $100", "Show shopping expenses above $200 from last month", "Filter expenses by groceries"), invoke gridApplyFilters.
+   - When the user asks to clear or reset filters (e.g. "Clear all filters", "Reset grid filters", "Show all transactions"), invoke gridClearFilters.
+   - When the user asks to sort columns (e.g. "Sort these from most expensive to least expensive", "Sort by amount descending"), invoke gridApplySorting.
+   - When the user asks to change column visibility (e.g. "Hide transaction IDs", "Show merchant names"), invoke gridSetColumnVisibility.
+   - When the user asks to select rows (e.g. "Select the five largest", "Select the top 3"), invoke gridSelectRows.
+   - When the user asks to undo or revert grid changes (e.g. "Undo that filter", "Go back to the previous view"), invoke gridUndoAction.
+   - When the user asks to save a view (e.g. "Save this view as Monthly Expenses"), invoke gridSaveView.
+   - When the user asks to restore a saved view (e.g. "Load Monthly Expenses view"), invoke gridRestoreView.
+   - When records are selected or selection context is attached and user asks about them (e.g. "What do these transactions have in common?", "How much did I spend on these?", "Which of these expenses are unnecessary?", "Find opportunities to save money", "Compare these transactions"), invoke gridAnalyseSelection. Base your answer strictly on the authorized selected records.
 User Name: ${user.name}
-Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + commerceContextText : ''}`;
+Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + commerceContextText : ''}${gridSelectionText ? '\n' + gridSelectionText : ''}`;
 
     const maxHistory = env.GEMINI_MAX_HISTORY_TURNS || 8;
     const formattedHistory = history.slice(-maxHistory).map((h) => ({
@@ -1664,6 +2090,28 @@ Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + comm
       create_financial_goal: 'create_financial_goal',
       createOrUpdateSavingsGoal: 'create_financial_goal',
       preparePayment: 'prepare_payment',
+      grid_apply_filters: 'grid_apply_filters',
+      gridApplyFilters: 'grid_apply_filters',
+      applyGridFilters: 'grid_apply_filters',
+      grid_clear_filters: 'grid_clear_filters',
+      gridClearFilters: 'grid_clear_filters',
+      clearGridFilters: 'grid_clear_filters',
+      grid_apply_sorting: 'grid_apply_sorting',
+      gridApplySorting: 'grid_apply_sorting',
+      sortGrid: 'grid_apply_sorting',
+      grid_set_column_visibility: 'grid_set_column_visibility',
+      gridSetColumnVisibility: 'grid_set_column_visibility',
+      grid_select_rows: 'grid_select_rows',
+      gridSelectRows: 'grid_select_rows',
+      grid_undo_action: 'grid_undo_action',
+      gridUndoAction: 'grid_undo_action',
+      grid_save_view: 'grid_save_view',
+      gridSaveView: 'grid_save_view',
+      grid_restore_view: 'grid_restore_view',
+      gridRestoreView: 'grid_restore_view',
+      grid_analyse_selection: 'grid_analyse_selection',
+      gridAnalyseSelection: 'grid_analyse_selection',
+      analyseSelectedRecords: 'grid_analyse_selection',
     };
 
     const targetActionName = actionNameMap[toolName] || toolName;
@@ -1677,6 +2125,7 @@ Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + comm
         requestId: ctx.requestId,
         conversationId: ctx.conversationId,
         commerceContext: ctx.commerceContext,
+        gridSelectionContext: (ctx as any).gridSelectionContext || null,
       });
 
       return {
@@ -2404,6 +2853,33 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
         ? 'gemini-conversational-core'
         : 'transaction-intelligence';
 
+    const toolAct = options.toolAction || null;
+    let executedAction: any = null;
+    if (toolAct) {
+      const details = (toolAct as any).details || {};
+      let actionName: string = toolAct.type;
+      if (toolAct.type === 'navigation') {
+        actionName = 'navigate_to_page';
+        if (details.targetTab && !details.page) {
+          details.page = details.targetTab;
+        }
+      } else if (details.action) {
+        actionName =
+          details.action === 'undo'
+            ? 'grid_undo_action'
+            : details.action.startsWith('grid_')
+            ? details.action
+            : `grid_${details.action}`;
+      } else if ((toolAct.type as string) === 'grid_action') {
+        actionName = 'grid_apply_filters';
+      }
+      executedAction = {
+        name: actionName,
+        gridId: details.gridId || 'transactions-grid',
+        parameters: details,
+      };
+    }
+
     return {
       success: true,
       serviceUnavailable: false,
@@ -2411,7 +2887,9 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
       workflowType: options.workflowType,
       explanation: options.explanation,
       answer: options.explanation,
-      toolAction: options.toolAction || null,
+      response: options.explanation,
+      toolAction: toolAct,
+      executedAction,
       suggestedNextPrompts: options.suggestedNextPrompts || [],
       modelUsed: options.modelUsed || GEMINI_MODEL_REGISTRY.primary.modelId,
       fallbackOccurred: Boolean(options.fallbackOccurred),
@@ -2447,6 +2925,7 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
       includeKernelResearch?: boolean;
       conversationId?: string;
       commerceContext?: ICommerceContext | null;
+      gridSelectionContext?: any;
     },
     onChunk: (chunk: { delta: string }) => void,
     onFinish: (result: any) => void

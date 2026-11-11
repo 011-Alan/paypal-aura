@@ -17,7 +17,9 @@ import {
   ConversationModel,
   MessageModel,
   ScheduledTaskModel,
+  GridSavedViewModel,
 } from '../models';
+import { gridSelectionService } from '../services/grid/gridSelectionService';
 import {
   AuthenticatedRequest,
   requireAuth,
@@ -401,18 +403,39 @@ apiRouter.post('/auth/login', strictAuthRateLimiter, async (req: Request, res: R
   }
 });
 
-apiRouter.post('/auth/demo-login', async (_req: Request, res: Response) => {
+apiRouter.post('/auth/demo-login', async (req: Request, res: Response) => {
   try {
-    const { user, credentials } = await ensureDemoUserAlexSeeded(false);
-    const token = signSessionToken(user);
+    const persona = String(req.body?.persona || 'alex').toLowerCase();
+    let seededUser: any;
+    let creds: any;
+
+    if (persona === 'bruce') {
+      const resBruce = await ensureDemoMerchantBruceSeeded(false);
+      seededUser = resBruce.user;
+      creds = resBruce.credentials;
+    } else if (persona === 'maya') {
+      const resMaya = await ensureDemoUserMayaSeeded(false);
+      seededUser = resMaya.user;
+      creds = resMaya.credentials;
+    } else if (persona === 'priya') {
+      await ensureDemoUserAlexSeeded(false);
+      seededUser = await UserModel.findOne({ email: DEMO_PRIYA_CREDENTIALS.email });
+      creds = DEMO_PRIYA_CREDENTIALS;
+    } else {
+      const resAlex = await ensureDemoUserAlexSeeded(false);
+      seededUser = resAlex.user;
+      creds = resAlex.credentials;
+    }
+
+    const token = signSessionToken(seededUser);
     setSessionCookie(res, token);
     res.json({
       success: true,
       token,
-      user: sanitizeUser(user),
+      user: sanitizeUser(seededUser),
       demoCredentials: {
-        email: credentials.email,
-        pinHint: credentials.pin,
+        email: creds.email,
+        pinHint: creds.pin,
       },
     });
   } catch (err: any) {
@@ -2170,10 +2193,19 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
   try {
     const userId = new mongoose.Types.ObjectId(req.userId);
     const convId = req.params.id;
-    const { content, includeKernelResearch } = req.body || {};
+    const { content, includeKernelResearch, gridSelectionContext } = req.body || {};
     if (!content || typeof content !== 'string') {
       res.status(400).json({ success: false, error: 'Message content is required' });
       return;
+    }
+
+    let resolvedSelectionContext = null;
+    if (gridSelectionContext && Array.isArray(gridSelectionContext.selectedIds) && gridSelectionContext.selectedIds.length > 0) {
+      try {
+        resolvedSelectionContext = await gridSelectionService.getAuthorizedSelectionContext(req.userId!, gridSelectionContext);
+      } catch (err: any) {
+        logger.warn('ApiRoutes', 'Failed to resolve grid selection context', { error: err?.message });
+      }
     }
 
     const conversation = await ConversationModel.findOne({ _id: convId, userId });
@@ -2257,10 +2289,19 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
   try {
     const userId = new mongoose.Types.ObjectId(req.userId);
     const convId = req.params.id;
-    const { content, includeKernelResearch } = req.body || {};
+    const { content, includeKernelResearch, gridSelectionContext } = req.body || {};
     if (!content || typeof content !== 'string') {
       res.status(400).json({ success: false, error: 'Message content is required' });
       return;
+    }
+
+    let resolvedSelectionContext = null;
+    if (gridSelectionContext && Array.isArray(gridSelectionContext.selectedIds) && gridSelectionContext.selectedIds.length > 0) {
+      try {
+        resolvedSelectionContext = await gridSelectionService.getAuthorizedSelectionContext(req.userId!, gridSelectionContext);
+      } catch (err: any) {
+        logger.warn('ApiRoutes', 'Failed to resolve grid selection context', { error: err?.message });
+      }
     }
 
     const conversation = await ConversationModel.findOne({ _id: convId, userId });
@@ -2303,6 +2344,7 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
         includeKernelResearch: Boolean(includeKernelResearch),
         conversationId: String(conversation._id),
         commerceContext: (conversation as any).commerceContext || null,
+        gridSelectionContext: resolvedSelectionContext,
       },
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
@@ -2355,7 +2397,7 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
 // ============================================================================
 apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { prompt, includeKernelResearch, conversationId, commerceContext } = req.body || {};
+    const { prompt, includeKernelResearch, conversationId, commerceContext, gridSelectionContext } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ success: false, error: 'A natural-language prompt is required.' });
       return;
@@ -2367,12 +2409,23 @@ apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Re
         loadedContext = conv.commerceContext;
       }
     }
+
+    let resolvedSelectionContext = null;
+    if (gridSelectionContext && Array.isArray(gridSelectionContext.selectedIds) && gridSelectionContext.selectedIds.length > 0) {
+      try {
+        resolvedSelectionContext = await gridSelectionService.getAuthorizedSelectionContext(req.userId!, gridSelectionContext);
+      } catch (err: any) {
+        logger.warn('ApiRoutes', 'Failed to resolve grid selection context in /ai/ask', { error: err?.message });
+      }
+    }
+
     const response = await auraAiOrchestrator.processConversationalQuery({
       userId: req.userId!,
       prompt,
       includeKernelResearch: Boolean(includeKernelResearch),
       conversationId,
       commerceContext: loadedContext,
+      gridSelectionContext: resolvedSelectionContext,
     });
     if (response.serviceUnavailable) {
       res.status(503).json(response);
@@ -2386,7 +2439,7 @@ apiRouter.post('/ai/ask', requireAuth, async (req: AuthenticatedRequest, res: Re
 
 apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { prompt, includeKernelResearch, conversationId, commerceContext } = req.body || {};
+    const { prompt, includeKernelResearch, conversationId, commerceContext, gridSelectionContext } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ success: false, error: 'A natural-language prompt is required.' });
       return;
@@ -2397,6 +2450,15 @@ apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, 
       const conv = await ConversationModel.findOne({ _id: conversationId, userId: req.userId });
       if (conv?.commerceContext) {
         loadedContext = conv.commerceContext;
+      }
+    }
+
+    let resolvedSelectionContext = null;
+    if (gridSelectionContext && Array.isArray(gridSelectionContext.selectedIds) && gridSelectionContext.selectedIds.length > 0) {
+      try {
+        resolvedSelectionContext = await gridSelectionService.getAuthorizedSelectionContext(req.userId!, gridSelectionContext);
+      } catch (err: any) {
+        logger.warn('ApiRoutes', 'Failed to resolve grid selection context in /ai/ask/stream', { error: err?.message });
       }
     }
 
@@ -2415,6 +2477,7 @@ apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, 
         includeKernelResearch: Boolean(includeKernelResearch),
         conversationId,
         commerceContext: loadedContext,
+        gridSelectionContext: resolvedSelectionContext,
       },
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'delta', delta: chunk.delta })}\n\n`);
@@ -2430,6 +2493,88 @@ apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, 
     } else {
       res.end();
     }
+  }
+});
+
+// ============================================================================
+// 12. AG Grid Financial Workspace & Saved Views
+// ============================================================================
+apiRouter.get('/grid/views', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const gridId = typeof req.query.gridId === 'string' ? req.query.gridId : 'transactions-grid';
+    const views = await GridSavedViewModel.find({ userId, gridId }).sort({ isDefault: -1, updatedAt: -1 });
+    res.json({ success: true, gridId, views });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/grid/views', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { gridId, name, description, filterModel, sortModel, columnVisibility, isDefault } = req.body || {};
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ success: false, error: 'View name is required.' });
+      return;
+    }
+
+    if (isDefault) {
+      await GridSavedViewModel.updateMany({ userId, gridId }, { isDefault: false });
+    }
+
+    const saved = await GridSavedViewModel.findOneAndUpdate(
+      { userId, gridId: gridId || 'transactions-grid', name: name.trim() },
+      {
+        description,
+        filterModel: filterModel || {},
+        sortModel: Array.isArray(sortModel) ? sortModel : [],
+        columnVisibility: columnVisibility || {},
+        isDefault: Boolean(isDefault),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ success: true, view: saved });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.delete('/grid/views/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, error: 'Invalid view ID' });
+      return;
+    }
+    const result = await GridSavedViewModel.findOneAndDelete({ _id: id, userId });
+    if (!result) {
+      res.status(404).json({ success: false, error: 'Saved view not found or not owned by you.' });
+      return;
+    }
+    res.json({ success: true, message: 'Saved view deleted successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/grid/selection-context', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { source, selectedIds, gridId } = req.body || {};
+    if (!source || !Array.isArray(selectedIds)) {
+      res.status(400).json({ success: false, error: 'source and selectedIds array are required.' });
+      return;
+    }
+    const context = await gridSelectionService.getAuthorizedSelectionContext(req.userId!, {
+      source,
+      selectedIds,
+      gridId: gridId || `${source}-grid`,
+    });
+    res.json({ success: true, context, selectionContext: context });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 

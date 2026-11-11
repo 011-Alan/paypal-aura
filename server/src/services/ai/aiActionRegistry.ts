@@ -11,12 +11,15 @@ import {
   IScheduledTask,
   ICommerceContext,
   CommerceContextProduct,
+  GridSavedViewModel,
 } from '../../models';
 import { channel3Integration } from '../../integrations/channel3';
 import { paymentGuardianService } from '../payments/paymentGuardianService';
 import { durableSchedulerService } from '../scheduling/durableSchedulerService';
 import { exchangeRateService } from '../finance/exchangeRateService';
 import { commerceIntelligenceService } from '../ecommerce/commerceIntelligenceService';
+import { agGridIntegration } from '../../integrations/ag-grid';
+import { gridSelectionService } from '../grid/gridSelectionService';
 import { logger } from '../../config/logger';
 
 export type ActionClassification = 'READ' | 'NAVIGATION' | 'PREPARATION' | 'WRITE' | 'SENSITIVE';
@@ -38,6 +41,7 @@ export interface ActionExecutionContext {
   requestId: string;
   conversationId: string;
   commerceContext?: ICommerceContext | null;
+  gridSelectionContext?: any;
 }
 
 export interface ActionResult {
@@ -1676,6 +1680,495 @@ ${userName}`;
         };
       },
     });
+
+    // -------------------------------------------------------------------------
+    // 8. AG GRID FINANCIAL WORKSPACE ACTIONS
+    // -------------------------------------------------------------------------
+
+    // 8.1 Apply Filters
+    this.registerAction({
+      name: 'grid_apply_filters',
+      classification: 'READ',
+      description: 'Apply natural-language or structured filters to AG Grid financial tables.',
+      execute: async (args, ctx) => {
+        const gridId = args.gridId || 'transactions-grid';
+        let filterModel = args.filterModel || {};
+        let summaryParts: string[] = [];
+
+        // If a natural language query is provided, parse it deterministically
+        if (args.query || args.searchQuery) {
+          const parsed = agGridIntegration.parseNaturalLanguageToGridFilter(args.query || args.searchQuery);
+          if (parsed.categoryFilter && parsed.categoryFilter.length > 0) {
+            filterModel.category = {
+              filterType: 'text',
+              type: 'equals',
+              filter: parsed.categoryFilter[0],
+            };
+            summaryParts.push(`category: ${parsed.categoryFilter.join(', ')}`);
+          }
+          if (typeof parsed.minAmount === 'number') {
+            filterModel.amount = {
+              filterType: 'number',
+              type: 'greaterThan',
+              filter: parsed.minAmount,
+            };
+            summaryParts.push(`amount > $${parsed.minAmount}`);
+          }
+          if (typeof parsed.maxAmount === 'number') {
+            filterModel.amount = {
+              ...(filterModel.amount || { filterType: 'number' }),
+              type: 'lessThan',
+              filter: parsed.maxAmount,
+            };
+            summaryParts.push(`amount < $${parsed.maxAmount}`);
+          }
+          if (parsed.typeFilter) {
+            filterModel.type = {
+              filterType: 'text',
+              type: 'equals',
+              filter: parsed.typeFilter,
+            };
+            summaryParts.push(`flow: ${parsed.typeFilter}`);
+          }
+          if (parsed.onlyUnusual) {
+            filterModel.isUnusual = {
+              filterType: 'text',
+              type: 'equals',
+              filter: 'true',
+            };
+            summaryParts.push('unusual expenses only');
+          }
+        }
+
+        // Direct structured filters
+        if (Array.isArray(args.filters)) {
+          for (const f of args.filters) {
+            const field = String(f.field || '').trim();
+            const op = String(f.operator || 'equals').trim();
+            const val = f.value;
+
+            if (field === 'amount' || field === 'totalAmount') {
+              let agType = 'equals';
+              if (op === 'greaterThan' || op === 'above' || op === '>') agType = 'greaterThan';
+              else if (op === 'lessThan' || op === 'below' || op === '<') agType = 'lessThan';
+              filterModel[field] = { filterType: 'number', type: agType, filter: Number(val) };
+              summaryParts.push(`${field} ${op} ${val}`);
+            } else if (field === 'date') {
+              filterModel.date = { filterType: 'date', type: op, dateFrom: val, dateTo: f.dateTo };
+              summaryParts.push(`date ${op} ${val}`);
+            } else if (field) {
+              filterModel[field] = { filterType: 'text', type: op === 'equals' ? 'equals' : 'contains', filter: String(val) };
+              summaryParts.push(`${field}: ${val}`);
+            }
+          }
+        }
+
+        const activeSummary = summaryParts.length > 0 ? summaryParts.join(' and ') : 'your requested criteria';
+        const explanation = `I've updated the grid filters to display **${activeSummary}**. Only matching records are now visible.`;
+
+        return {
+          success: true,
+          data: { gridId, filterModel, activeSummary },
+          explanation,
+          toolAction: {
+            type: 'grid_action',
+            title: `Filtered Grid: ${activeSummary}`,
+            status: 'completed',
+            details: {
+              action: 'apply_filters',
+              gridId,
+              filterModel,
+              activeSummary,
+            },
+          },
+          suggestedNextPrompts: [
+            'Sort these from most expensive to least expensive',
+            'Select the 5 largest transactions',
+            'Clear all filters',
+          ],
+        };
+      },
+    });
+
+    // 8.2 Clear Filters
+    this.registerAction({
+      name: 'grid_clear_filters',
+      classification: 'READ',
+      description: 'Clear all active filters on an AG Grid table.',
+      execute: async (args) => {
+        const gridId = args.gridId || 'transactions-grid';
+        return {
+          success: true,
+          data: { gridId },
+          explanation: "I've cleared all active filters. All records in your workspace are now visible.",
+          toolAction: {
+            type: 'grid_action',
+            title: 'Cleared Grid Filters',
+            status: 'completed',
+            details: {
+              action: 'clear_filters',
+              gridId,
+            },
+          },
+          suggestedNextPrompts: [
+            'Show my transactions above $100',
+            'Sort by date descending',
+            'Show spending by category',
+          ],
+        };
+      },
+    });
+
+    // 8.3 Apply Sorting
+    this.registerAction({
+      name: 'grid_apply_sorting',
+      classification: 'READ',
+      description: 'Sort an AG Grid table by a specific column in ascending or descending order.',
+      execute: async (args) => {
+        const gridId = args.gridId || 'transactions-grid';
+        const field = args.field || args.colId || 'amount';
+        const direction = (String(args.direction || args.sortOrder || 'desc').toLowerCase().includes('asc')) ? 'asc' : 'desc';
+
+        const sortModel = [{ colId: field, sort: direction as 'asc' | 'desc' }];
+        const dirLabel = direction === 'desc' ? 'highest to lowest' : 'lowest to highest';
+        const explanation = `I've sorted the records by **${field}** from ${dirLabel}.`;
+
+        return {
+          success: true,
+          data: { gridId, sortModel },
+          explanation,
+          toolAction: {
+            type: 'grid_action',
+            title: `Sorted by ${field} (${direction.toUpperCase()})`,
+            status: 'completed',
+            details: {
+              action: 'apply_sorting',
+              gridId,
+              sortModel,
+            },
+          },
+          suggestedNextPrompts: [
+            'Select the top 5 records',
+            'Filter by this month',
+            'Reset sorting',
+          ],
+        };
+      },
+    });
+
+    // 8.4 Column Visibility
+    this.registerAction({
+      name: 'grid_set_column_visibility',
+      classification: 'READ',
+      description: 'Show or hide specific columns in an AG Grid financial table.',
+      execute: async (args) => {
+        const gridId = args.gridId || 'transactions-grid';
+        const hideColumns: string[] = Array.isArray(args.hideColumns) ? args.hideColumns : [];
+        const showColumns: string[] = Array.isArray(args.showColumns) ? args.showColumns : [];
+
+        let summary = '';
+        if (hideColumns.length > 0) summary += `hidden [${hideColumns.join(', ')}]`;
+        if (showColumns.length > 0) summary += (summary ? ' and ' : '') + `displayed [${showColumns.join(', ')}]`;
+
+        return {
+          success: true,
+          data: { gridId, hideColumns, showColumns },
+          explanation: `I've updated your column layout: ${summary || 'adjusted column view'}.`,
+          toolAction: {
+            type: 'grid_action',
+            title: 'Updated Column Layout',
+            status: 'completed',
+            details: {
+              action: 'set_column_visibility',
+              gridId,
+              hideColumns,
+              showColumns,
+            },
+          },
+          suggestedNextPrompts: ['Reset to default column layout', 'Export data to CSV'],
+        };
+      },
+    });
+
+    // 8.5 Select Rows
+    this.registerAction({
+      name: 'grid_select_rows',
+      classification: 'READ',
+      description: 'Select rows in the active AG Grid table by count, criteria, or IDs.',
+      execute: async (args) => {
+        const gridId = args.gridId || 'transactions-grid';
+        const count = typeof args.count === 'number' ? args.count : 5;
+        const criteria = args.criteria || 'top_largest';
+
+        return {
+          success: true,
+          data: { gridId, criteria, count },
+          explanation: `I've selected the **${count} largest records** in the current view. You can now ask questions about them or click **Analyse with AURA**.`,
+          toolAction: {
+            type: 'grid_action',
+            title: `Selected ${count} Records`,
+            status: 'completed',
+            details: {
+              action: 'select_rows',
+              gridId,
+              criteria,
+              count,
+            },
+          },
+          suggestedNextPrompts: [
+            'How much did I spend on these?',
+            'What do these transactions have in common?',
+            'Find opportunities to reduce these expenses',
+          ],
+        };
+      },
+    });
+
+    // 8.6 Undo Last Grid Action
+    this.registerAction({
+      name: 'grid_undo_action',
+      classification: 'READ',
+      description: 'Restore the previous AG Grid filter and sorting state.',
+      execute: async (args) => {
+        const gridId = args.gridId || 'transactions-grid';
+        return {
+          success: true,
+          data: { gridId },
+          explanation: "I've undone your last grid change and restored the previous view.",
+          toolAction: {
+            type: 'grid_action',
+            title: 'Undid Previous Grid Action',
+            status: 'completed',
+            details: {
+              action: 'undo',
+              gridId,
+            },
+          },
+          suggestedNextPrompts: ['Clear all filters', 'Sort by amount descending'],
+        };
+      },
+    });
+
+    // 8.7 Save Grid View
+    this.registerAction({
+      name: 'grid_save_view',
+      classification: 'WRITE',
+      description: 'Save the current AG Grid filters, sorting, and column configuration as a named view.',
+      execute: async (args, ctx) => {
+        const gridId = args.gridId || 'transactions-grid';
+        const name = String(args.name || `Saved View ${new Date().toLocaleDateString()}`).trim();
+
+        const saved = await GridSavedViewModel.findOneAndUpdate(
+          { userId: ctx.userId, gridId, name },
+          {
+            filterModel: args.filterModel || {},
+            sortModel: args.sortModel || [],
+            columnVisibility: args.columnVisibility || {},
+            isDefault: Boolean(args.isDefault),
+          },
+          { upsert: true, new: true }
+        );
+
+        return {
+          success: true,
+          data: { viewId: String(saved._id), name, gridId },
+          explanation: `I've saved this configuration as **"${name}"**. You can switch to it anytime from the Saved Views menu.`,
+          toolAction: {
+            type: 'grid_action',
+            title: `Saved View: ${name}`,
+            status: 'completed',
+            details: {
+              action: 'save_view',
+              gridId,
+              name,
+              viewId: String(saved._id),
+            },
+          },
+          suggestedNextPrompts: ['List all saved views', 'Apply Monthly Expenses view'],
+        };
+      },
+    });
+
+    // 8.8 Restore Grid View
+    this.registerAction({
+      name: 'grid_restore_view',
+      classification: 'READ',
+      description: 'Restore a previously saved AG Grid view by name or identifier.',
+      execute: async (args, ctx) => {
+        const gridId = args.gridId || 'transactions-grid';
+        const name = args.name;
+        const viewId = args.viewId;
+
+        const query: any = { userId: ctx.userId, gridId };
+        if (viewId && mongoose.Types.ObjectId.isValid(viewId)) {
+          query._id = viewId;
+        } else if (name) {
+          query.name = new RegExp(`^${name}$`, 'i');
+        }
+
+        const view = await GridSavedViewModel.findOne(query);
+        if (!view) {
+          return {
+            success: false,
+            data: null,
+            explanation: `I couldn't find a saved view matching "${name || viewId}".`,
+            toolAction: {
+              type: 'grid_action',
+              title: 'View Not Found',
+              status: 'informational',
+              details: { gridId, name },
+            },
+            suggestedNextPrompts: ['Show available saved views', 'Save current view as Monthly Expenses'],
+          };
+        }
+
+        return {
+          success: true,
+          data: { view },
+          explanation: `I've loaded the **"${view.name}"** view into your grid.`,
+          toolAction: {
+            type: 'grid_action',
+            title: `Restored View: ${view.name}`,
+            status: 'completed',
+            details: {
+              action: 'restore_view',
+              gridId,
+              view: {
+                id: String(view._id),
+                name: view.name,
+                filterModel: view.filterModel,
+                sortModel: view.sortModel,
+                columnVisibility: view.columnVisibility,
+              },
+            },
+          },
+          suggestedNextPrompts: ['Clear all filters', 'Export data to CSV'],
+        };
+      },
+    });
+
+    // 8.9 Deep Selection Analysis
+    this.registerAction({
+      name: 'grid_analyse_selection',
+      classification: 'READ',
+      description: 'Perform deep financial intelligence analysis on explicitly selected AG Grid records.',
+      execute: async (args, ctx) => {
+        const source = args.source || 'transactions';
+        const selectedIds = Array.isArray(args.selectedIds)
+          ? args.selectedIds
+          : (ctx.gridSelectionContext?.selectedIds || []);
+        const gridId = args.gridId || ctx.gridSelectionContext?.gridId || `${source}-grid`;
+
+        // Authoritatively fetch authorized records from database
+        const context = await gridSelectionService.getAuthorizedSelectionContext(ctx.userId, {
+          source,
+          selectedIds,
+          gridId,
+        });
+
+        if (context.totalSelected === 0) {
+          return {
+            success: false,
+            data: null,
+            explanation: 'No authorized records were selected. Please select one or more rows in the grid to analyse.',
+            toolAction: {
+              type: 'grid_selection_analysis',
+              title: 'No Selection Found',
+              status: 'informational',
+              details: { totalSelected: 0 },
+            },
+            suggestedNextPrompts: ['Select the top 5 transactions', 'Show transactions above $100'],
+          };
+        }
+
+        const { summary, records } = context;
+        const promptLower = ctx.prompt.toLowerCase();
+
+        // 1. Total Spending Calculation
+        let responseMarkdown = '';
+        if (
+          promptLower.includes('how much') ||
+          promptLower.includes('total') ||
+          promptLower.includes('sum') ||
+          promptLower.includes('spend')
+        ) {
+          responseMarkdown = `You spent a total of **$${summary.totalAmount.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+          })}** across the **${context.totalSelected} selected records** (average of $${(
+            summary.averageAmount || 0
+          ).toFixed(2)} per record).`;
+        }
+
+        // 2. Common Patterns / Recurring Analysis
+        if (
+          promptLower.includes('common') ||
+          promptLower.includes('pattern') ||
+          promptLower.includes('recurring')
+        ) {
+          const topCategory = Object.entries(summary.categories || {}).sort((a, b) => b[1] - a[1])[0];
+          const topMerchant = Object.entries(summary.merchants || {}).sort((a, b) => b[1] - a[1])[0];
+
+          responseMarkdown += `\n\n### Patterns in Your Selection:\n` +
+            `• **Primary Category:** ${topCategory ? `${topCategory[0]} ($${topCategory[1].toFixed(2)})` : 'Various'}\n` +
+            `• **Top Merchant:** ${topMerchant ? `${topMerchant[0]} ($${topMerchant[1].toFixed(2)})` : 'Various'}\n` +
+            `• **Recurring Transactions:** ${summary.recurringCount || 0} of ${context.totalSelected} records are marked recurring.\n` +
+            `• **Date Span:** ${summary.dateRange ? `${summary.dateRange.earliest} to ${summary.dateRange.latest}` : 'Single period'}`;
+        }
+
+        // 3. Savings / Optimization Opportunities
+        if (
+          promptLower.includes('save') ||
+          promptLower.includes('reduce') ||
+          promptLower.includes('unnecessary') ||
+          promptLower.includes('opportunity')
+        ) {
+          // Identify discretionary categories (dining, entertainment, shopping) vs essential (utilities, groceries, rent)
+          const discretionaryCats = ['Dining', 'Food & Dining', 'Shopping', 'Electronics', 'Entertainment', 'Subscription'];
+          const discretionaryTxs = records.filter((r) => discretionaryCats.includes(r.category));
+          const discretionaryTotal = discretionaryTxs.reduce((sum, r) => sum + r.amount, 0);
+
+          responseMarkdown += `\n\n### Savings & Budget Review:\n` +
+            `• **Discretionary Spending Review:** Found **${discretionaryTxs.length} transactions** in flexible categories (${discretionaryCats.slice(0, 3).join(', ')}), totaling **$${discretionaryTotal.toFixed(2)}**.\n` +
+            `• **Potential Savings Estimate:** Trimming 20% of these discretionary purchases could save you approximately **$${(discretionaryTotal * 0.2).toFixed(2)}**.\n` +
+            `> 💡 *Note: Category evaluations are contextual suggestions to help you prioritize your financial goals rather than absolute judgments.*`;
+        }
+
+        // Default overview if no specific question matched
+        if (!responseMarkdown) {
+          responseMarkdown = `### Analysis of ${context.totalSelected} Selected Records:\n\n` +
+            `• **Total Amount:** **$${summary.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}**\n` +
+            `• **Average Transaction:** $${(summary.averageAmount || 0).toFixed(2)}\n` +
+            `• **Categories Involved:** ${Object.keys(summary.categories || {}).join(', ')}\n` +
+            `• **Recurring Items:** ${summary.recurringCount || 0}\n` +
+            `• **Flagged Anomalies:** ${summary.unusualCount || 0}`;
+        }
+
+        return {
+          success: true,
+          data: context,
+          explanation: responseMarkdown,
+          toolAction: {
+            type: 'grid_selection_analysis',
+            title: `Analysis of ${context.totalSelected} Records ($${summary.totalAmount.toFixed(2)})`,
+            status: 'completed',
+            details: {
+              source,
+              gridId,
+              totalSelected: context.totalSelected,
+              totalAmount: summary.totalAmount,
+              currency: summary.currency,
+              summary,
+            },
+          },
+          suggestedNextPrompts: [
+            'How can I reduce spending in these categories?',
+            'Create a savings plan based on these expenses',
+            'Clear selection',
+          ],
+        };
+      },
+    });
+
   }
 }
 

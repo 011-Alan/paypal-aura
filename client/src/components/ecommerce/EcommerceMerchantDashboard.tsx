@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ColDef } from 'ag-grid-community';
 import {
   Store,
   DollarSign,
@@ -24,6 +25,7 @@ import { EcommerceOrder, FulfillmentStatus, MerchantOverview } from './Ecommerce
 import { apiRequest } from '../../lib/api';
 import { BryntumTaskBoardFulfillment } from './BryntumTaskBoardFulfillment';
 import { MerchantReceivedPaymentsAgGrid } from './MerchantReceivedPaymentsAgGrid';
+import { AuraDataGrid } from '../grid/AuraDataGrid';
 
 const STAGE_CONFIG: Record<
   FulfillmentStatus,
@@ -165,6 +167,120 @@ export const EcommerceMerchantDashboard: React.FC = () => {
       setUpdating(false);
     }
   };
+
+  const formattedOrders = useMemo(() => {
+    return orders.map((o) => ({
+      ...o,
+      id: o._id,
+    }));
+  }, [orders]);
+
+  const orderColumnDefs: ColDef<EcommerceOrder>[] = useMemo(() => [
+    {
+      field: 'orderNumber',
+      headerName: 'Order #',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 150,
+      cellRenderer: (p: any) => (
+        <span className="font-mono font-bold text-navy-900 dark:text-white">{p.value}</span>
+      ),
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Date',
+      filter: 'agDateColumnFilter',
+      sortable: true,
+      width: 120,
+      valueFormatter: (p: any) => p.value ? new Date(p.value).toLocaleDateString() : '—',
+    },
+    {
+      field: 'customerName',
+      headerName: 'Customer',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      flex: 1,
+      minWidth: 150,
+      cellRenderer: (p: any) => (
+        <div>
+          <div className="font-bold text-navy-900 dark:text-white">{p.value}</div>
+          <div className="text-[11px] text-slate-400">{p.data?.customerEmail}</div>
+        </div>
+      ),
+    },
+    {
+      headerName: 'Item Details',
+      sortable: false,
+      filter: false,
+      flex: 1.2,
+      minWidth: 160,
+      cellRenderer: (p: any) => {
+        const ord = p.data;
+        return (
+          <div>
+            <div className="font-medium text-navy-900 dark:text-white truncate">
+              {ord?.items?.[0]?.name || 'Store Item'}
+            </div>
+            <div className="text-[11px] text-slate-400">
+              {ord?.items?.length > 1
+                ? `+${ord.items.length - 1} more (${ord.items.reduce((s: number, it: any) => s + it.quantity, 0)} total)`
+                : `Qty: ${ord?.items?.[0]?.quantity || 1}`}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      field: 'totalAmount',
+      headerName: 'Amount',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 120,
+      cellRenderer: (p: any) => (
+        <span className="font-bold text-navy-900 dark:text-white">
+          ${p.value?.toFixed(2)} USD
+        </span>
+      ),
+    },
+    {
+      field: 'fulfillmentStatus',
+      headerName: 'Status',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 160,
+      cellRenderer: (p: any) => {
+        const cfg = STAGE_CONFIG[p.value as FulfillmentStatus] || {
+          label: p.value,
+          bg: 'bg-slate-100',
+          text: 'text-slate-700',
+          border: 'border-slate-200',
+        };
+        return (
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+            {cfg.label}
+          </span>
+        );
+      },
+    },
+    {
+      headerName: 'Actions',
+      width: 100,
+      sortable: false,
+      filter: false,
+      cellRenderer: (p: any) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openOrderManager(p.data);
+          }}
+          className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition"
+        >
+          Manage
+        </button>
+      ),
+    },
+  ], []);
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -331,102 +447,17 @@ export const EcommerceMerchantDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Order Management Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs divide-y divide-slate-100 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-500 dark:text-slate-400">
-              <tr>
-                <th className="py-3 px-4">Order Number</th>
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Customer</th>
-                <th className="py-3 px-4">Items / Qty</th>
-                <th className="py-3 px-4">Amount</th>
-                <th className="py-3 px-4">Payment</th>
-                <th className="py-3 px-4">Fulfillment Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {orders.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    No orders match the current filter.
-                  </td>
-                </tr>
-              ) : (
-                orders.map((ord) => {
-                  const cfg = STAGE_CONFIG[ord.fulfillmentStatus] || {
-                    label: ord.fulfillmentStatus,
-                    bg: 'bg-slate-100',
-                    text: 'text-slate-700',
-                    border: 'border-slate-200',
-                  };
-                  return (
-                    <tr
-                      key={ord._id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
-                    >
-                      <td className="py-3 px-4 font-mono font-bold text-navy-900 dark:text-white">
-                        {ord.orderNumber}
-                      </td>
-                      <td className="py-3 px-4 text-slate-500">
-                        {new Date(ord.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-navy-900 dark:text-white">{ord.customerName}</div>
-                        <div className="text-[11px] text-slate-400">{ord.customerEmail}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-navy-900 dark:text-white">
-                          {ord.items?.[0]?.name || 'Store Item'}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          {ord.items?.length > 1
-                            ? `+${ord.items.length - 1} more (${ord.items.reduce((s, it) => s + it.quantity, 0)} total)`
-                            : `Qty: ${ord.items?.[0]?.quantity || 1}`}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-navy-900 dark:text-white">
-                        ${ord.totalAmount.toFixed(2)} USD
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Paid
-                        </span>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[100px]" title={ord.paymentInfo?.paypalCaptureId}>
-                          {ord.paymentInfo?.paypalCaptureId || 'Verified'}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}
-                        >
-                          {cfg.label}
-                        </span>
-                        {ord.shipment?.carrier && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            {ord.shipment.carrier} • {ord.shipment.trackingNumber || 'Pending'}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openOrderManager(ord)}
-                          className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-xs shadow-xs transition"
-                        >
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Order Management AG Grid */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
+        <AuraDataGrid
+          gridId="merchant-orders-grid"
+          source="orders"
+          rowData={formattedOrders}
+          columnDefs={orderColumnDefs}
+          quickSearch={searchTerm}
+          onRowClicked={(row: any) => openOrderManager(row)}
+          height="520px"
+        />
       </div>
     </>
   )}

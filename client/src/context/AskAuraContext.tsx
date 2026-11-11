@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { apiRequest, getApiBase, getStoredToken } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { NavTabId } from '../components/AppShell';
+import { gridStateManager, GridSelectionContext } from '../lib/gridStateManager';
 
 export interface Message {
   _id?: string;
@@ -65,6 +66,9 @@ export interface AskAuraContextValue {
   popOutToFloatingChat: (targetTab?: NavTabId) => void;
   openFullPageChat: () => void;
   activeTab: NavTabId;
+  attachedSelectionContext: GridSelectionContext | null;
+  attachSelectionContext: (ctx: GridSelectionContext) => void;
+  clearSelectionContext: () => void;
 }
 
 const AskAuraContext = createContext<AskAuraContextValue | undefined>(undefined);
@@ -94,6 +98,15 @@ export const AskAuraProvider: React.FC<{
 
   // Floating Chat State
   const [isFloatingOpen, setIsFloatingOpen] = useState(false);
+
+  // AG Grid Context Selection
+  const [attachedSelectionContext, setAttachedSelectionContext] = useState<GridSelectionContext | null>(null);
+  const attachSelectionContext = useCallback((ctx: GridSelectionContext) => {
+    setAttachedSelectionContext(ctx);
+  }, []);
+  const clearSelectionContext = useCallback(() => {
+    setAttachedSelectionContext(null);
+  }, []);
 
   // Voice Interaction state
   const [isListening, setIsListening] = useState(false);
@@ -430,6 +443,12 @@ export const AskAuraProvider: React.FC<{
     ) {
       window.dispatchEvent(new CustomEvent('aura-state-changed', { detail: action }));
     }
+
+    // 7. AG Grid Actions
+    if (action.type === 'grid_action' && action.details) {
+      gridStateManager.handleAction(action.details);
+      window.dispatchEvent(new CustomEvent('aura-grid-action', { detail: action.details }));
+    }
   }, [onNavigate]);
 
   // Send Message with SSE Token Streaming Support & Duplicate Request Protection
@@ -484,7 +503,7 @@ export const AskAuraProvider: React.FC<{
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ content: query }),
+        body: JSON.stringify({ content: query, gridSelectionContext: attachedSelectionContext }),
       });
 
       if (streamRes.ok && streamRes.body) {
@@ -563,7 +582,7 @@ export const AskAuraProvider: React.FC<{
         // Fallback to standard request
         const res = await apiRequest(`/conversations/${targetConvId}/messages`, {
           method: 'POST',
-          body: JSON.stringify({ content: query, includeKernelResearch: true }),
+          body: JSON.stringify({ content: query, includeKernelResearch: true, gridSelectionContext: attachedSelectionContext }),
         });
 
         const assistantMsg: Message = {
@@ -676,6 +695,9 @@ export const AskAuraProvider: React.FC<{
         popOutToFloatingChat,
         openFullPageChat,
         activeTab,
+        attachedSelectionContext,
+        attachSelectionContext,
+        clearSelectionContext,
       }}
     >
       {children}

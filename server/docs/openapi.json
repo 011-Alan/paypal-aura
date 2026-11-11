@@ -1,0 +1,2206 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AURA Intelligent Financial Workspace & Developer Platform API",
+    "description": "AURA Developer API provides programmatic access to personal financial intelligence, recurring commitments management, automated financial planning, AG Grid data workspace saved views and selection analysis, and verified merchant operations powered by PayPal and APIMatic.",
+    "version": "2.4.0",
+    "contact": {
+      "name": "AURA Engineering & APIMatic Architecture Team",
+      "url": "https://aura-fintech.onrender.com/developer",
+      "email": "developers@tryaura.com"
+    },
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://opensource.org/licenses/Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://aura-fintech.onrender.com",
+      "description": "Production & Sandbox Environment"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User registration, login, session validation, and demo personas"
+    },
+    {
+      "name": "Accounts",
+      "description": "Linked bank and fintech accounts management and balance synchronization"
+    },
+    {
+      "name": "Transactions",
+      "description": "Transaction history, filtering, category aggregations, and stats"
+    },
+    {
+      "name": "Financial Planning",
+      "description": "AI-driven budget generation, cashflow forecasting, and recovery advisor"
+    },
+    {
+      "name": "Goals",
+      "description": "Savings milestones, target amounts, and automated contributions"
+    },
+    {
+      "name": "Commitments",
+      "description": "Recurring subscriptions, bills, mandates, and approval flows"
+    },
+    {
+      "name": "Ecommerce",
+      "description": "Curated financial store products, cart checkout, and PayPal order fulfillment"
+    },
+    {
+      "name": "Merchant Hub",
+      "description": "Operations workspace exclusively for verified PayPal Business merchants"
+    },
+    {
+      "name": "AG Grid Workspace",
+      "description": "AG Grid saved views, column states, and multi-row selection analysis context"
+    },
+    {
+      "name": "Ask AURA AI",
+      "description": "Multi-modal natural language conversational orchestration, tools, and actions"
+    },
+    {
+      "name": "PayPal Payments",
+      "description": "Standardized Orders v2 creation, capture, and verification flows"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Provide your user or merchant session JWT token obtained via `/api/auth/login` or `/api/auth/demo-login`."
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-AURA-API-KEY",
+        "description": "Developer sandbox or service API key for server-to-server integration."
+      }
+    },
+    "schemas": {
+      "ApiResponseMeta": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Operation completed successfully"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "example": "Resource not found or unauthorized"
+          },
+          "code": {
+            "type": "string",
+            "example": "UNAUTHORIZED_ACCESS"
+          },
+          "details": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "success",
+          "error"
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "usr_alex_001"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "alex@example.com"
+          },
+          "name": {
+            "type": "string",
+            "example": "Alex Morgan"
+          },
+          "auraAccountType": {
+            "type": "string",
+            "enum": [
+              "PERSONAL",
+              "BUSINESS",
+              "UNVERIFIED"
+            ],
+            "example": "PERSONAL"
+          },
+          "paypalAccountType": {
+            "type": "string",
+            "enum": [
+              "PERSONAL",
+              "BUSINESS",
+              "UNKNOWN"
+            ],
+            "example": "PERSONAL"
+          },
+          "merchantVerificationStatus": {
+            "type": "string",
+            "enum": [
+              "NOT_STARTED",
+              "PENDING",
+              "VERIFIED",
+              "REJECTED",
+              "UNVERIFIED"
+            ],
+            "example": "NOT_STARTED"
+          },
+          "merchantAccessEnabled": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "auraAccountType"
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "acc_chase_checking"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chase Premier Checking"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "checking",
+              "savings",
+              "credit",
+              "investment"
+            ],
+            "example": "checking"
+          },
+          "institution": {
+            "type": "string",
+            "example": "Chase"
+          },
+          "balance": {
+            "type": "number",
+            "example": 4520.5
+          },
+          "currency": {
+            "type": "string",
+            "example": "USD"
+          },
+          "lastSyncedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "balance",
+          "currency"
+        ]
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "tx_amazon_884"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-05"
+          },
+          "merchant": {
+            "type": "string",
+            "example": "Amazon Prime"
+          },
+          "description": {
+            "type": "string",
+            "example": "Electronics & Home Office supplies"
+          },
+          "category": {
+            "type": "string",
+            "example": "Shopping"
+          },
+          "accountName": {
+            "type": "string",
+            "example": "Chase Premier Checking"
+          },
+          "amount": {
+            "type": "number",
+            "example": 129.99
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "income",
+              "expense",
+              "transfer"
+            ],
+            "example": "expense"
+          },
+          "isUnusual": {
+            "type": "boolean",
+            "example": false
+          },
+          "unusualReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "date",
+          "merchant",
+          "amount",
+          "type",
+          "category"
+        ]
+      },
+      "FinancialPlan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "plan_nov_2026"
+          },
+          "title": {
+            "type": "string",
+            "example": "November 2026 Optimized Cashflow Plan"
+          },
+          "totalCommitments": {
+            "type": "number",
+            "example": 1250
+          },
+          "totalEssentialBudget": {
+            "type": "number",
+            "example": 800
+          },
+          "totalDiscretionaryBudget": {
+            "type": "number",
+            "example": 550
+          },
+          "totalSavingsTarget": {
+            "type": "number",
+            "example": 700
+          },
+          "aiSummary": {
+            "type": "string",
+            "example": "Discretionary buffer healthy. 2 recurring subscriptions detected with rate increases."
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string",
+                  "example": "Dining Out"
+                },
+                "type": {
+                  "type": "string",
+                  "example": "Discretionary"
+                },
+                "plannedAmount": {
+                  "type": "number",
+                  "example": 300
+                },
+                "spentAmount": {
+                  "type": "number",
+                  "example": 185.5
+                },
+                "remainingAmount": {
+                  "type": "number",
+                  "example": 114.5
+                },
+                "utilizationPercent": {
+                  "type": "number",
+                  "example": 61.8
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "warning",
+                    "overrun"
+                  ],
+                  "example": "normal"
+                },
+                "recommendation": {
+                  "type": "string",
+                  "example": "Pacing well within remaining monthly allowance."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Goal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "goal_emergency_fund"
+          },
+          "title": {
+            "type": "string",
+            "example": "Emergency Reserve 6 Months"
+          },
+          "targetAmount": {
+            "type": "number",
+            "example": 15000
+          },
+          "currentAmount": {
+            "type": "number",
+            "example": 9400
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2027-06-30"
+          },
+          "category": {
+            "type": "string",
+            "example": "Safety"
+          },
+          "monthlyContribution": {
+            "type": "number",
+            "example": 500
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "completed",
+              "paused"
+            ],
+            "example": "in_progress"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "targetAmount",
+          "currentAmount"
+        ]
+      },
+      "Mandate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "man_netflix_sub"
+          },
+          "title": {
+            "type": "string",
+            "example": "Netflix Premium 4K"
+          },
+          "merchant": {
+            "type": "string",
+            "example": "Netflix Inc."
+          },
+          "category": {
+            "type": "string",
+            "example": "Subscription"
+          },
+          "amount": {
+            "type": "number",
+            "example": 22.99
+          },
+          "dueDayOfMonth": {
+            "type": "number",
+            "example": 14
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "inferred",
+              "paused"
+            ],
+            "example": "confirmed"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "merchant",
+          "amount",
+          "dueDayOfMonth",
+          "status"
+        ]
+      },
+      "EcommerceProduct": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "prod_macbook_air"
+          },
+          "name": {
+            "type": "string",
+            "example": "Apple MacBook Air 15\" M3"
+          },
+          "description": {
+            "type": "string",
+            "example": "Latest M3 chip, 16GB Unified Memory, 512GB SSD"
+          },
+          "price": {
+            "type": "number",
+            "example": 1299
+          },
+          "category": {
+            "type": "string",
+            "example": "Electronics"
+          },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "inStock": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price",
+          "category"
+        ]
+      },
+      "EcommerceOrder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "ord_20261111_0042"
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "AURA-ORD-9821"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "customerName": {
+            "type": "string",
+            "example": "Maya Lin"
+          },
+          "customerEmail": {
+            "type": "string",
+            "format": "email",
+            "example": "maya@example.com"
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 142.5
+          },
+          "currency": {
+            "type": "string",
+            "example": "USD"
+          },
+          "fulfillmentStatus": {
+            "type": "string",
+            "enum": [
+              "payment_completed",
+              "order_confirmed",
+              "processing",
+              "packed",
+              "shipped",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ],
+            "example": "processing"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "example": "Ergonomic Desk Mat"
+                },
+                "quantity": {
+                  "type": "number",
+                  "example": 1
+                },
+                "unitPrice": {
+                  "type": "number",
+                  "example": 42.5
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "orderNumber",
+          "customerName",
+          "totalAmount",
+          "fulfillmentStatus"
+        ]
+      },
+      "GridSavedView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "view_high_value_tx"
+          },
+          "gridId": {
+            "type": "string",
+            "example": "transactions-grid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Large Expenses Over $100"
+          },
+          "filterModel": {
+            "type": "object",
+            "example": {
+              "amount": {
+                "filterType": "number",
+                "type": "greaterThan",
+                "filter": 100
+              },
+              "type": {
+                "filterType": "text",
+                "type": "equals",
+                "filter": "expense"
+              }
+            }
+          },
+          "sortModel": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "colId": {
+                  "type": "string",
+                  "example": "amount"
+                },
+                "sort": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "example": "desc"
+                }
+              }
+            }
+          },
+          "columnVisibility": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "example": {
+              "date": true,
+              "merchant": true,
+              "amount": true,
+              "status": true
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "gridId",
+          "name"
+        ]
+      },
+      "GridSelectionContext": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "transactions",
+              "orders",
+              "commitments",
+              "goals",
+              "budget"
+            ],
+            "example": "transactions"
+          },
+          "gridId": {
+            "type": "string",
+            "example": "transactions-grid"
+          },
+          "selectedIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "tx_001",
+              "tx_002",
+              "tx_005"
+            ]
+          },
+          "selectionMode": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "filtered",
+              "all"
+            ],
+            "example": "explicit"
+          }
+        },
+        "required": [
+          "source",
+          "gridId",
+          "selectedIds"
+        ]
+      },
+      "AiAskRequest": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "example": "What is my total spending among these selected transactions?"
+          },
+          "conversationId": {
+            "type": "string",
+            "example": "conv_session_912"
+          },
+          "gridSelectionContext": {
+            "$ref": "#/components/schemas/GridSelectionContext"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "AiAskResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "response": {
+            "type": "string",
+            "example": "The 3 selected transactions total $349.50 across Shopping and Utilities."
+          },
+          "executedAction": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "example": "grid_analyse_selection"
+              },
+              "gridId": {
+                "type": "string",
+                "example": "transactions-grid"
+              },
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "required": [
+          "success",
+          "response"
+        ]
+      }
+    }
+  },
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register a new personal user account",
+        "operationId": "registerUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "developer@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "SecurePassword123!"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Alex Developer"
+                  }
+                },
+                "required": [
+                  "email",
+                  "password",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Email already registered or invalid inputs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Login with email and password credentials",
+        "operationId": "loginUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "alex@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "AuraPass2026!"
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful; returns JWT token and user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/demo-login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Instant login into seeded demo personas (Alex, Priya, Maya, Bruce)",
+        "operationId": "demoLogin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "persona": {
+                    "type": "string",
+                    "enum": [
+                      "alex",
+                      "priya",
+                      "maya",
+                      "bruce"
+                    ],
+                    "example": "alex"
+                  }
+                },
+                "required": [
+                  "persona"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Demo login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get current authenticated user profile and entitlements",
+        "operationId": "getSession",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active session info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired session token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "List all linked financial accounts for current user",
+        "operationId": "listAccounts",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    },
+                    "totalBalance": {
+                      "type": "number",
+                      "example": 12450.75
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Retrieve transactions with AG Grid row formatting and stats",
+        "operationId": "listTransactions",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by category name"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense",
+                "transfer"
+              ]
+            },
+            "description": "Filter by flow"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            },
+            "description": "Max records to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transactions list and stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transactions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transaction"
+                      }
+                    },
+                    "agGrid": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Transaction"
+                          }
+                        },
+                        "totalCount": {
+                          "type": "integer",
+                          "example": 50
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plans": {
+      "get": {
+        "tags": [
+          "Financial Planning"
+        ],
+        "summary": "Get active financial plan and category budget allocations",
+        "operationId": "getActivePlan",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active financial plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activePlan": {
+                      "$ref": "#/components/schemas/FinancialPlan"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plans/generate": {
+      "post": {
+        "tags": [
+          "Financial Planning"
+        ],
+        "summary": "Recalculate and generate updated financial plan using AI & Python analytical engine",
+        "operationId": "generatePlan",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Generated plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "$ref": "#/components/schemas/FinancialPlan"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals": {
+      "get": {
+        "tags": [
+          "Goals"
+        ],
+        "summary": "List all financial goals and savings milestones",
+        "operationId": "listGoals",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User goals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Goal"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/mandates": {
+        "get": {
+          "tags": [
+            "Commitments"
+          ],
+          "summary": "List recurring commitments, bills, and subscriptions",
+          "operationId": "listMandates",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "List of commitments",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "mandates": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Mandate"
+                        }
+                      },
+                      "confirmedMonthlyOutflow": {
+                        "type": "number",
+                        "example": 840.5
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": [
+            "Commitments"
+          ],
+          "summary": "Create a new recurring commitment",
+          "operationId": "createMandate",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "example": "Home Internet Fiber"
+                    },
+                    "merchant": {
+                      "type": "string",
+                      "example": "Verizon Fios"
+                    },
+                    "category": {
+                      "type": "string",
+                      "example": "Utilities"
+                    },
+                    "amount": {
+                      "type": "number",
+                      "example": 79.99
+                    },
+                    "dueDayOfMonth": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 31,
+                      "example": 10
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "merchant",
+                    "amount",
+                    "dueDayOfMonth"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Mandate created",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "mandate": {
+                        "$ref": "#/components/schemas/Mandate"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/products": {
+        "get": {
+          "tags": [
+            "Ecommerce"
+          ],
+          "summary": "List store products with Channel3 live price intelligence",
+          "operationId": "listProducts",
+          "parameters": [
+            {
+              "name": "search",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              },
+              "description": "Search term"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Products list",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "products": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/EcommerceProduct"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/orders": {
+        "get": {
+          "tags": [
+            "Ecommerce"
+          ],
+          "summary": "List consumer purchases and order statuses",
+          "operationId": "listCustomerOrders",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Customer orders",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "orders": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/EcommerceOrder"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/merchant/overview": {
+        "get": {
+          "tags": [
+            "Merchant Hub"
+          ],
+          "summary": "Get merchant operations metrics (Restricted to verified PayPal Business accounts)",
+          "operationId": "getMerchantOverview",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Merchant fulfillment summary",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "overview": {
+                        "type": "object",
+                        "properties": {
+                          "totalOrders": {
+                            "type": "integer",
+                            "example": 28
+                          },
+                          "totalRevenue": {
+                            "type": "number",
+                            "example": 4890
+                          },
+                          "pendingFulfillment": {
+                            "type": "integer",
+                            "example": 5
+                          },
+                          "deliveredOrders": {
+                            "type": "integer",
+                            "example": 23
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "403": {
+              "description": "Merchant Hub access denied: Account not verified as PayPal Business",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApiErrorResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/merchant/orders": {
+        "get": {
+          "tags": [
+            "Merchant Hub"
+          ],
+          "summary": "List merchant customer orders (Restricted to verified PayPal Business accounts)",
+          "operationId": "listMerchantOrders",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Merchant orders list",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean"
+                      },
+                      "orders": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/EcommerceOrder"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "403": {
+              "description": "Forbidden",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApiErrorResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/merchant/orders/{id}/fulfillment": {
+        "put": {
+          "tags": [
+            "Merchant Hub"
+          ],
+          "summary": "Update order fulfillment stage and carrier tracking",
+          "operationId": "updateOrderFulfillment",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Order ID"
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fulfillmentStatus": {
+                      "type": "string",
+                      "enum": [
+                        "processing",
+                        "packed",
+                        "shipped",
+                        "out_for_delivery",
+                        "delivered"
+                      ]
+                    },
+                    "carrier": {
+                      "type": "string",
+                      "example": "FedEx"
+                    },
+                    "trackingNumber": {
+                      "type": "string",
+                      "example": "FDX9827104928"
+                    },
+                    "notes": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fulfillmentStatus"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Order updated",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean"
+                      },
+                      "order": {
+                        "$ref": "#/components/schemas/EcommerceOrder"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/grid/views": {
+        "get": {
+          "tags": [
+            "AG Grid Workspace"
+          ],
+          "summary": "Retrieve user saved AG Grid views for a given grid table",
+          "operationId": "getGridViews",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "gridId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "example": "transactions-grid"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "List of saved views for this user",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean"
+                      },
+                      "views": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/GridSavedView"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": [
+            "AG Grid Workspace"
+          ],
+          "summary": "Save an AG Grid view configuration (filterModel, sortModel, columnVisibility)",
+          "operationId": "saveGridView",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GridSavedView"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "View saved successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean"
+                      },
+                      "view": {
+                        "$ref": "#/components/schemas/GridSavedView"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/grid/selection-context": {
+        "post": {
+          "tags": [
+            "AG Grid Workspace"
+          ],
+          "summary": "Resolve authoritative ground-truth context and statistics for selected AG Grid row IDs",
+          "operationId": "resolveGridSelectionContext",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GridSelectionContext"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Authoritative selection context with verified summary statistics and sanitized records",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "context": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string"
+                          },
+                          "gridId": {
+                            "type": "string"
+                          },
+                          "totalSelected": {
+                            "type": "integer",
+                            "example": 3
+                          },
+                          "summary": {
+                            "type": "object",
+                            "properties": {
+                              "totalAmount": {
+                                "type": "number",
+                                "example": 349.5
+                              },
+                              "currency": {
+                                "type": "string",
+                                "example": "USD"
+                              },
+                              "itemCount": {
+                                "type": "integer",
+                                "example": 3
+                              },
+                              "averageAmount": {
+                                "type": "number",
+                                "example": 116.5
+                              }
+                            }
+                          },
+                          "records": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ai/ask": {
+        "post": {
+          "tags": [
+            "Ask AURA AI"
+          ],
+          "summary": "Submit a natural-language prompt to Ask AURA, with optional attached AG Grid selection",
+          "operationId": "askAura",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAskRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "AI response with executed application tool and action payload",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AiAskResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/conversations": {
+        "get": {
+          "tags": [
+            "Ask AURA AI"
+          ],
+          "summary": "List user chat conversations",
+          "operationId": "listConversations",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "User conversations",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "conversations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "_id": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/ecommerce/merchant/received-payments": {
+        "get": {
+          "tags": [
+            "Merchant Hub"
+          ],
+          "summary": "Retrieve verified PayPal payments received by the merchant with settlement details",
+          "operationId": "getMerchantReceivedPayments",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "List of received payments and metrics",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "payments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "example": "pay_paypal_883"
+                            },
+                            "orderId": {
+                              "type": "string",
+                              "example": "ord_20261111_0042"
+                            },
+                            "customerName": {
+                              "type": "string",
+                              "example": "Maya Lin"
+                            },
+                            "grossAmount": {
+                              "type": "number",
+                              "example": 142.5
+                            },
+                            "netAmount": {
+                              "type": "number",
+                              "example": 137.95
+                            },
+                            "paypalFee": {
+                              "type": "number",
+                              "example": 4.55
+                            },
+                            "currency": {
+                              "type": "string",
+                              "example": "USD"
+                            },
+                            "status": {
+                              "type": "string",
+                              "example": "COMPLETED"
+                            },
+                            "date": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "403": {
+              "description": "Access denied: Requires verified PayPal Business account",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApiErrorResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/grid/views/{id}": {
+        "delete": {
+          "tags": [
+            "AG Grid Workspace"
+          ],
+          "summary": "Delete a previously saved AG Grid view",
+          "operationId": "deleteGridView",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "View ID to delete"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "View deleted successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/conversations/{id}/messages": {
+        "get": {
+          "tags": [
+            "Ask AURA AI"
+          ],
+          "summary": "Get conversation history and messages",
+          "operationId": "getConversationMessages",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Conversation ID"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Conversation messages",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "messages": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "_id": {
+                              "type": "string"
+                            },
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "assistant"
+                              ]
+                            },
+                            "content": {
+                              "type": "string"
+                            },
+                            "timestamp": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/paypal/create-order": {
+        "post": {
+          "tags": [
+            "PayPal Payments"
+          ],
+          "summary": "Create a PayPal Orders v2 transaction intent (APIMatic validated)",
+          "operationId": "createPayPalOrder",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "amount": {
+                      "type": "number",
+                      "example": 129.99
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "USD"
+                    },
+                    "description": {
+                      "type": "string",
+                      "example": "AURA Store Purchase"
+                    }
+                  },
+                  "required": [
+                    "amount"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "PayPal order created",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "orderId": {
+                        "type": "string",
+                        "example": "5O190127TN364715T"
+                      },
+                      "status": {
+                        "type": "string",
+                        "example": "CREATED"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/paypal/capture-order": {
+        "post": {
+          "tags": [
+            "PayPal Payments"
+          ],
+          "summary": "Capture an authorized PayPal Orders v2 payment transaction",
+          "operationId": "capturePayPalOrder",
+          "security": [
+            {
+              "BearerAuth": []
+            },
+            {
+              "ApiKeyAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": {
+                      "type": "string",
+                      "example": "5O190127TN364715T"
+                    }
+                  },
+                  "required": [
+                    "orderId"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "PayPal order captured",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "captureId": {
+                        "type": "string",
+                        "example": "2GG279541U471931P"
+                      },
+                      "status": {
+                        "type": "string",
+                        "example": "COMPLETED"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

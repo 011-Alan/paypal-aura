@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { PieChart, Sparkles, CheckCircle2, XCircle, RefreshCw, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { ColDef } from 'ag-grid-community';
+import { PieChart, Sparkles, CheckCircle2, XCircle, RefreshCw, ShieldAlert, Table } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { AuraDataGrid } from '../components/grid/AuraDataGrid';
 
 export const FinancialPlanPage: React.FC = () => {
   const { balancesVisible } = useAuth();
   const [plan, setPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
+  const [allocationView, setAllocationView] = useState<'cards' | 'grid'>('cards');
 
   const loadPlan = async () => {
     setLoading(true);
@@ -42,6 +45,84 @@ export const FinancialPlanPage: React.FC = () => {
     });
     setPlan(res.plan);
   };
+
+  const allocationRows = useMemo(() => {
+    return (plan?.allocations || []).map((alloc: any, idx: number) => ({
+      ...alloc,
+      id: alloc.category || `cat-${idx}`,
+    }));
+  }, [plan]);
+
+  const allocationColumnDefs: ColDef[] = useMemo(() => [
+    {
+      field: 'category',
+      headerName: 'Category',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 150,
+      cellRenderer: (p: any) => (
+        <span className="font-bold text-navy-900 dark:text-white">{p.value}</span>
+      ),
+    },
+    {
+      field: 'type',
+      headerName: 'Classification',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 130,
+      cellRenderer: (p: any) => (
+        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 uppercase">
+          {p.value}
+        </span>
+      ),
+    },
+    {
+      field: 'plannedAmount',
+      headerName: 'Planned Budget',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 140,
+      cellRenderer: (p: any) => formatInr(p.value, !balancesVisible),
+    },
+    {
+      field: 'spentAmount',
+      headerName: 'Actual Spent',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 140,
+      cellRenderer: (p: any) => formatInr(p.value, !balancesVisible),
+    },
+    {
+      field: 'remainingAmount',
+      headerName: 'Remaining',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 130,
+      cellRenderer: (p: any) => formatInr(Math.max(0, p.value), !balancesVisible),
+    },
+    {
+      field: 'utilizationPercent',
+      headerName: 'Utilisation',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 120,
+      cellRenderer: (p: any) => (
+        <span className={`font-semibold ${p.value > 100 ? 'text-rose-600' : p.value > 85 ? 'text-amber-600' : 'text-blue-600'}`}>
+          {p.value}%
+        </span>
+      ),
+    },
+    {
+      field: 'recommendation',
+      headerName: 'AI Guidance',
+      filter: 'agTextColumnFilter',
+      flex: 1.5,
+      minWidth: 220,
+      cellRenderer: (p: any) => (
+        <span className="text-xs text-slate-600 dark:text-slate-300">{p.value}</span>
+      ),
+    },
+  ], [balancesVisible]);
 
   if (loading && !plan) {
     return (
@@ -133,7 +214,7 @@ export const FinancialPlanPage: React.FC = () => {
 
       {/* Category Allocations & Utilization */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
               <PieChart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -143,46 +224,82 @@ export const FinancialPlanPage: React.FC = () => {
               Comparing planned allocation against actual MongoDB transactions
             </p>
           </div>
+
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setAllocationView('cards')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                allocationView === 'cards'
+                  ? 'bg-white dark:bg-slate-700 text-navy-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+              }`}
+            >
+              Visual Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllocationView('grid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                allocationView === 'grid'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
+              }`}
+            >
+              <Table className="w-3.5 h-3.5" />
+              AG Grid Workspace
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          {(plan.allocations || []).map((alloc: any) => {
-            const pct = Math.min(100, Math.round(alloc.utilizationPercent || 0));
-            const barColor =
-              alloc.status === 'overrun'
-                ? 'bg-rose-500'
-                : alloc.status === 'warning'
-                ? 'bg-amber-500'
-                : 'bg-blue-600';
+        {allocationView === 'grid' ? (
+          <AuraDataGrid
+            gridId="budget-allocations-grid"
+            source="budget"
+            rowData={allocationRows}
+            columnDefs={allocationColumnDefs}
+            height="400px"
+          />
+        ) : (
+          <div className="space-y-4">
+            {(plan.allocations || []).map((alloc: any) => {
+              const pct = Math.min(100, Math.round(alloc.utilizationPercent || 0));
+              const barColor =
+                alloc.status === 'overrun'
+                  ? 'bg-rose-500'
+                  : alloc.status === 'warning'
+                  ? 'bg-amber-500'
+                  : 'bg-blue-600';
 
-            return (
-              <div key={alloc.category} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-navy-900 dark:text-white">{alloc.category}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 uppercase">
-                      {alloc.type}
+              return (
+                <div key={alloc.category} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-navy-900 dark:text-white">{alloc.category}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 uppercase">
+                        {alloc.type}
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold text-navy-900 dark:text-white">
+                      Spent {formatInr(alloc.spentAmount, !balancesVisible)} of {formatInr(alloc.plannedAmount, !balancesVisible)} ({alloc.utilizationPercent}%)
+                    </div>
+                  </div>
+
+                  <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <span>{alloc.recommendation}</span>
+                    <span className="font-medium">
+                      Remaining: {formatInr(Math.max(0, alloc.remainingAmount), !balancesVisible)}
                     </span>
                   </div>
-                  <div className="text-xs font-semibold text-navy-900 dark:text-white">
-                    Spent {formatInr(alloc.spentAmount, !balancesVisible)} of {formatInr(alloc.plannedAmount, !balancesVisible)} ({alloc.utilizationPercent}%)
-                  </div>
                 </div>
-
-                <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 dark:text-slate-300">
-                  <span>{alloc.recommendation}</span>
-                  <span className="font-medium">
-                    Remaining: {formatInr(Math.max(0, alloc.remainingAmount), !balancesVisible)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Financial Recovery Recommendations (Workflow F) */}

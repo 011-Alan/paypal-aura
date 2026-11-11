@@ -1,0 +1,103 @@
+{
+  "$schema": "https://apimatic.io/schemas/context-plugin/v1.json",
+  "pluginVersion": "1.0.0",
+  "name": "aura-apimatic-context-plugin",
+  "displayName": "AURA Financial Workspace & Developer Platform Plugin",
+  "description": "APIMatic Context Plugin for autonomous coding agents, LLMs, and engineers building integrations on the AURA Intelligent Financial Platform.",
+  "platform": {
+    "name": "AURA",
+    "version": "2.4.0",
+    "baseUrl": "https://aura-fintech.onrender.com",
+    "localUrl": "http://localhost:5000",
+    "openApiSpec": "server/docs/openapi.json"
+  },
+  "authentication": {
+    "methods": [
+      {
+        "type": "bearer_jwt",
+        "header": "Authorization: Bearer <token>",
+        "obtainedVia": "POST /api/auth/login or POST /api/auth/demo-login",
+        "description": "User or merchant authenticated session token"
+      },
+      {
+        "type": "api_key",
+        "header": "X-AURA-API-KEY: <key>",
+        "description": "Backend-to-backend sandbox and server-side integration key"
+      }
+    ]
+  },
+  "rolesAndEntitlements": {
+    "personalUser": {
+      "allowedEndpoints": [
+        "/api/auth/*",
+        "/api/accounts/*",
+        "/api/transactions/*",
+        "/api/plans/*",
+        "/api/goals/*",
+        "/api/mandates/*",
+        "/api/ecommerce/products",
+        "/api/ecommerce/orders",
+        "/api/grid/views",
+        "/api/grid/selection-context",
+        "/api/ai/ask",
+        "/api/conversations/*"
+      ],
+      "forbiddenEndpoints": [
+        "/api/ecommerce/merchant/*"
+      ]
+    },
+    "verifiedMerchant": {
+      "description": "Exclusively available to AURA accounts whose connected PayPal account has been verified as Business",
+      "allowedEndpoints": [
+        "/api/ecommerce/merchant/overview",
+        "/api/ecommerce/merchant/orders",
+        "/api/ecommerce/merchant/orders/:id/fulfillment",
+        "/api/ecommerce/merchant/received-payments"
+      ]
+    }
+  },
+  "capabilities": {
+    "agGridWorkspace": {
+      "supportedGrids": [
+        "transactions-grid",
+        "commitments-grid",
+        "merchant-orders-grid",
+        "budget-allocations-grid"
+      ],
+      "features": [
+        "Server-side persistent views (filterModel, sortModel, columnVisibility)",
+        "Authoritative ground-truth selection context (multi-row selection analysis)",
+        "Ask AURA natural-language grid manipulation (apply_filters, clear_filters, apply_sorting, undo)"
+      ]
+    },
+    "apimaticContractGuard": {
+      "validatorClass": "ApimaticPayPalContractValidator",
+      "enforcedStandards": [
+        "PayPal Orders v2 (/v2/checkout/orders) strictly enforced over deprecated v1",
+        "Idempotency PayPal-Request-Id header required on mutating financial transactions",
+        "Strict decimal currency formatting with ISO-4217 validation"
+      ]
+    }
+  },
+  "recommendedAgentWorkflows": [
+    {
+      "name": "analyze_selected_financial_records",
+      "steps": [
+        "User selects rows in transactions-grid or merchant-orders-grid",
+        "Frontend calls POST /api/grid/selection-context with selected row IDs",
+        "Backend validates record ownership and computes statistical summary",
+        "Prompt sent to POST /api/ai/ask with verified selection context",
+        "AI model responds with ground-truth financial insights without hallucination"
+      ]
+    },
+    {
+      "name": "merchant_order_fulfillment",
+      "steps": [
+        "Check merchantAccessEnabled on active user profile",
+        "Fetch pending orders via GET /api/ecommerce/merchant/orders",
+        "Update fulfillment status via PUT /api/ecommerce/merchant/orders/{id}/fulfillment",
+        "Optionally sync carrier tracking number to customer tracking view"
+      ]
+    }
+  ]
+}

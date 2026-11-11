@@ -27,6 +27,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Store,
+  Code2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
@@ -47,6 +48,8 @@ export type NavTabId =
   | 'payments'
   | 'settings'
   | 'demo-lab'
+  | 'developer'
+  | 'dev-portal'
   // Backward compatibility aliases
   | 'home'
   | 'my-money'
@@ -101,6 +104,7 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
     group: 'Account',
     items: [
       { id: 'settings', label: 'Settings', icon: Settings, tooltip: 'Financial profile, security PIN, and preferences' },
+      { id: 'developer', label: 'Developer Portal', icon: Code2, tooltip: 'OpenAPI 3.0.3 spec, SDKs, and API Playground', badge: 'API' },
     ],
   },
 ];
@@ -259,6 +263,9 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         return 'Payments';
       case 'settings':
         return 'Settings';
+      case 'developer':
+      case 'dev-portal':
+        return 'Developer Platform & APIMatic Portal';
       case 'demo-lab':
       case 'automations':
         return 'Demo Lab — Technical Demonstration';

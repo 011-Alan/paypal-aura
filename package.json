@@ -11,7 +11,10 @@
     "build": "npm run build:server && npm run build:client",
     "start": "npm --prefix server run start",
     "test": "npm --prefix server run test",
-    "seed": "npm --prefix server run seed"
+    "seed": "npm --prefix server run seed",
+    "openapi:validate": "npm --prefix server run openapi:validate",
+    "sdk:generate": "npm --prefix server run sdk:generate",
+    "test:contracts": "npm --prefix server run test:contracts"
   },
   "keywords": [
     "aura",

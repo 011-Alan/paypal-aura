@@ -25,6 +25,7 @@ import {
   ArrowRight,
   CheckCheck,
   Minimize2,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAskAura } from '../context/AskAuraContext';
@@ -70,6 +71,8 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
     toggleSpeechRecognition,
     speakText,
     popOutToFloatingChat,
+    attachedSelectionContext,
+    clearSelectionContext,
   } = useAskAura();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -584,6 +587,22 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
 
         {/* Bottom Input Workspace with Voice Support */}
         <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          {attachedSelectionContext && (
+            <div className="mb-2.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-medium truncate">
+                <Sparkles className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span className="truncate">Attached Selection: {attachedSelectionContext.previewText || `${attachedSelectionContext.count} selected ${attachedSelectionContext.source}`}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearSelectionContext}
+                className="p-1 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500 dark:text-blue-400"
+                title="Remove attached selection"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();

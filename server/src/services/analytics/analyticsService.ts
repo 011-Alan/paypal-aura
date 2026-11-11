@@ -31,8 +31,10 @@ export class PythonAnalyticsService {
         const timeout = setTimeout(() => {
           child.kill();
           logger.warn('PythonAnalytics', 'Python analytics process timed out; using deterministic fallback');
-          resolve(this.fallbackCompute(payload));
-        }, 12000);
+          const fallback = this.fallbackCompute(payload);
+          this.cache.set(cacheKey, { timestamp: Date.now(), data: fallback });
+          resolve(fallback);
+        }, 1500);
 
         child.stdout.on('data', (chunk) => {
           stdoutData += chunk.toString();

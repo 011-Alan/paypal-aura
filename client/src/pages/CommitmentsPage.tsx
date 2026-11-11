@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { ColDef } from 'ag-grid-community';
 import { Repeat, CheckCircle2, AlertCircle, Plus, Calendar, Clock, Layers, ListOrdered, ShieldCheck } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { FinancialSchedulerView } from '../components/FinancialSchedulerView';
+import { AuraDataGrid } from '../components/grid/AuraDataGrid';
 
 export const CommitmentsPage: React.FC = () => {
   const { balancesVisible, formatMoney } = useAuth();
@@ -79,6 +81,113 @@ export const CommitmentsPage: React.FC = () => {
     const today = new Date().getDate();
     return upcomingCommitments.filter((m) => m.dueDayOfMonth < today && m.status === 'inferred').length;
   }, [upcomingCommitments]);
+
+  const formattedMandates = useMemo(() => {
+    return mandates.map((m) => ({
+      ...m,
+      id: m._id || m.id,
+    }));
+  }, [mandates]);
+
+  const columnDefs: ColDef[] = useMemo(() => [
+    {
+      field: 'dueDayOfMonth',
+      headerName: 'Due Day',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 140,
+      valueFormatter: (params) => `${params.value}th of month`,
+    },
+    {
+      field: 'title',
+      headerName: 'Title',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      flex: 1.2,
+      minWidth: 150,
+      cellRenderer: (params: any) => (
+        <span className="font-bold text-navy-900 dark:text-white">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'merchant',
+      headerName: 'Payee / Merchant',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      flex: 1,
+      minWidth: 140,
+      cellRenderer: (params: any) => (
+        <span className="text-slate-600 dark:text-slate-300">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'category',
+      headerName: 'Category',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 140,
+      cellRenderer: (params: any) => (
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          {params.value}
+        </span>
+      ),
+    },
+    {
+      field: 'amount',
+      headerName: 'Amount',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      width: 130,
+      cellRenderer: (params: any) => (
+        <span className="font-bold text-navy-900 dark:text-white">
+          {!balancesVisible ? '••••••' : formatMoney(params.value)}
+        </span>
+      ),
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      filter: 'agTextColumnFilter',
+      sortable: true,
+      width: 130,
+      cellRenderer: (params: any) => {
+        const isConfirmed = params.value === 'confirmed';
+        return isConfirmed ? (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="w-3 h-3" /> Confirmed
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+            <AlertCircle className="w-3 h-3" /> Inferred
+          </span>
+        );
+      },
+    },
+    {
+      headerName: 'Action',
+      width: 110,
+      sortable: false,
+      filter: false,
+      cellRenderer: (params: any) => {
+        if (params.data?.status === 'inferred') {
+          return (
+            <button
+              type="button"
+              onClick={() => handleConfirmMandate(params.data._id || params.data.id)}
+              className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition"
+            >
+              Confirm
+            </button>
+          );
+        }
+        return <span className="text-slate-400 text-xs">--</span>;
+      },
+    },
+  ], [balancesVisible, formatMoney]);
 
   return (
     <div className="space-y-6">
@@ -277,67 +386,20 @@ export const CommitmentsPage: React.FC = () => {
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Scheduled Commitments</h3>
-            <span className="text-xs text-slate-400">{mandates.length} Total</span>
+            <div>
+              <h3 className="text-sm font-bold text-navy-900 dark:text-white">Scheduled Commitments</h3>
+              <p className="text-xs text-slate-400">Explore, sort, filter and analyze your recurring commitments</p>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">{mandates.length} Total</span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                  <th className="py-2.5 px-3">Due Day</th>
-                  <th className="py-2.5 px-3">Title &amp; Payee</th>
-                  <th className="py-2.5 px-3">Category</th>
-                  <th className="py-2.5 px-3">Amount</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {mandates.map((m) => (
-                  <tr key={m._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                    <td className="py-3 px-3 font-semibold text-slate-500 whitespace-nowrap">
-                      {m.dueDayOfMonth}th of month
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-navy-900 dark:text-white">{m.title}</div>
-                      <div className="text-[11px] text-slate-400">{m.merchant}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        {m.category}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-bold text-navy-900 dark:text-white whitespace-nowrap">
-                      {!balancesVisible ? '••••••' : formatMoney(m.amount)}
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      {m.status === 'confirmed' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                          <CheckCircle2 className="w-3 h-3" /> Confirmed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                          <AlertCircle className="w-3 h-3" /> Inferred
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      {m.status === 'inferred' && (
-                        <button
-                          type="button"
-                          onClick={() => handleConfirmMandate(m._id)}
-                          className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition"
-                        >
-                          Confirm
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AuraDataGrid
+            gridId="commitments-grid"
+            source="commitments"
+            rowData={formattedMandates}
+            columnDefs={columnDefs}
+            height="460px"
+          />
         </div>
       )}
     </div>
