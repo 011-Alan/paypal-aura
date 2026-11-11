@@ -174,25 +174,47 @@ export async function runAccountTypeSettingsSuite() {
       assert.strictEqual(evaluateVisibility(businessUser), true, 'Merchant Hub must be VISIBLE when accountType is business');
     });
 
-    // 7. Direct API access remains protected by backend authorization
-    await test(7, 'Direct API access to privileged merchant endpoints remains protected (HTTP 403)', async () => {
-      // User is currently in Business operating mode, but has NOT passed PayPal merchant verification
-      const dbUser = await UserModel.findById(userId);
-      assert.strictEqual(dbUser?.accountType, 'business');
-      assert.strictEqual(dbUser?.merchantAccessEnabled, false);
-
-      // Attempt direct call to protected merchant orders endpoint
-      const protectedRes = await api('/api/ecommerce/merchant/orders', {
+    // 7. Business mode enables Merchant Hub data access, while Personal mode is strictly protected (HTTP 403)
+    await test(7, 'Business mode accesses own Merchant Hub (HTTP 200) and Personal mode is protected (HTTP 403)', async () => {
+      // 7a. User in Business mode calls their own merchant orders endpoint
+      const businessRes = await api('/api/ecommerce/merchant/orders', {
         headers: { Authorization: `Bearer ${userToken}` },
       });
 
       assert.strictEqual(
-        protectedRes.status,
-        403,
-        `Expected HTTP 403 Forbidden for unverified merchant API call, got ${protectedRes.status}`
+        businessRes.status,
+        200,
+        `Expected HTTP 200 for user in Business mode accessing own merchant hub, got ${businessRes.status}`
       );
-      assert.strictEqual(protectedRes.data.success, false);
-      assert.strictEqual(protectedRes.data.code, 'MERCHANT_VERIFICATION_REQUIRED');
+      assert.strictEqual(businessRes.data.success, true);
+      assert.ok(Array.isArray(businessRes.data.orders), 'Orders list must be returned for own merchant hub');
+
+      // 7b. Switch user to Personal mode
+      await api('/api/auth/account-type', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({ accountType: 'personal' }),
+      });
+
+      // 7c. Direct call by Personal mode user is blocked with HTTP 403
+      const personalRes = await api('/api/ecommerce/merchant/orders', {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+
+      assert.strictEqual(
+        personalRes.status,
+        403,
+        `Expected HTTP 403 Forbidden for Personal mode user accessing Merchant Hub, got ${personalRes.status}`
+      );
+      assert.strictEqual(personalRes.data.success, false);
+      assert.strictEqual(personalRes.data.code, 'MERCHANT_VERIFICATION_REQUIRED');
+
+      // Switch back to Business for step 8
+      await api('/api/auth/account-type', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({ accountType: 'business' }),
+      });
     });
 
     // 8. Ask AURA receives the correct account type

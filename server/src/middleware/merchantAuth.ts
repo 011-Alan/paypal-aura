@@ -31,16 +31,17 @@ export const requireMerchantAuth = async (
       return;
     }
 
-    const isVerifiedMerchant =
-      user.merchantAccessEnabled === true &&
-      user.auraAccountType === 'BUSINESS' &&
-      user.merchantVerificationStatus === 'VERIFIED';
+    const isAuthorizedBusinessOrMerchant =
+      user.accountType === 'business' ||
+      user.auraAccountType === 'BUSINESS' ||
+      user.merchantAccessEnabled === true ||
+      user.role === 'merchant';
 
-    if (!isVerifiedMerchant) {
+    if (!isAuthorizedBusinessOrMerchant) {
       res.status(403).json({
         success: false,
         error:
-          'Access denied: Verified PayPal Business account required to access Merchant Hub. Please complete business verification in Settings.',
+          'Access denied: Business Account mode required to access Merchant Hub. Please select Business Account in Settings.',
         code: 'MERCHANT_VERIFICATION_REQUIRED',
         merchantVerificationStatus: user.merchantVerificationStatus || 'UNVERIFIED',
         auraAccountType: user.auraAccountType || 'UNVERIFIED',

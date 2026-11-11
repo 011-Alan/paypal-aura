@@ -39,9 +39,10 @@ export const SmartPurchasePage: React.FC<{
 }> = ({ onNavigate, initialTab }) => {
   const { balancesVisible, user, switchAccountType, switchDemoPersona } = useAuth();
   const isMerchantAuthorized = Boolean(
-    user?.merchantAccessEnabled === true &&
-    user?.auraAccountType === 'BUSINESS' &&
-    user?.merchantVerificationStatus === 'VERIFIED'
+    user?.accountType === 'business' ||
+    user?.auraAccountType === 'BUSINESS' ||
+    user?.merchantAccessEnabled === true ||
+    user?.role === 'merchant'
   );
 
   // Navigation tab state: 'storefront' | 'my-purchases' | 'merchant-hub'

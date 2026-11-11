@@ -13,7 +13,6 @@ import { apiRequest, formatDateShort } from '../lib/api';
 import { NavTabId } from '../components/AppShell';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
-import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
 import { PayPalSandboxBusinessReporting } from '../components/PayPalSandboxBusinessReporting';
 import { FEATURE_FLAGS } from '../config/features';
 
@@ -376,30 +375,8 @@ export const HomePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ on
         </div>
       </div>
 
-      {/* 4. Section: Connected PayPal Account (Personal) */}
-      <ConnectedPayPalAccount />
-
       {/* Optional Merchant Reporting (toggled via FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION) */}
       {FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION && <PayPalSandboxBusinessReporting />}
-
-      {/* Ask AURA Dedicated Assistant Banner */}
-      <div className="bg-gradient-to-r from-blue-50/80 via-white to-indigo-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40 rounded-3xl p-5 border border-blue-100 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Ask AURA Financial Companion</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Ask questions, plan budgets, or schedule reminders naturally in your dedicated assistant chat.</p>
-          </div>
-        </div>
-        <button
-          onClick={() => onNavigate('ask-aura')}
-          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center justify-center gap-1.5 shrink-0"
-        >
-          Open Assistant <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
     </div>
   );
 };
