@@ -113,6 +113,14 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
     pinHash: alexPinHash,
     role: 'family_admin',
     accountType: 'personal',
+    auraAccountType: 'PERSONAL',
+    paypalAccountType: 'PERSONAL',
+    merchantVerificationStatus: 'NOT_STARTED',
+    merchantAccessEnabled: false,
+    merchantVerifiedAt: null,
+    paypalMerchantId: null,
+    verificationMethod: null,
+    verificationUpdatedAt: new Date(),
     currency: 'USD',
     monthlyIncome: 7500,
     familyGroupId,
@@ -140,6 +148,14 @@ export async function ensureDemoUserAlexSeeded(forceReset = false) {
     pinHash: priyaPinHash,
     role: 'family_member',
     accountType: 'personal',
+    auraAccountType: 'PERSONAL',
+    paypalAccountType: 'PERSONAL',
+    merchantVerificationStatus: 'NOT_STARTED',
+    merchantAccessEnabled: false,
+    merchantVerifiedAt: null,
+    paypalMerchantId: null,
+    verificationMethod: null,
+    verificationUpdatedAt: new Date(),
     currency: 'USD',
     monthlyIncome: 6200,
     familyGroupId,
@@ -755,6 +771,14 @@ export async function ensureDemoUserMayaSeeded(forceReset = false) {
     pinHash,
     role: 'user',
     accountType: 'personal',
+    auraAccountType: 'PERSONAL',
+    paypalAccountType: 'PERSONAL',
+    merchantVerificationStatus: 'NOT_STARTED',
+    merchantAccessEnabled: false,
+    merchantVerifiedAt: null,
+    paypalMerchantId: null,
+    verificationMethod: null,
+    verificationUpdatedAt: new Date(),
     currency: 'USD',
     monthlyIncome: 4200,
     familyGroupId: 'aura-family-patel',
@@ -911,9 +935,34 @@ export const DEMO_BRUCE_CREDENTIALS = {
 export async function ensureDemoMerchantBruceSeeded(forceReset = false) {
   const existingBruce = await UserModel.findOne({ email: DEMO_BRUCE_CREDENTIALS.email });
   if (existingBruce && !forceReset) {
+    let changed = false;
     if (existingBruce.accountType !== 'business' || existingBruce.role !== 'merchant') {
       existingBruce.accountType = 'business';
       existingBruce.role = 'merchant';
+      changed = true;
+    }
+    if (
+      existingBruce.auraAccountType !== 'BUSINESS' ||
+      existingBruce.paypalAccountType !== 'BUSINESS' ||
+      existingBruce.merchantVerificationStatus !== 'VERIFIED' ||
+      !existingBruce.merchantAccessEnabled
+    ) {
+      existingBruce.auraAccountType = 'BUSINESS';
+      existingBruce.paypalAccountType = 'BUSINESS';
+      existingBruce.merchantVerificationStatus = 'VERIFIED';
+      existingBruce.merchantAccessEnabled = true;
+      existingBruce.merchantVerifiedAt = existingBruce.merchantVerifiedAt || new Date();
+      existingBruce.paypalMerchantId = 'MERCHANT-BRUCE-WAYNE';
+      existingBruce.verificationMethod = 'paypal_sandbox_verified_business_identity';
+      existingBruce.verificationUpdatedAt = new Date();
+      existingBruce.paypalAccountLinked = true;
+      existingBruce.paypalIdentityVerified = true;
+      existingBruce.paypalEmail = DEMO_BRUCE_CREDENTIALS.email;
+      existingBruce.paypalUserId = existingBruce.paypalUserId || 'paypal-sub-bruce-wayne-biz';
+      existingBruce.paypalPayerId = existingBruce.paypalPayerId || 'PAYER-ID-BRUCE-BIZ';
+      changed = true;
+    }
+    if (changed) {
       await existingBruce.save();
     }
     return {
@@ -939,6 +988,19 @@ export async function ensureDemoMerchantBruceSeeded(forceReset = false) {
     pinHash,
     role: 'merchant',
     accountType: 'business',
+    auraAccountType: 'BUSINESS',
+    paypalAccountType: 'BUSINESS',
+    merchantVerificationStatus: 'VERIFIED',
+    merchantAccessEnabled: true,
+    merchantVerifiedAt: new Date(),
+    paypalMerchantId: 'MERCHANT-BRUCE-WAYNE',
+    verificationMethod: 'paypal_sandbox_verified_business_identity',
+    verificationUpdatedAt: new Date(),
+    paypalAccountLinked: true,
+    paypalIdentityVerified: true,
+    paypalEmail: DEMO_BRUCE_CREDENTIALS.email,
+    paypalUserId: 'paypal-sub-bruce-wayne-biz',
+    paypalPayerId: 'PAYER-ID-BRUCE-BIZ',
     currency: 'USD',
     monthlyIncome: 250000,
     spendingPreferences: {

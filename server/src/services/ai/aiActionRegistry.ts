@@ -114,18 +114,23 @@ export class AiActionRegistry {
         const matched = validRoutes[rawTarget] || { tab: 'overview', title: 'Overview' };
 
         // Permission check for merchant-only pages
-        if (matched.merchantOnly && ctx.user.accountType !== 'business' && ctx.user.role !== 'merchant') {
+        const isMerchantVerified =
+          ctx.user.merchantAccessEnabled === true &&
+          ctx.user.auraAccountType === 'BUSINESS' &&
+          ctx.user.merchantVerificationStatus === 'VERIFIED';
+
+        if (matched.merchantOnly && !isMerchantVerified) {
           return {
             success: false,
             data: { error: 'UNAUTHORIZED_MERCHANT_ACCESS' },
             explanation:
-              'Merchant Hub is restricted to verified business accounts. Your account is currently set to personal finance mode.',
+              'Merchant Hub is restricted to verified PayPal Business accounts. Your account does not have merchant entitlement. Please complete business verification in Settings.',
             toolAction: {
               type: 'clarification_needed',
               title: 'Merchant Access Required',
               status: 'informational',
             },
-            suggestedNextPrompts: ['Switch to Business Profile in Settings', 'Open Accounts', 'Take me to Overview'],
+            suggestedNextPrompts: ['Check Business Eligibility in Settings', 'Open Accounts', 'Take me to Overview'],
           };
         }
 
@@ -1392,18 +1397,23 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
       description: 'Analyze merchant business cash flow, revenue, margins, and operating metrics. Requires business authorization.',
       execute: async (_args, ctx) => {
         // Enforce Merchant Hub security boundaries
-        if (ctx.user.accountType !== 'business' && ctx.user.role !== 'merchant') {
+        const isMerchantVerified =
+          ctx.user.merchantAccessEnabled === true &&
+          ctx.user.auraAccountType === 'BUSINESS' &&
+          ctx.user.merchantVerificationStatus === 'VERIFIED';
+
+        if (!isMerchantVerified) {
           return {
             success: false,
             data: { error: 'UNAUTHORIZED_MERCHANT_ACCESS' },
             explanation:
-              'Business financial analytics are exclusively available to verified business and merchant accounts. Your account is currently in Personal Finance mode.',
+              'Business financial analytics are exclusively available to verified PayPal Business accounts. Your account does not have merchant entitlement. Please complete business verification in Settings.',
             toolAction: {
               type: 'clarification_needed',
               title: 'Business Account Required',
               status: 'informational',
             },
-            suggestedNextPrompts: ['Switch to Business Profile in Settings', 'Show my personal financial summary'],
+            suggestedNextPrompts: ['Check Business Eligibility in Settings', 'Show my personal financial summary'],
           };
         }
 

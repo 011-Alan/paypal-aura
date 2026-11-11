@@ -11,6 +11,7 @@ import { apiRouter } from './routes/apiRoutes';
 import { renderWorkerManager } from './workers/backgroundWorkflows';
 import { logPayPalStartupDiagnostics } from './integrations/paypal/validator';
 import { durableSchedulerService } from './services/scheduling/durableSchedulerService';
+import { merchantVerificationService } from './services/auth/merchantVerificationService';
 
 export const app = express();
 
@@ -76,6 +77,11 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 export async function startServer() {
   await connectDatabase();
   logPayPalStartupDiagnostics();
+
+  // Safe, idempotent account classification & merchant entitlement migration
+  merchantVerificationService.migrateLegacyAccounts().catch((err) => {
+    logger.warn('Server', 'Account classification migration warning', { error: err?.message });
+  });
 
   const server = app.listen(env.PORT, () => {
     logger.info('Server', `PROJECT AURA Backend API listening on http://localhost:${env.PORT}`);

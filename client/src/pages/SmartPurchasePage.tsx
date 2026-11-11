@@ -33,12 +33,23 @@ import {
   EcommerceCartItem,
 } from '../components/ecommerce/EcommerceTypes';
 
-export const SmartPurchasePage: React.FC<{ onNavigate: (tab: NavTabId) => void }> = ({ onNavigate }) => {
+export const SmartPurchasePage: React.FC<{
+  onNavigate: (tab: NavTabId) => void;
+  initialTab?: 'storefront' | 'my-purchases' | 'merchant-hub';
+}> = ({ onNavigate, initialTab }) => {
   const { balancesVisible, user, switchAccountType, switchDemoPersona } = useAuth();
-  const isMerchantAuthorized = user?.accountType === 'business' || user?.role === 'merchant';
+  const isMerchantAuthorized = Boolean(
+    user?.merchantAccessEnabled === true &&
+    user?.auraAccountType === 'BUSINESS' &&
+    user?.merchantVerificationStatus === 'VERIFIED'
+  );
 
   // Navigation tab state: 'storefront' | 'my-purchases' | 'merchant-hub'
-  const [activeTab, setActiveTab] = useState<'storefront' | 'my-purchases' | 'merchant-hub'>('storefront');
+  const [activeTab, setActiveTab] = useState<'storefront' | 'my-purchases' | 'merchant-hub'>(() => {
+    if (initialTab === 'merchant-hub' && isMerchantAuthorized) return 'merchant-hub';
+    if (initialTab) return initialTab;
+    return 'storefront';
+  });
 
   // Ensure non-business accounts cannot remain in merchant hub
   useEffect(() => {

@@ -7,6 +7,14 @@ export interface UserProfile {
   email: string;
   role: string;
   accountType?: 'personal' | 'business';
+  auraAccountType?: 'PERSONAL' | 'BUSINESS' | 'UNVERIFIED';
+  paypalAccountType?: 'PERSONAL' | 'BUSINESS' | 'UNKNOWN';
+  merchantVerificationStatus?: 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'UNVERIFIED';
+  merchantAccessEnabled?: boolean;
+  merchantVerifiedAt?: string | null;
+  paypalMerchantId?: string | null;
+  verificationMethod?: string | null;
+  verificationUpdatedAt?: string | null;
   currency: string;
   preferredCurrency?: string;
   monthlyIncome: number;

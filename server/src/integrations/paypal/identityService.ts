@@ -6,6 +6,7 @@ import { logger } from '../../config/logger';
 import { UserModel, AccountModel, IUser } from '../../models';
 import { hashSecretArgon2id, signSessionToken, recordAuditLog } from '../../middleware/security';
 import { zapierIntegration } from '../zapier';
+import { merchantVerificationService } from '../../services/auth/merchantVerificationService';
 
 export interface PayPalUserInfo {
   user_id?: string;
@@ -1136,6 +1137,28 @@ export class PayPalIdentityService {
         if (parsedAddress && Object.values(parsedAddress).some(Boolean)) {
           existingUser.paypalAddress = parsedAddress;
         }
+
+        // Authoritative eligibility check
+        const eligibilityA = merchantVerificationService.evaluateAccountEligibility(existingUser, {
+          userInfo,
+          idTokenClaims,
+        });
+        existingUser.auraAccountType = eligibilityA.auraAccountType;
+        existingUser.paypalAccountType = eligibilityA.paypalAccountType;
+        existingUser.merchantVerificationStatus = eligibilityA.merchantVerificationStatus;
+        existingUser.merchantAccessEnabled = eligibilityA.merchantAccessEnabled;
+        existingUser.merchantVerifiedAt = eligibilityA.merchantVerifiedAt;
+        existingUser.paypalMerchantId = eligibilityA.paypalMerchantId;
+        existingUser.verificationMethod = eligibilityA.verificationMethod;
+        existingUser.verificationUpdatedAt = eligibilityA.verificationUpdatedAt;
+        if (eligibilityA.merchantAccessEnabled) {
+          existingUser.role = 'merchant';
+          existingUser.accountType = 'business';
+        } else if (existingUser.role === 'merchant') {
+          existingUser.role = 'family_admin';
+          existingUser.accountType = 'personal';
+        }
+
         await existingUser.save();
 
         await recordAuditLog({
@@ -1170,15 +1193,28 @@ export class PayPalIdentityService {
           if (tokens.expires_at) existingPayPalUser.paypalTokenExpiresAt = tokens.expires_at;
           if (grantedScopes) existingPayPalUser.paypalGrantedScopes = grantedScopes;
           existingPayPalUser.paypalLastSyncAt = new Date();
-          const isBusiness = Boolean(
-            (userInfo as any)?.account_type === 'BUSINESS' ||
-            (idTokenClaims as any)?.account_type === 'BUSINESS' ||
-            businessName ||
-            (paypalEmail && (paypalEmail.includes('business') || paypalEmail.includes('merchant')))
-          );
-          if (isBusiness || existingPayPalUser.role === 'user') {
-            existingPayPalUser.role = isBusiness ? 'merchant' : 'family_admin';
+
+          // Authoritative eligibility check
+          const eligibilityB = merchantVerificationService.evaluateAccountEligibility(existingPayPalUser, {
+            userInfo,
+            idTokenClaims,
+          });
+          existingPayPalUser.auraAccountType = eligibilityB.auraAccountType;
+          existingPayPalUser.paypalAccountType = eligibilityB.paypalAccountType;
+          existingPayPalUser.merchantVerificationStatus = eligibilityB.merchantVerificationStatus;
+          existingPayPalUser.merchantAccessEnabled = eligibilityB.merchantAccessEnabled;
+          existingPayPalUser.merchantVerifiedAt = eligibilityB.merchantVerifiedAt;
+          existingPayPalUser.paypalMerchantId = eligibilityB.paypalMerchantId;
+          existingPayPalUser.verificationMethod = eligibilityB.verificationMethod;
+          existingPayPalUser.verificationUpdatedAt = eligibilityB.verificationUpdatedAt;
+          if (eligibilityB.merchantAccessEnabled) {
+            existingPayPalUser.role = 'merchant';
+            existingPayPalUser.accountType = 'business';
+          } else if (existingPayPalUser.role === 'merchant') {
+            existingPayPalUser.role = 'family_admin';
+            existingPayPalUser.accountType = 'personal';
           }
+
           if (parsedAddress && Object.values(parsedAddress).some(Boolean)) {
             existingPayPalUser.paypalAddress = parsedAddress;
           }
@@ -1217,19 +1253,33 @@ export class PayPalIdentityService {
           const passwordHash = await hashSecretArgon2id(secureRandomPassword);
           const pinHash = await hashSecretArgon2id(secureRandomPin);
 
-          const isBusiness = Boolean(
-            (userInfo as any)?.account_type === 'BUSINESS' ||
-            (idTokenClaims as any)?.account_type === 'BUSINESS' ||
-            businessName ||
-            (paypalEmail && (paypalEmail.includes('business') || paypalEmail.includes('merchant')))
-          );
+          const tempUserDoc = {
+            paypalAccountLinked: true,
+            paypalUserId: paypalSubjectId,
+            paypalEmail,
+            email: paypalEmail || '',
+            paypalPayerId: payerId,
+          } as any;
+          const eligibilityD = merchantVerificationService.evaluateAccountEligibility(tempUserDoc, {
+            userInfo,
+            idTokenClaims,
+          });
 
           const newUser = await UserModel.create({
             name,
             email: paypalEmail || `paypal-${crypto.randomBytes(4).toString('hex')}@user.aura`,
             passwordHash,
             pinHash,
-            role: isBusiness ? 'merchant' : 'family_admin',
+            role: eligibilityD.merchantAccessEnabled ? 'merchant' : 'family_admin',
+            accountType: eligibilityD.merchantAccessEnabled ? 'business' : 'personal',
+            auraAccountType: eligibilityD.auraAccountType,
+            paypalAccountType: eligibilityD.paypalAccountType,
+            merchantVerificationStatus: eligibilityD.merchantVerificationStatus,
+            merchantAccessEnabled: eligibilityD.merchantAccessEnabled,
+            merchantVerifiedAt: eligibilityD.merchantVerifiedAt,
+            paypalMerchantId: eligibilityD.paypalMerchantId,
+            verificationMethod: eligibilityD.verificationMethod,
+            verificationUpdatedAt: eligibilityD.verificationUpdatedAt,
             currency: 'USD',
             monthlyIncome: 5000,
             familyGroupId: `aura-family-${Date.now()}`,

@@ -23,6 +23,10 @@ export interface IFinancialProfile {
   preferredCurrency: string;
 }
 
+export type AuraAccountType = 'PERSONAL' | 'BUSINESS' | 'UNVERIFIED';
+export type PayPalAccountType = 'PERSONAL' | 'BUSINESS' | 'UNKNOWN';
+export type MerchantVerificationStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'UNVERIFIED';
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -30,6 +34,15 @@ export interface IUser extends Document {
   pinHash: string;
   role: 'user' | 'family_admin' | 'family_member' | 'merchant' | 'admin';
   accountType?: 'personal' | 'business';
+  // Account Classification & Merchant Entitlement
+  auraAccountType?: AuraAccountType;
+  paypalAccountType?: PayPalAccountType;
+  merchantVerificationStatus?: MerchantVerificationStatus;
+  merchantAccessEnabled?: boolean;
+  merchantVerifiedAt?: Date | null;
+  paypalMerchantId?: string | null;
+  verificationMethod?: string | null;
+  verificationUpdatedAt?: Date | null;
   currency: string;
   monthlyIncome: number;
   financialProfile?: IFinancialProfile;
@@ -72,6 +85,27 @@ const UserSchema = new Schema<IUser>(
     pinHash: { type: String, required: true },
     role: { type: String, enum: ['user', 'family_admin', 'family_member', 'merchant', 'admin'], default: 'family_admin' },
     accountType: { type: String, enum: ['personal', 'business'], default: 'personal' },
+    // Account Classification & Merchant Entitlement
+    auraAccountType: {
+      type: String,
+      enum: ['PERSONAL', 'BUSINESS', 'UNVERIFIED'],
+      default: 'UNVERIFIED',
+    },
+    paypalAccountType: {
+      type: String,
+      enum: ['PERSONAL', 'BUSINESS', 'UNKNOWN'],
+      default: 'UNKNOWN',
+    },
+    merchantVerificationStatus: {
+      type: String,
+      enum: ['NOT_STARTED', 'PENDING', 'VERIFIED', 'REJECTED', 'UNVERIFIED'],
+      default: 'UNVERIFIED',
+    },
+    merchantAccessEnabled: { type: Boolean, default: false },
+    merchantVerifiedAt: { type: Date, default: null },
+    paypalMerchantId: { type: String, trim: true, default: null },
+    verificationMethod: { type: String, trim: true, default: null },
+    verificationUpdatedAt: { type: Date, default: null },
     currency: { type: String, default: 'USD' },
     monthlyIncome: { type: Number, default: 95000 },
     // PayPal Identity Fields

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Lock } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AskAuraProvider } from './context/AskAuraContext';
 import { AppShell, NavTabId } from './components/AppShell';
@@ -88,6 +89,28 @@ const MainRouter: React.FC = () => {
         {activeTab === 'goals' && <GoalsPage />}
         {(activeTab === 'smart-purchases' || activeTab === 'smart-purchase') && (
           <SmartPurchasePage onNavigate={handleNavigate} />
+        )}
+        {activeTab === 'merchant-hub' && (
+          user?.merchantAccessEnabled ? (
+            <SmartPurchasePage onNavigate={handleNavigate} initialTab="merchant-hub" />
+          ) : (
+            <div className="p-8 max-w-xl mx-auto my-12 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-navy-900 dark:text-white">Merchant Hub Access Denied</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Merchant Hub is restricted exclusively to AURA accounts with a verified PayPal Business classification.
+                Your account does not currently hold merchant entitlement.
+              </p>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition"
+              >
+                Check Business Eligibility in Settings
+              </button>
+            </div>
+          )
         )}
         {activeTab === 'family' && <FamilyPage />}
         {activeTab === 'payments' && <PaymentsPage />}

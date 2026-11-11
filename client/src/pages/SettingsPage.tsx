@@ -22,6 +22,7 @@ import { apiRequest, formatInr } from '../lib/api';
 import { Tooltip } from '../components/Tooltip';
 import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
 import { PayPalSandboxBusinessReporting } from '../components/PayPalSandboxBusinessReporting';
+import { AccountTypeVerificationSection } from '../components/AccountTypeVerificationSection';
 import { FEATURE_FLAGS } from '../config/features';
 
 export const SettingsPage: React.FC = () => {
@@ -613,11 +614,16 @@ export const SettingsPage: React.FC = () => {
         </form>
       </div>
 
-      {/* 4. PayPal Identity & Connected Account Section (Personal) */}
+      {/* 4. Account Type & Business Verification Section */}
+      <AccountTypeVerificationSection />
+
+      {/* 5. PayPal Identity & Connected Account Section (Personal) */}
       <ConnectedPayPalAccount />
 
-      {/* Optional Merchant Reporting (toggled via FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION) */}
-      {FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION && <PayPalSandboxBusinessReporting />}
+      {/* Optional Merchant Reporting (Exclusively for verified Business merchants) */}
+      {FEATURE_FLAGS.ENABLE_MERCHANT_REPORTING_SECTION && user?.merchantAccessEnabled && (
+        <PayPalSandboxBusinessReporting />
+      )}
 
       {/* 5. Session Sign Out Card (Prominent & Clear) */}
       <div className="bg-rose-50/60 dark:bg-rose-950/40 rounded-3xl p-6 border border-rose-200 dark:border-rose-900/60 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors">

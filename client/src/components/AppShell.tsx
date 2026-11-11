@@ -26,6 +26,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, formatInr } from '../lib/api';
@@ -41,6 +42,7 @@ export type NavTabId =
   | 'calendar'
   | 'goals'
   | 'smart-purchases'
+  | 'merchant-hub'
   | 'family'
   | 'payments'
   | 'settings'
@@ -59,6 +61,7 @@ export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   tooltip?: string;
   badge?: string;
+  merchantOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -91,6 +94,7 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
       { id: 'calendar', label: 'Calendar', icon: CalendarDays, tooltip: 'Financial calendar with scheduled bill reminders' },
       { id: 'family', label: 'Family Finance', icon: Users, tooltip: 'Shared household budgets with privacy boundaries' },
       { id: 'smart-purchases', label: 'AURA E-Commerce', icon: ShoppingBag, tooltip: 'AURA E-Commerce Storefront, Cart, Checkout & Affordability' },
+      { id: 'merchant-hub', label: 'Merchant Hub', icon: Store, tooltip: 'Store orders, fulfilment, and verified merchant settlements', merchantOnly: true },
     ],
   },
   {
@@ -265,6 +269,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
   const isTabActive = (itemId: NavTabId): boolean => {
     if (activeTab === itemId) return true;
+    if (itemId === 'merchant-hub' && activeTab === 'merchant-hub') return true;
     if (itemId === 'overview' && activeTab === 'home') return true;
     if (itemId === 'accounts' && activeTab === 'my-money') return true;
     if (itemId === 'transactions' && activeTab === 'spending') return true;
@@ -273,6 +278,12 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
     if (itemId === 'demo-lab' && activeTab === 'automations') return true;
     return false;
   };
+
+  const isMerchantAuthorized = Boolean(
+    user?.merchantAccessEnabled === true &&
+    user?.auraAccountType === 'BUSINESS' &&
+    user?.merchantVerificationStatus === 'VERIFIED'
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex text-slate-800 dark:text-slate-100 antialiased font-sans">
@@ -327,45 +338,53 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           <>
             {/* Grouped Navigation List */}
             <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
-              {NAVIGATION_GROUPS.map((group) => (
-                <div key={group.group}>
-                  <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    {group.group}
-                  </div>
-                  <div className="space-y-1">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = isTabActive(item.id);
+              {NAVIGATION_GROUPS.map((group) => {
+                const visibleItems = group.items.filter((item) => {
+                  if (item.merchantOnly && !isMerchantAuthorized) return false;
+                  return true;
+                });
+                if (visibleItems.length === 0) return null;
 
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => onSelectTab(item.id)}
-                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                            active
-                              ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 truncate">
-                            <Icon
-                              className={`w-4 h-4 shrink-0 ${
-                                active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
-                              }`}
-                            />
-                            <span className="truncate">{item.label}</span>
-                          </div>
-                          {item.badge && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
-                              {item.badge}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                return (
+                  <div key={group.group}>
+                    <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {group.group}
+                    </div>
+                    <div className="space-y-1">
+                      {visibleItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = isTabActive(item.id);
+
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => onSelectTab(item.id)}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                              active
+                                ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border border-blue-100 dark:border-blue-700'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 truncate">
+                              <Icon
+                                className={`w-4 h-4 shrink-0 ${
+                                  active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                                }`}
+                              />
+                              <span className="truncate">{item.label}</span>
+                            </div>
+                            {item.badge && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Dedicated Demo Lab Navigation Item */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -597,47 +616,55 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
               {/* Navigation Items */}
               <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                {NAVIGATION_GROUPS.map((group) => (
-                  <div key={group.group}>
-                    <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                      {group.group}
+                {NAVIGATION_GROUPS.map((group) => {
+                  const visibleItems = group.items.filter((item) => {
+                    if (item.merchantOnly && !isMerchantAuthorized) return false;
+                    return true;
+                  });
+                  if (visibleItems.length === 0) return null;
+
+                  return (
+                    <div key={group.group}>
+                      <div className="px-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        {group.group}
+                      </div>
+                      <div className="space-y-1">
+                        {visibleItems.map((item) => {
+                          const Icon = item.icon;
+                          const active = isTabActive(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                onSelectTab(item.id);
+                                setMobileMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                                active
+                                  ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-100 dark:border-blue-900'
+                                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Icon
+                                  className={`w-4 h-4 ${
+                                    active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                                  }`}
+                                />
+                                <span>{item.label}</span>
+                              </div>
+                              {item.badge && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {group.items.map((item) => {
-                        const Icon = item.icon;
-                        const active = isTabActive(item.id);
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => {
-                              onSelectTab(item.id);
-                              setMobileMenuOpen(false);
-                            }}
-                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
-                              active
-                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-100 dark:border-blue-900'
-                                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Icon
-                                className={`w-4 h-4 ${
-                                  active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
-                                }`}
-                              />
-                              <span>{item.label}</span>
-                            </div>
-                            {item.badge && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                                {item.badge}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                   <button

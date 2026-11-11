@@ -58,6 +58,8 @@ import { elasticIntegration } from '../integrations/elastic';
 import { kernelIntegration } from '../integrations/kernel';
 import { paypalIntegration } from '../integrations/paypal';
 import { paypalIdentityService } from '../integrations/paypal/identityService';
+import { requireMerchantAuth } from '../middleware/merchantAuth';
+import { merchantVerificationService } from '../services/auth/merchantVerificationService';
 import { paypalProfileService } from '../integrations/paypal/paypalProfileService';
 import { paypalBalanceService } from '../integrations/paypal/paypalBalanceService';
 import { paypalTransactionService } from '../integrations/paypal/paypalTransactionService';
@@ -108,6 +110,15 @@ function sanitizeUser(u: any) {
     name: u.name,
     email: u.email,
     role: u.role,
+    accountType: u.accountType || (u.merchantAccessEnabled ? 'business' : 'personal'),
+    auraAccountType: u.auraAccountType || 'UNVERIFIED',
+    paypalAccountType: u.paypalAccountType || 'UNKNOWN',
+    merchantVerificationStatus: u.merchantVerificationStatus || 'UNVERIFIED',
+    merchantAccessEnabled: Boolean(u.merchantAccessEnabled),
+    merchantVerifiedAt: u.merchantVerifiedAt || null,
+    paypalMerchantId: u.paypalMerchantId || null,
+    verificationMethod: u.verificationMethod || null,
+    verificationUpdatedAt: u.verificationUpdatedAt || null,
     currency: normCurrency,
     preferredCurrency: normCurrency,
     monthlyIncome: u.monthlyIncome,
@@ -477,9 +488,32 @@ apiRouter.post('/auth/account-type', requireAuth, async (req: AuthenticatedReque
     const user = await UserModel.findById(req.userId);
     if (!user) return res.status(404).json({ success: false, error: 'User not found.' });
 
-    user.accountType = accountType;
     if (accountType === 'business') {
+      // MANDATORY VERIFICATION: Never trust self-declared role/accountType values
+      const eligibility = merchantVerificationService.evaluateAccountEligibility(user);
+      if (!eligibility.merchantAccessEnabled) {
+        user.auraAccountType = 'UNVERIFIED';
+        user.merchantVerificationStatus = eligibility.merchantVerificationStatus;
+        user.merchantAccessEnabled = false;
+        user.accountType = 'personal';
+        await user.save();
+        return res.status(403).json({
+          success: false,
+          error:
+            'Self-declaration prohibited: A verified PayPal Business account is required to enable business merchant status. Please complete business verification in Settings.',
+          code: 'BUSINESS_VERIFICATION_REQUIRED',
+          eligibility,
+          user: sanitizeUser(user),
+        });
+      }
+
+      user.auraAccountType = 'BUSINESS';
+      user.paypalAccountType = 'BUSINESS';
+      user.merchantVerificationStatus = 'VERIFIED';
+      user.merchantAccessEnabled = true;
+      user.accountType = 'business';
       user.role = 'merchant';
+
       const existingAccount = await AccountModel.findOne({ userId: user._id, name: /Merchant/i });
       if (!existingAccount) {
         await AccountModel.create({
@@ -494,8 +528,14 @@ apiRouter.post('/auth/account-type', requireAuth, async (req: AuthenticatedReque
           status: 'active',
         });
       }
-    } else if (user.role === 'merchant') {
-      user.role = 'user';
+    } else {
+      user.auraAccountType = 'PERSONAL';
+      user.accountType = 'personal';
+      user.merchantAccessEnabled = false;
+      user.merchantVerificationStatus = 'NOT_STARTED';
+      if (user.role === 'merchant') {
+        user.role = 'family_admin';
+      }
     }
     await user.save();
 
@@ -900,7 +940,7 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
  * Dedicated endpoint for PayPal Sandbox Business Account Balances
  * Scope: https://uri.paypal.com/services/reporting/balances/read
  */
-apiRouter.get('/paypal/merchant-reporting/balances', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+apiRouter.get('/paypal/merchant-reporting/balances', requireAuth, requireMerchantAuth, async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const balanceResult = await paypalReportingService.getMerchantBalances();
     res.json({
@@ -920,7 +960,7 @@ apiRouter.get('/paypal/merchant-reporting/balances', requireAuth, async (_req: A
  * Dedicated endpoint for PayPal Sandbox Business Account Transaction History
  * Scope: https://uri.paypal.com/services/reporting/search/read
  */
-apiRouter.get('/paypal/merchant-reporting/transactions', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+apiRouter.get('/paypal/merchant-reporting/transactions', requireAuth, requireMerchantAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { startDate, endDate, page, pageSize, transactionStatus } = req.query as {
       startDate?: string;
@@ -2534,36 +2574,57 @@ apiRouter.post('/purchase/evaluate', requireAuth, async (req: AuthenticatedReque
 });
 
 // ============================================================================
-// 12b. AURA E-Commerce — Modern Online Storefront & Fulfillment Engine
+// 12a. Merchant Classification & Business Verification (Section 1 - 8)
 // ============================================================================
 
-// Merchant/Admin authorization middleware
-const requireMerchantAuth = async (req: AuthenticatedRequest, res: Response, next: any) => {
-  if (!req.userId) {
-    return res.status(401).json({ success: false, error: 'Authentication required.' });
-  }
+apiRouter.get('/merchant/status', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await UserModel.findById(req.userId);
     if (!user) {
-      return res.status(401).json({ success: false, error: 'User not found.' });
+      return res.status(404).json({ success: false, error: 'User account not found.' });
     }
-
-    const isAuthorized =
-      user.accountType === 'business' ||
-      user.role === 'merchant' ||
-      user.role === 'admin';
-
-    if (!isAuthorized) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied: Merchant or Business account privileges are required to access this dashboard. Regular personal accounts cannot access merchant operations.',
-      });
-    }
-    next();
+    const eligibility = merchantVerificationService.evaluateAccountEligibility(user);
+    res.json({
+      success: true,
+      ...eligibility,
+      user: sanitizeUser(user),
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
   }
-};
+});
+
+apiRouter.post('/merchant/check-eligibility', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const eligibility = await merchantVerificationService.verifyBusinessEligibility(req.userId!);
+    const updatedUser = await UserModel.findById(req.userId);
+    res.json({
+      success: true,
+      eligibility,
+      user: sanitizeUser(updatedUser),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+apiRouter.post('/paypal/disconnect', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { user, eligibility } = await merchantVerificationService.disconnectPayPal(req.userId!);
+    res.json({
+      success: true,
+      message: 'PayPal account successfully disconnected and merchant privileges revoked.',
+      eligibility,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// ============================================================================
+// 12b. AURA E-Commerce — Modern Online Storefront & Fulfillment Engine
+// ============================================================================
 
 // --- Product Discovery (Channel3 Catalog) ---
 apiRouter.get('/ecommerce/products', async (req: Request, res: Response) => {
