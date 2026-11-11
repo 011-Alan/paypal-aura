@@ -46,6 +46,7 @@ import { pythonAnalyticsService } from '../services/analytics/analyticsService';
 import { paymentGuardianService } from '../services/payments/paymentGuardianService';
 import { ecommerceService } from '../services/ecommerce/ecommerceService';
 import { auraAiOrchestrator } from '../services/planning/aiOrchestratorService';
+import { applicationRouteRegistry } from '../services/navigation/applicationRouteRegistry';
 import { durableSchedulerService } from '../services/scheduling/durableSchedulerService';
 import { geminiRequestManager } from '../services/planning/geminiRequestManager';
 import { GEMINI_MODEL_REGISTRY, validateModelAvailability } from '../services/planning/modelConfig';
@@ -2241,10 +2242,14 @@ apiRouter.post('/conversations/:id/messages', requireAuth, async (req: Authentic
       includeKernelResearch: Boolean(includeKernelResearch),
       conversationId: String(conversation._id),
       commerceContext: (conversation as any).commerceContext || null,
+      gridSelectionContext: resolvedSelectionContext,
     });
 
     if (aiResult.commerceContext) {
       (conversation as any).commerceContext = aiResult.commerceContext;
+      if (typeof (conversation as any).markModified === 'function') {
+        (conversation as any).markModified('commerceContext');
+      }
     }
 
     // 3. Save assistant message (preserving error notice if service unavailable)
@@ -2493,6 +2498,18 @@ apiRouter.post('/ai/ask/stream', requireAuth, async (req: AuthenticatedRequest, 
     } else {
       res.end();
     }
+  }
+});
+
+// ============================================================================
+// 11b. Application Route Registry & Autonomous Navigation Endpoints
+// ============================================================================
+apiRouter.get('/navigation/routes', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const routes = applicationRouteRegistry.getAllRoutes();
+    res.json({ success: true, routes });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
   }
 });
 

@@ -391,6 +391,13 @@ export const AskAuraProvider: React.FC<{
           );
         }, 150);
       }
+      if (action.type === 'product_filtered' && action.details) {
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('aura-commerce-filter', { detail: action.details })
+          );
+        }, 150);
+      }
       onNavigate(targetPage as NavTabId);
       window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
     }

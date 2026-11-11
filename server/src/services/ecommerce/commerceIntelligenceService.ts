@@ -172,7 +172,12 @@ export class CommerceIntelligenceService {
     const fxBest = exchangeRateService.convert(bestProduct.priceInr, 'INR', 'USD');
     const fxRunner = runnerUp ? exchangeRateService.convert(runnerUp.priceInr, 'INR', 'USD') : null;
 
-    const explanation = `I would recommend the **${bestProduct.name}** at **₹${bestProduct.priceInr.toLocaleString('en-IN')}** (~$${fxBest.convertedAmount.toLocaleString('en-US')} USD) from **${bestProduct.retailerName}**.\n\n### Why this model stands out:\n- **Processor & Performance:** Equipped with ${bestSpecs.Processor || 'a powerful multi-core processor'}, delivering excellent responsiveness for multitasking, development, and daily workflows.\n- **Memory & Storage:** Features ${bestSpecs.RAM || '16GB RAM'} and ${bestSpecs.Storage || '512GB SSD'}, ensuring smooth execution without memory bottlenecks.\n- **Portability & Build:** Weighs ${bestSpecs.Weight || 'approx. 1.4kg'} with a ${bestSpecs.Display || '14.0-inch FHD'} display, making it easy to carry between home, office, or classes.\n- **Battery:** ${bestSpecs.Battery || 'Reliable all-day battery performance'}.`;
+    const isProgramming = userCriteria?.toLowerCase().includes('programming') || userCriteria?.toLowerCase().includes('coding') || userCriteria?.toLowerCase().includes('developer');
+    const intro = isProgramming
+      ? `For **programming and software development**, I recommend the **${bestProduct.name}** at **₹${bestProduct.priceInr.toLocaleString('en-IN')}** (~$${fxBest.convertedAmount.toLocaleString('en-US')} USD) from **${bestProduct.retailerName}**.\n\nIt provides the necessary multi-core processor performance and RAM capacity for compiling code, running local Docker containers, and handling modern IDEs efficiently.`
+      : `I would recommend the **${bestProduct.name}** at **₹${bestProduct.priceInr.toLocaleString('en-IN')}** (~$${fxBest.convertedAmount.toLocaleString('en-US')} USD) from **${bestProduct.retailerName}**.`;
+
+    const explanation = `${intro}\n\n### Why this model stands out:\n- **Processor & Performance:** Equipped with ${bestSpecs.Processor || 'a powerful multi-core processor'}, delivering excellent responsiveness for multitasking, development, and daily workflows.\n- **Memory & Storage:** Features ${bestSpecs.RAM || '16GB RAM'} and ${bestSpecs.Storage || '512GB SSD'}, ensuring smooth execution without memory bottlenecks.\n- **Portability & Build:** Weighs ${bestSpecs.Weight || 'approx. 1.4kg'} with a ${bestSpecs.Display || '14.0-inch FHD'} display, making it easy to carry between home, office, or classes.\n- **Battery:** ${bestSpecs.Battery || 'Reliable all-day battery performance'}.`;
 
     let tradeOffAnalysis = '';
     if (runnerUp) {
@@ -232,6 +237,69 @@ export class CommerceIntelligenceService {
       productA,
       productB,
       markdownTable,
+      verdict,
+    };
+  }
+
+  /**
+   * Generates a multi-product side-by-side comparison across 2, 3, or more products.
+   */
+  public compareMultipleProducts(products: CommerceContextProduct[]): {
+    products: CommerceContextProduct[];
+    markdownTable: string;
+    verdict: string;
+  } {
+    if (!products || products.length === 0) {
+      return { products: [], markdownTable: '', verdict: 'No products provided for comparison.' };
+    }
+    if (products.length === 2) {
+      const res2 = this.compareProducts(products[0], products[1]);
+      return {
+        products,
+        markdownTable: res2.markdownTable,
+        verdict: res2.verdict,
+      };
+    }
+
+    const enriched = products.map((p) => ({
+      ...p,
+      specs: this.extractSpecifications(p),
+      fx: exchangeRateService.convert(p.priceInr, 'INR', 'USD'),
+    }));
+
+    // Build Table Header
+    const colHeaders = enriched.map((p) => `**${p.name.slice(0, 26)}**`).join(' | ');
+    const sep = enriched.map(() => ':---').join(' | ');
+
+    const rows: string[] = [
+      `| Specification | ${colHeaders} |`,
+      `| :--- | ${sep} |`,
+      `| **Price (INR)** | ${enriched.map((p) => `**₹${p.priceInr.toLocaleString('en-IN')}**`).join(' | ')} |`,
+      `| **Price (USD)** | ${enriched.map((p) => `~$${p.fx.convertedAmount.toLocaleString('en-US')} USD`).join(' | ')} |`,
+      `| **Brand** | ${enriched.map((p) => p.brand).join(' | ')} |`,
+      `| **Processor** | ${enriched.map((p) => p.specs.Processor || 'Multi-core').join(' | ')} |`,
+      `| **RAM / Memory** | ${enriched.map((p) => p.specs.RAM || 'Standard').join(' | ')} |`,
+      `| **Storage** | ${enriched.map((p) => p.specs.Storage || 'Standard SSD').join(' | ')} |`,
+      `| **Display** | ${enriched.map((p) => p.specs.Display || 'Standard Display').join(' | ')} |`,
+      `| **Battery** | ${enriched.map((p) => p.specs.Battery || 'Li-ion Battery').join(' | ')} |`,
+      `| **Portability / Weight** | ${enriched.map((p) => p.specs.Weight || 'Standard').join(' | ')} |`,
+      `| **Retailer / Merchant** | ${enriched.map((p) => p.retailerName).join(' | ')} |`,
+    ];
+
+    // Compute cheapest and most powerful
+    const sortedByPrice = [...enriched].sort((a, b) => a.priceInr - b.priceInr);
+    const cheapest = sortedByPrice[0];
+    const mostPremium = sortedByPrice[sortedByPrice.length - 1];
+
+    let verdict = `### Comparison Verdict & Key Insights:\n`;
+    verdict += `- **Most Economical Option:** **${cheapest.name}** at **₹${cheapest.priceInr.toLocaleString('en-IN')}** (~$${cheapest.fx.convertedAmount} USD) via ${cheapest.retailerName}.\n`;
+    verdict += `- **Performance Leader:** **${mostPremium.name}** offering high-tier specifications (${mostPremium.specs.Processor || 'Processor'}, ${mostPremium.specs.RAM || 'RAM'}).\n`;
+    verdict += `- **AURA Recommendation for Programming & Productivity:** Look for at least 16GB RAM and a modern multi-core processor for smooth compilation and containerized workflows.\n`;
+    verdict += `- **Buyer Protection:** All verified products are covered by manufacturer warranty and PayPal buyer protection.`;
+
+    return {
+      products,
+      markdownTable: rows.join('\n'),
       verdict,
     };
   }

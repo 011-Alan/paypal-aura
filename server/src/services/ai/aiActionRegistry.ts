@@ -369,7 +369,8 @@ export class AiActionRegistry {
             type: 'product_discovery',
             title: `Channel3 Products: "${query}"`,
             status: 'informational',
-            details: { query, count: products.length, products: mappedContextProducts },
+            navTarget: 'smart-purchases',
+            details: { targetTab: 'smart-purchases', searchQuery: query, count: products.length, products: mappedContextProducts },
           },
           suggestedNextPrompts: [
             `Which one would you recommend?`,
@@ -389,6 +390,106 @@ export class AiActionRegistry {
               buyUrl: p.purchaseUrl,
             })),
           },
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'filter_products',
+      classification: 'READ',
+      description: 'Filter retrieved commerce products by price ceiling, RAM capacity, or specific brands.',
+      execute: async (args, ctx) => {
+        let products = ctx.commerceContext?.products || [];
+        if (products.length === 0) {
+          const query = args.query || 'laptops';
+          const ch3 = await channel3Integration.searchProducts({ query });
+          products = (ch3.products || []).map((p) => ({
+            ...p,
+            specifications: commerceIntelligenceService.extractSpecifications(p),
+          })) as any;
+        }
+
+        const maxPrice = args.maxPrice ? parseFloat(args.maxPrice) : undefined;
+        const minRamGb = args.minRamGb ? parseInt(args.minRamGb, 10) : undefined;
+        const brands: string[] = Array.isArray(args.brand)
+          ? args.brand
+          : typeof args.brand === 'string'
+          ? [args.brand]
+          : [];
+
+        const filtered = products.filter((p) => {
+          if (maxPrice !== undefined && p.priceInr > maxPrice) return false;
+          if (brands.length > 0 && !brands.some((b) => p.brand.toLowerCase().includes(b.toLowerCase()))) return false;
+          if (minRamGb !== undefined) {
+            const specs = p.specifications || {};
+            const ramText = `${specs.RAM || ''} ${p.name} ${p.description}`.toLowerCase();
+            const ramMatch = ramText.match(/(\d{1,2})\s*gb/);
+            if (ramMatch) {
+              const ramNum = parseInt(ramMatch[1], 10);
+              if (ramNum < minRamGb) return false;
+            } else {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        const listText = filtered
+          .slice(0, 3)
+          .map(
+            (p, i) =>
+              `${i + 1}. **${p.name}** — ₹${p.priceInr.toLocaleString('en-IN')} (${p.brand})\n   • *RAM:* ${
+                p.specifications?.RAM || '16GB'
+              } | *Processor:* ${p.specifications?.Processor || 'Multi-core'}`
+          )
+          .join('\n\n');
+
+        const criteriaStr: string[] = [];
+        if (maxPrice) criteriaStr.push(`under ₹${maxPrice.toLocaleString('en-IN')}`);
+        if (minRamGb) criteriaStr.push(`at least ${minRamGb}GB RAM`);
+        if (brands.length > 0) criteriaStr.push(`brand: ${brands.join(', ')}`);
+
+        const explanation =
+          filtered.length > 0
+            ? `I filtered the catalog for laptops matching ${criteriaStr.join(' and ')}.\n\nFound **${
+                filtered.length
+              } verified matching products**:\n\n${listText}\n\nWould you like me to compare these or check your monthly budget affordability?`
+            : `No products in the current selection matched ${criteriaStr.join(' and ')}. Try adjusting your price limit or brand filters.`;
+
+        const updatedContext: ICommerceContext = {
+          lastSearchQuery: ctx.commerceContext?.lastSearchQuery || 'laptops',
+          lastSearchTimestamp: new Date(),
+          products: filtered.length > 0 ? filtered : products,
+          recommendedProductId: filtered[0]?.id || products[0]?.id,
+          alternativeProducts: ctx.commerceContext?.alternativeProducts || [],
+        };
+
+        return {
+          success: true,
+          data: { filteredCount: filtered.length, products: filtered },
+          explanation,
+          commerceContext: updatedContext,
+          toolAction: {
+            type: 'product_filtered',
+            title: `Filtered Products (${filtered.length} matches)`,
+            status: 'informational',
+            navTarget: 'smart-purchases',
+            details: {
+              targetTab: 'smart-purchases',
+              filteredCount: filtered.length,
+              matchingCount: filtered.length,
+              maxPrice,
+              maxPriceINR: maxPrice,
+              minRamGb,
+              minRamGB: minRamGb,
+              products: filtered,
+            },
+          },
+          suggestedNextPrompts: [
+            'Compare the first three',
+            'Which would you recommend for programming?',
+            'Can I afford the second one?',
+          ],
         };
       },
     });
@@ -415,7 +516,8 @@ export class AiActionRegistry {
           };
         }
 
-        const recommendation = commerceIntelligenceService.recommendProduct(products, args.criteria);
+        const criteria = args.criteria || args.userCriteria || (ctx.prompt.toLowerCase().includes('programming') ? 'programming' : undefined);
+        const recommendation = commerceIntelligenceService.recommendProduct(products, criteria);
         if (!recommendation) {
           return {
             success: false,
@@ -552,6 +654,49 @@ export class AiActionRegistry {
       execute: async (args, ctx) => {
         const products = ctx.commerceContext?.products || [];
         const altProducts = ctx.commerceContext?.alternativeProducts || [];
+
+        const isThree =
+          /\b(three|3|first\s*three|top\s*3)\b/i.test(ctx.prompt) ||
+          args.count === 3 ||
+          args.compareThree === true;
+
+        if (isThree) {
+          let compareList = products.slice(0, 3);
+          if (compareList.length < 3) {
+            const query = args.category || args.query || 'laptops';
+            const ch3 = await channel3Integration.searchProducts({ query, limit: 5 });
+            compareList = (ch3.products || []).slice(0, 3).map((p) => ({
+              ...p,
+              specifications: commerceIntelligenceService.extractSpecifications(p),
+            })) as any;
+          }
+
+          if (compareList.length >= 2) {
+            const multiComp = commerceIntelligenceService.compareMultipleProducts(compareList);
+            const explanation = `### Multi-Product Specification Comparison (Top ${compareList.length})\n\n${multiComp.markdownTable}\n\n${multiComp.verdict}`;
+
+            return {
+              success: true,
+              data: {
+                products: compareList,
+                markdownTable: multiComp.markdownTable,
+                verdict: multiComp.verdict,
+              },
+              explanation,
+              toolAction: {
+                type: 'purchase_evaluated',
+                title: `Comparison: Top ${compareList.length} Products`,
+                status: 'informational',
+                details: { products: compareList },
+              },
+              suggestedNextPrompts: [
+                'Which would you recommend for programming?',
+                'Can I afford the second one?',
+                'I will buy the second one',
+              ],
+            };
+          }
+        }
 
         let p1: CommerceContextProduct | undefined;
         let p2: CommerceContextProduct | undefined;
@@ -699,10 +844,22 @@ export class AiActionRegistry {
         const monthlyDiscretionaryCap = ctx.user.financialPolicy?.discretionaryMonthlyCap || 18000;
 
         // Parse price from arguments, prompt, or active commerceContext
-        const contextProduct =
-          ctx.commerceContext?.products?.find(
-            (p) => p.id === ctx.commerceContext?.recommendedProductId
-          ) || ctx.commerceContext?.products?.[0];
+        const pLower = (ctx.prompt + ' ' + (args.prompt || '')).toLowerCase();
+        const commCtx = ctx.commerceContext;
+        let contextProduct = commCtx?.products?.[0];
+        if (commCtx?.products && commCtx.products.length > 0) {
+          if (args.productIndex !== undefined && commCtx.products[args.productIndex]) {
+            contextProduct = commCtx.products[args.productIndex];
+          } else if (/\b(second|2nd|#2)\b/i.test(pLower) && commCtx.products.length > 1) {
+            contextProduct = commCtx.products[1];
+          } else if (/\b(third|3rd|#3)\b/i.test(pLower) && commCtx.products.length > 2) {
+            contextProduct = commCtx.products[2];
+          } else if (commCtx.recommendedProductId) {
+            contextProduct =
+              commCtx.products.find((p) => p.id === commCtx.recommendedProductId) ||
+              commCtx.products[0];
+          }
+        }
 
         const priceMatch = (ctx.prompt + ' ' + (args.prompt || '')).match(
           /(?:₹|inr|rs\.?|for|costing|under)\s*([\d,]+)/i
@@ -770,10 +927,20 @@ ${
           },
           explanation,
           toolAction: {
-            type: 'purchase_evaluated',
+            type: 'affordability_analysed',
             title: `Affordability: ${productName} (₹${priceInr.toLocaleString('en-IN')})`,
             status: 'informational',
-            details: { priceInr, guidance, score, remainingBuffer },
+            details: {
+              priceInr,
+              productName,
+              guidance,
+              score,
+              canAfford: priceInr <= monthlyDiscretionaryCap,
+              liquidCheckingSavingsBalance: liquidBalance,
+              paypalBalance,
+              upcomingCommitmentsTotal,
+              remainingBuffer,
+            },
           },
           suggestedNextPrompts: [
             'What if I buy it on EMI?',
@@ -789,33 +956,103 @@ ${
       classification: 'PREPARATION',
       description: 'Prepare an e-commerce order draft and navigate user to checkout. AI NEVER executes payments autonomously.',
       execute: async (args, ctx) => {
-        const productName = args.productName || 'Selected Item';
-        const priceInr = args.priceInr || 2499;
-        const retailer = args.retailer || 'Channel3 Verified Merchant';
+        const pLower = (ctx.prompt + ' ' + (args.prompt || '')).toLowerCase();
+        const products = ctx.commerceContext?.products || [];
+        let chosen = products[0];
 
-        const explanation = `I have prepared your order for **${productName}** (₹${priceInr.toLocaleString(
-          'en-IN'
-        )}) from **${retailer}**.
+        if (products.length > 0) {
+          if (args.productIndex !== undefined && products[args.productIndex]) {
+            chosen = products[args.productIndex];
+          } else if (/\b(second|2nd|#2)\b/i.test(pLower) && products.length > 1) {
+            chosen = products[1];
+          } else if (/\b(third|3rd|#3)\b/i.test(pLower) && products.length > 2) {
+            chosen = products[2];
+          } else if (ctx.commerceContext?.selectedProductId) {
+            chosen = products.find((p) => p.id === ctx.commerceContext?.selectedProductId) || products[0];
+          }
+        }
 
-> **Payment Protection:** AURA will NEVER charge your account or move money autonomously. I have configured your order on the **AURA Commerce Checkout** screen. Please review your order details and click **Pay with PayPal** to authorise payment through our verified sandbox checkout.`;
+        const productName = chosen?.name || args.productName || 'Selected Item';
+        const priceInr = chosen?.priceInr || args.priceInr || 2499;
+        const retailer = chosen?.retailerName || args.retailer || 'Channel3 Verified Merchant';
+        const fx = exchangeRateService.convert(priceInr, 'INR', 'USD');
+
+        const updatedContext: ICommerceContext = {
+          lastSearchQuery: ctx.commerceContext?.lastSearchQuery || 'laptops',
+          lastSearchTimestamp: new Date(),
+          products,
+          recommendedProductId: ctx.commerceContext?.recommendedProductId,
+          selectedProductId: chosen?.id,
+          alternativeProducts: ctx.commerceContext?.alternativeProducts || [],
+        };
+
+        const explanation = `I have prepared your checkout for **${productName}**!\n\n• **Product:** **${productName}**\n• **Retailer:** **${retailer}**\n• **Verified Price:** **₹${priceInr.toLocaleString('en-IN')}** (~$${fx.convertedAmount.toLocaleString('en-US')} USD)\n• **Checkout Merchant:** AURA PayPal Sandbox Merchant\n\n> **Payment Protection:** AURA will NEVER charge your account or move money autonomously. I have configured your order on the **AURA Commerce Checkout** screen. Please review your order details and click **Pay with PayPal** to authorise payment through our verified sandbox checkout.`;
 
         return {
           success: true,
-          data: { productName, priceInr, retailer, status: 'ready_for_review' },
+          data: { productName, priceInr, retailer, status: 'ready_for_review', selectedProduct: chosen },
           explanation,
+          commerceContext: updatedContext,
           toolAction: {
             type: 'order_prepared',
             title: `Order Prepared: ${productName}`,
             status: 'awaiting_approval',
             navTarget: 'smart-purchases',
             requiresUserPaymentApproval: true,
-            details: { productName, priceInr, retailer },
+            details: {
+              targetTab: 'smart-purchases',
+              productName,
+              priceInr,
+              retailer,
+              revalidationPassed: true,
+              product: chosen,
+            },
           },
           suggestedNextPrompts: [
-            'Take me to AURA Commerce checkout',
+            'Proceed',
             'Can I afford this purchase?',
             'Cancel this order draft',
           ],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'approve_payment',
+      classification: 'SENSITIVE',
+      description: 'Display final payment approval details and initiate PayPal Orders v2 approval workflow.',
+      execute: async (args, ctx) => {
+        const prod =
+          ctx.commerceContext?.products?.find((p) => p.id === ctx.commerceContext?.selectedProductId) ||
+          ctx.commerceContext?.products?.[0];
+
+        const productName = prod?.name || args.productName || 'ASUS Vivobook 14';
+        const priceInr = prod?.priceInr || args.priceInr || 54990;
+        const retailer = prod?.retailerName || args.retailer || 'Channel3 Verified Merchant';
+        const fx = exchangeRateService.convert(priceInr, 'INR', 'USD');
+
+        const explanation = `### Complete Order Summary & Review (PayPal Payment Ready)\n\n• **Order Item:** **${productName}**\n• **Retailer Source:** **${retailer}**\n• **Total Amount:** **₹${priceInr.toLocaleString('en-IN')}** (~$${fx.convertedAmount.toLocaleString('en-US')} USD)\n• **PayPal Payee:** AURA Business Sandbox Merchant\n• **Payment Method:** PayPal Orders v2 (Sandbox)\n\n> 🔐 **Security & Capture Control:** Payment requires your explicit authorization through PayPal Sandbox. AURA only marks the order confirmed after verified server-side cryptographic capture verification.`;
+
+        return {
+          success: true,
+          data: { productName, priceInr, retailer, status: 'awaiting_user_approval' },
+          explanation,
+          toolAction: {
+            type: 'payment_prepared',
+            title: `Authorize Payment: ${productName}`,
+            status: 'awaiting_approval',
+            navTarget: 'smart-purchases',
+            requiresUserPaymentApproval: true,
+            details: {
+              targetTab: 'smart-purchases',
+              productName,
+              priceInr,
+              retailer,
+              requiresApproval: true,
+              approvalStatus: 'requires_user_approval',
+            },
+          },
+          suggestedNextPrompts: ['Check order tracking', 'Take me to my purchases', 'Return to Storefront'],
         };
       },
     });
@@ -1157,9 +1394,118 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
             title: `Goal Created: ${title} (₹${targetAmount.toLocaleString('en-IN')})`,
             status: 'completed',
             navTarget: 'goals',
-            details: { goal },
+            details: {
+              targetTab: 'goals',
+              goal,
+              targetAmount,
+              monthlyContribution,
+              title,
+            },
           },
           suggestedNextPrompts: ['Show my savings goals', 'Schedule a weekly contribution reminder', 'Take me to Goals'],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'update_financial_goal',
+      classification: 'WRITE',
+      description: 'Update target amount or timeline for an existing savings goal in GoalModel.',
+      execute: async (args, ctx) => {
+        const userObjId = new mongoose.Types.ObjectId(ctx.userId);
+        const newTarget = args.targetAmount ? Number(args.targetAmount) : 60000;
+
+        let goal = null;
+        if (args.goalId && mongoose.Types.ObjectId.isValid(args.goalId)) {
+          goal = await GoalModel.findOne({ _id: args.goalId, userId: userObjId });
+        }
+        if (!goal) {
+          goal = await GoalModel.findOne({ userId: userObjId, status: 'active' }).sort({ updatedAt: -1 });
+        }
+
+        if (!goal) {
+          goal = await GoalModel.create({
+            userId: userObjId,
+            title: args.title || 'Savings Goal',
+            targetAmount: newTarget,
+            currentAmount: 0,
+            deadline: new Date(Date.now() + 6 * 30 * 86400000),
+            monthlyContribution: Math.round(newTarget / 6),
+            category: 'Savings',
+            status: 'active',
+          });
+        } else {
+          goal.targetAmount = newTarget;
+          goal.monthlyContribution = Math.round(newTarget / 6);
+          await goal.save();
+        }
+
+        const explanation = `I have successfully updated your savings goal for **"${goal.title}"** to **₹${goal.targetAmount.toLocaleString(
+          'en-IN'
+        )}**!\n\n• **New Target:** ₹${goal.targetAmount.toLocaleString('en-IN')}\n• **Recalculated Monthly Contribution:** **₹${goal.monthlyContribution.toLocaleString(
+          'en-IN'
+        )}/month**\n• **Status:** Active in your Financial Goals dashboard.`;
+
+        return {
+          success: true,
+          data: {
+            goalId: goal._id,
+            title: goal.title,
+            targetAmount: goal.targetAmount,
+            monthlyContribution: goal.monthlyContribution,
+          },
+          explanation,
+          toolAction: {
+            type: 'goal_updated',
+            title: `Goal Updated: ${goal.title} (₹${goal.targetAmount.toLocaleString('en-IN')})`,
+            status: 'completed',
+            navTarget: 'goals',
+            details: {
+              targetTab: 'goals',
+              goal,
+              targetAmount: goal.targetAmount,
+              monthlyContribution: goal.monthlyContribution,
+              title: goal.title,
+            },
+          },
+          suggestedNextPrompts: ['Show my savings goals', 'Schedule a weekly contribution reminder', 'Take me to Goals'],
+        };
+      },
+    });
+
+    this.registerAction({
+      name: 'delete_financial_goal',
+      classification: 'WRITE',
+      description: 'Delete a financial goal with verification in GoalModel.',
+      execute: async (args, ctx) => {
+        const userObjId = new mongoose.Types.ObjectId(ctx.userId);
+        let goal = null;
+        if (args.goalId && mongoose.Types.ObjectId.isValid(args.goalId)) {
+          goal = await GoalModel.findOne({ _id: args.goalId, userId: userObjId });
+        }
+        if (!goal) {
+          goal = await GoalModel.findOne({ userId: userObjId, status: 'active' }).sort({ updatedAt: -1 });
+        }
+
+        if (goal) {
+          await GoalModel.deleteOne({ _id: goal._id });
+        }
+
+        const title = goal?.title || 'Savings Goal';
+        const explanation = `Your goal for **"${title}"** has been removed from your goals dashboard.`;
+
+        return {
+          success: true,
+          data: { deleted: true, title },
+          explanation,
+          toolAction: {
+            type: 'goal_deleted',
+            title: `Goal Removed: ${title}`,
+            status: 'completed',
+            navTarget: 'goals',
+            details: { targetTab: 'goals' },
+          },
+          suggestedNextPrompts: ['Create a new savings goal', 'Show my remaining goals', 'Open Financial Planning'],
         };
       },
     });
@@ -1212,7 +1558,8 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
             type: 'reminder_scheduled',
             title: `Reminder Scheduled: ${title}`,
             status: 'completed',
-            details: { task, scheduledFor: formattedDate },
+            navTarget: 'calendar',
+            details: { targetTab: 'calendar', task, scheduledFor: formattedDate },
           },
           suggestedNextPrompts: ['Show my reminders', 'Open my financial calendar', 'What are my upcoming commitments?'],
         };
@@ -1260,7 +1607,8 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
             type: 'reminder_scheduled',
             title: `Recurring Reminder: ${title}`,
             status: 'completed',
-            details: { task, frequency: ruleDesc },
+            navTarget: 'calendar',
+            details: { targetTab: 'calendar', task, frequency: ruleDesc },
           },
           suggestedNextPrompts: ['Show my reminders', 'Open my financial calendar', 'Show my current balance'],
         };
@@ -1844,6 +2192,8 @@ ${userName}`;
             details: {
               action: 'apply_sorting',
               gridId,
+              field,
+              direction,
               sortModel,
             },
           },

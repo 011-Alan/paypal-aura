@@ -158,9 +158,26 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
         fetchProducts(q, 'All', 'All', '');
       }
     };
+
+    const handleAuraFilter = (e: any) => {
+      const details = e?.detail;
+      if (details) {
+        if (details.brand) setSelectedBrand(details.brand);
+        if (details.maxPriceINR) {
+          const usdEst = Math.round(details.maxPriceINR / 83);
+          setMaxPrice(String(usdEst));
+          fetchProducts(searchQuery, 'All', details.brand || 'All', String(usdEst));
+        } else {
+          fetchProducts(searchQuery, 'All', details.brand || 'All', '');
+        }
+      }
+    };
+
     window.addEventListener('aura-commerce-search', handleAuraSearch);
+    window.addEventListener('aura-commerce-filter', handleAuraFilter);
     return () => {
       window.removeEventListener('aura-commerce-search', handleAuraSearch);
+      window.removeEventListener('aura-commerce-filter', handleAuraFilter);
     };
   }, [selectedCategory, selectedBrand]);
 

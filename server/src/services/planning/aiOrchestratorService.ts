@@ -29,6 +29,8 @@ import { semanticRetrievalService } from '../ai/semanticRetrievalService';
 import { lightweightProcessingService } from '../ai/lightweightProcessingService';
 import { aiActionRegistry } from '../ai/aiActionRegistry';
 import { commerceIntentRouter } from '../ai/commerceIntentRouter';
+import { applicationIntentClassifier } from '../ai/applicationIntentClassifier';
+import { applicationRouteRegistry } from '../navigation/applicationRouteRegistry';
 import { commerceIntelligenceService } from '../ecommerce/commerceIntelligenceService';
 
 export interface AiToolAction {
@@ -1414,23 +1416,388 @@ export class AuraAiOrchestratorService {
       }
     }
 
-    // Navigation intent
+    const isMerchantAuthorized = Boolean(
+      user?.merchantAccessEnabled === true &&
+      user?.auraAccountType === 'BUSINESS' &&
+      user?.merchantVerificationStatus === 'VERIFIED'
+    );
+
+    const intent = applicationIntentClassifier.classify(prompt, {
+      commerceContext: params.commerceContext,
+      conversationHistory: history,
+      isMerchantAuthorized,
+    });
+
+    // 1. Concept Explanations & Financial Education (No Navigation!)
+    if (intent.intent === 'CONCEPT_EXPLANATION') {
+      let explanation = '';
+      if (promptLower.includes('financial goal')) {
+        explanation = `A **financial goal** is a specific target you set for your money within a defined timeframe. It provides direction, purpose, and discipline for your income.\n\n### Core Types of Financial Goals:\n1. **Short-Term Goals (0–12 Months):** Building an emergency fund (3–6 months of essential expenses), saving for a laptop, or planning an annual vacation.\n2. **Medium-Term Goals (1–5 Years):** Accumulating a down payment for a car or home, or funding higher education certifications.\n3. **Long-Term Goals (5+ Years):** Retirement planning, wealth building, and long-term financial independence.\n\n### How AURA Helps:\nIn AURA, you can create savings goals with monthly contribution calculations, milestone alerts, and ringfenced balances so your essential rent and bills are never compromised.\n\n*Would you like me to help you set up a goal for something you're saving toward?*`;
+      } else if (promptLower.includes('apr')) {
+        explanation = `**APR (Annual Percentage Rate)** represents the total annualized cost of borrowing money, expressed as a yearly percentage.\n\n### Key Components of APR:\n• **Nominal Interest Rate:** The base interest rate charged by the lender.\n• **Additional Mandatory Fees:** Processing charges, origination fees, closing costs, and administrative fees associated with issuing the loan.\n\n### Why APR Matters:\nUnlike simple interest rates, APR reflects your true annual borrowing cost. For example, a loan with a 10% interest rate and high origination fees might carry an effective APR of 12.5%. When comparing credit cards or loans, always compare APR rather than nominal rates.\n\n*Would you like me to calculate loan amortization options for a specific loan amount?*`;
+      } else if (promptLower.includes('subscription')) {
+        explanation = `Recurring subscriptions create **"subscription creep"**—small recurring outlays (₹299/mo, ₹699/mo) that silently accumulate into significant fixed monthly cash outflows.\n\n### How Subscriptions Impact Your Finances:\n• **Reduced Discretionary Buffer:** Every active mandate reduces your unallocated monthly cushion before you even begin discretionary spending.\n• **Annual Compounding Cost:** Three unused ₹499/mo subscriptions quietly cost **₹17,964 per year** that could otherwise fund an emergency buffer.\n• **Forgotten Mandates:** Automatic renewals often persist long after you stop using the service.\n\n### AURA Protection:\nAURA tracks all recurring mandates under **Bills & Commitments** so you can identify unused subscriptions, forecast outflows, and protect your cash flow.`;
+      } else if (promptLower.includes('commerce')) {
+        explanation = `**AURA Commerce** is an integrated smart shopping platform powered by live merchant catalogs from Channel3, specification comparisons, and verified PayPal checkout.\n\n### Key Capabilities:\n1. **Live Product Discovery:** Search real products (laptops, electronics, footwear, etc.) with real-time pricing.\n2. **Context-Aware Specification Comparison:** Compare hardware specifications (processors, RAM, battery, build quality) side-by-side.\n3. **Financial Affordability Intelligence:** Before you spend, Ask AURA evaluates whether a purchase comfortably fits your monthly discretionary cap without jeopardizing ringfenced bills or savings.\n4. **Controlled PayPal Checkout:** Prepare order drafts seamlessly with full payment control—AURA never moves funds autonomously.`;
+      } else {
+        explanation = `Here is an overview of ${prompt}:\n\nUnderstanding your financial resources and commitments helps you make disciplined, informed decisions. In AURA, you can track bank balances, budget monthly spending, schedule durable bill reminders, and explore products with real-time affordability checks.\n\n*Let me know if you would like to explore specific calculations, review your accounts, or plan a goal!*`;
+      }
+
+      return this.formatSuccessfulResponse({
+        prompt,
+        workflowType: 'general_knowledge',
+        explanation,
+        suggestedNextPrompts: [
+          'I want to create a financial goal',
+          'Show my upcoming bills',
+          'How am I doing financially overall?',
+        ],
+        commerceContext: params.commerceContext || null,
+      });
+    }
+
+    // 2. Application Controls
+    if (intent.intent === 'APP_LOGOUT') {
+      const tool = aiActionRegistry.getAction('logout_user');
+      if (tool) {
+        const exec = await tool.execute({}, { userId: params.userId, user, prompt, history, requestId, conversationId });
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'application_control',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: [],
+        });
+      }
+    }
+
+    if (intent.intent === 'APP_THEME_CHANGE') {
+      const tool = aiActionRegistry.getAction('change_theme');
+      if (tool) {
+        const exec = await tool.execute(
+          { theme: intent.actionDetails?.theme || 'dark' },
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'application_control',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: ['Show my current balance', 'Switch to light mode', 'Take me to Overview'],
+        });
+      }
+    }
+
+    if (intent.intent === 'APP_SIDEBAR_TOGGLE') {
+      const tool = aiActionRegistry.getAction('toggle_sidebar');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.actionDetails || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'application_control',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: ['Open Overview', 'Show my accounts'],
+        });
+      }
+    }
+
+    // 3. Commerce: Payment Approval ("Proceed")
+    if (intent.intent === 'COMMERCE_PAYMENT_APPROVAL') {
+      const tool = aiActionRegistry.getAction('approve_payment');
+      if (tool) {
+        const exec = await tool.execute(
+          {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'paypal_payment',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 4. Commerce: Checkout Preparation ("I'll buy this one", "I'll buy the second one")
+    if (intent.intent === 'COMMERCE_CHECKOUT_PREPARATION') {
+      const tool = aiActionRegistry.getAction('prepare_commerce_order');
+      if (tool) {
+        const exec = await tool.execute(
+          { productIndex: intent.selectedProductIndex },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'purchase_evaluation',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 5. Commerce: Affordability Evaluation ("Can I afford the second one?")
+    if (intent.intent === 'COMMERCE_AFFORDABILITY_EVALUATION' || promptLower.includes('afford')) {
+      const tool = aiActionRegistry.getAction('analyse_purchase_affordability');
+      if (tool) {
+        const exec = await tool.execute(
+          { productIndex: intent.selectedProductIndex },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'purchase_affordability',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 6. Commerce: Multi-Product Comparison ("Compare the first three", "Compare these")
+    if (intent.intent === 'COMMERCE_PRODUCT_COMPARISON') {
+      const tool = aiActionRegistry.getAction('compare_products');
+      if (tool) {
+        const exec = await tool.execute(
+          { count: intent.comparisonProducts?.length || 3 },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'purchase_evaluation',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 7. Commerce: Recommendation ("Which would you recommend for programming?")
+    if (intent.intent === 'COMMERCE_PRODUCT_RECOMMENDATION') {
+      const tool = aiActionRegistry.getAction('recommend_product');
+      if (tool) {
+        const exec = await tool.execute(
+          { userCriteria: intent.extractedRequirements?.useCase },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'purchase_evaluation',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 8. Commerce: Product Filtering ("Show me laptops under ₹70,000 with at least 16GB RAM")
+    if (intent.intent === 'COMMERCE_PRODUCT_FILTERING') {
+      const tool = aiActionRegistry.getAction('filter_products');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.extractedRequirements || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'product_discovery',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || params.commerceContext || null,
+        });
+      }
+    }
+
+    // 9. Commerce: Product Discovery ("I want to buy an ASUS Vivobook 14")
+    if (intent.intent === 'COMMERCE_PRODUCT_DISCOVERY') {
+      const tool = aiActionRegistry.getAction('search_products');
+      if (tool) {
+        const query = intent.extractedRequirements?.productQuery || 'laptop';
+        const exec = await tool.execute(
+          { query },
+          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'product_discovery',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: exec.commerceContext || null,
+        });
+      }
+    }
+
+    // 10. Financial Goals: Modification ("Change the target to ₹60,000")
+    if (intent.intent === 'GOAL_MODIFICATION') {
+      const tool = aiActionRegistry.getAction('update_financial_goal');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.goalRequirements || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'savings_planning',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 11. Financial Goals: Creation ("I want to save ₹50,000 in six months")
+    if (intent.intent === 'GOAL_CREATION') {
+      const tool = aiActionRegistry.getAction('create_financial_goal');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.goalRequirements || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'savings_planning',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 12. Financial Goals: Deletion ("Delete goal")
+    if (intent.intent === 'GOAL_DELETION') {
+      const tool = aiActionRegistry.getAction('delete_financial_goal');
+      if (tool) {
+        const exec = await tool.execute(
+          {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'savings_planning',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 13. Calendar & Scheduling: Recurring Schedule ("Remind me to review my savings every month")
+    if (intent.intent === 'RECURRING_SCHEDULE') {
+      const tool = aiActionRegistry.getAction('create_recurring_schedule');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.actionDetails || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'calendar_scheduling',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 14. Calendar & Scheduling: One-Time Reminder ("Remind me to pay electricity tomorrow")
+    if (intent.intent === 'REMINDER_CREATION') {
+      const tool = aiActionRegistry.getAction('create_reminder');
+      if (tool) {
+        const exec = await tool.execute(
+          intent.actionDetails || {},
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'calendar_scheduling',
+          explanation: exec.explanation,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: exec.suggestedNextPrompts,
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 15. Bills & Commitments: Inquiry ("Show my upcoming bills")
+    if (intent.intent === 'BILL_INQUIRY') {
+      const tool = aiActionRegistry.getAction('navigate_to_page');
+      if (tool) {
+        const exec = await tool.execute(
+          { page: 'commitments' },
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'navigation',
+          explanation: `Taking you directly to **Bills & Commitments** to review your upcoming scheduled payments and mandates.`,
+          toolAction: exec.toolAction as any,
+          suggestedNextPrompts: ['Show my largest expenses this month', 'What is my current balance?'],
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 16. Transactions & Spending: Largest Expenses / Sorting
+    if (intent.intent === 'TRANSACTION_ANALYSIS') {
+      const tool = aiActionRegistry.getAction('grid_apply_sorting');
+      if (tool) {
+        const exec = await tool.execute(
+          { gridId: 'transactions-grid', field: 'amount', direction: 'desc' },
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'grid_action',
+          explanation: `Navigating to **Transactions** and sorting by amount from largest to smallest to highlight your biggest spending items.`,
+          toolAction: {
+            type: 'navigation',
+            title: 'Transactions: Largest Expenses',
+            status: 'completed',
+            navTarget: 'transactions',
+            details: { targetTab: 'transactions', ...exec.toolAction?.details, field: 'amount', direction: 'desc' },
+          } as any,
+          suggestedNextPrompts: ['Filter shopping expenses', 'Undo that filter', 'What is my liquid balance?'],
+          commerceContext: params.commerceContext || null,
+        });
+      }
+    }
+
+    // 17. Application Navigation ("Take me to Transactions", "Go to Goals", etc.)
     if (
+      intent.intent === 'APP_NAVIGATION' ||
       promptLower.includes('take me to') ||
       promptLower.includes('go to') ||
       promptLower.startsWith('open ')
     ) {
-      let targetPage = 'overview';
-      if (promptLower.includes('transaction') || promptLower.includes('spending')) targetPage = 'transactions';
-      else if (promptLower.includes('bill') || promptLower.includes('commitment')) targetPage = 'commitments';
-      else if (promptLower.includes('plan')) targetPage = 'financial-planning';
-      else if (promptLower.includes('goal')) targetPage = 'goals';
-      else if (promptLower.includes('account')) targetPage = 'accounts';
-      else if (promptLower.includes('calendar')) targetPage = 'calendar';
-      else if (promptLower.includes('commerce') || promptLower.includes('shop') || promptLower.includes('store')) targetPage = 'smart-purchases';
-      else if (promptLower.includes('merchant')) targetPage = 'merchant-hub';
-      else if (promptLower.includes('setting')) targetPage = 'settings';
-      else if (promptLower.includes('developer')) targetPage = 'developer';
+      let targetPage = intent.navTarget || 'overview';
+      if (!intent.navTarget) {
+        if (promptLower.includes('transaction') || promptLower.includes('spending')) targetPage = 'transactions';
+        else if (promptLower.includes('bill') || promptLower.includes('commitment')) targetPage = 'commitments';
+        else if (promptLower.includes('plan')) targetPage = 'financial-planning';
+        else if (promptLower.includes('goal')) targetPage = 'goals';
+        else if (promptLower.includes('account')) targetPage = 'accounts';
+        else if (promptLower.includes('calendar')) targetPage = 'calendar';
+        else if (promptLower.includes('commerce') || promptLower.includes('shop') || promptLower.includes('store')) targetPage = 'smart-purchases';
+        else if (promptLower.includes('merchant')) targetPage = 'merchant-hub';
+        else if (promptLower.includes('setting')) targetPage = 'settings';
+        else if (promptLower.includes('developer')) targetPage = 'developer';
+      }
 
       const navTool = aiActionRegistry.getAction('navigate_to_page');
       if (navTool) {
@@ -1441,24 +1808,6 @@ export class AuraAiOrchestratorService {
         return this.formatSuccessfulResponse({
           prompt,
           workflowType: 'navigation',
-          explanation: exec.explanation,
-          toolAction: exec.toolAction as any,
-          suggestedNextPrompts: exec.suggestedNextPrompts,
-        });
-      }
-    }
-
-    // Affordability evaluation fallback
-    if (promptLower.includes('afford')) {
-      const tool = aiActionRegistry.getAction('analyse_purchase_affordability');
-      if (tool) {
-        const exec = await tool.execute(
-          { productPrice: 200 },
-          { userId: params.userId, user, prompt, history, requestId, conversationId, commerceContext: params.commerceContext }
-        );
-        return this.formatSuccessfulResponse({
-          prompt,
-          workflowType: 'purchase_affordability',
           explanation: exec.explanation,
           toolAction: exec.toolAction as any,
           suggestedNextPrompts: exec.suggestedNextPrompts,
@@ -2857,6 +3206,10 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
     let executedAction: any = null;
     if (toolAct) {
       const details = (toolAct as any).details || {};
+      if (toolAct.navTarget) {
+        if (!details.targetTab) details.targetTab = toolAct.navTarget;
+        if (!details.page) details.page = toolAct.navTarget;
+      }
       let actionName: string = toolAct.type;
       if (toolAct.type === 'navigation') {
         actionName = 'navigate_to_page';
