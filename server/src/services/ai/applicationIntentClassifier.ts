@@ -172,6 +172,127 @@ export class ApplicationIntentClassifier {
     }
 
     // =========================================================================
+    // 2b. COMPOUND NAVIGATION + OPERATION COMMANDS (EXECUTION, NOT NAVIGATION LINKS!)
+    // e.g. "Take me to Commerce and search for ASUS Vivobook 14."
+    // e.g. "Open Transactions and show purchases above ₹5,000."
+    // e.g. "Open Calendar and schedule a monthly savings review."
+    // e.g. "Open Financial Goals and create a goal to save ₹50,000 in six months."
+    // =========================================================================
+    const compoundNavMatch = raw.match(
+      /^(?:take\s*me\s*to|go\s*to|open|navigate\s*to)\s+(?:the\s*)?(?:aura\s*)?(commerce|store|shop|smart\s*purchases?|transactions?|spending|goals?|financial\s*goals?|commitments?|bills?|calendar|scheduler|settings|overview)\s+(?:and\s+|,?\s*then\s+)(.+)$/i
+    );
+
+    if (compoundNavMatch) {
+      const pageKey = compoundNavMatch[1].toLowerCase();
+      const actionPart = compoundNavMatch[2].trim();
+
+      // Commerce Search
+      if (
+        (pageKey.includes('commerce') || pageKey.includes('store') || pageKey.includes('shop') || pageKey.includes('purchase')) &&
+        /\b(search|find|buy|look\s*for|vivobook|laptop|headphone|shoes?|sneakers?)\b/i.test(actionPart)
+      ) {
+        let cleanQuery = actionPart
+          .replace(/^(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*)?|look\s*for\s*(?:a\s*)?|buy\s*(?:a\s*)?)\s*/i, '')
+          .replace(/\s*(?:in\s*aura\s*commerce|in\s*commerce|online|store)\s*$/i, '')
+          .replace(/[.!?,;]+$/, '')
+          .trim();
+        if (!cleanQuery) cleanQuery = 'laptop';
+
+        return {
+          domain: 'COMMERCE',
+          intent: 'COMMERCE_PRODUCT_DISCOVERY',
+          confidence: 0.98,
+          targetRoute: applicationRouteRegistry.getRouteById('commerce'),
+          shouldNavigate: true,
+          navTarget: 'smart-purchases',
+          extractedRequirements: { productQuery: cleanQuery },
+          reason: `User requested navigation to Commerce with immediate search for "${cleanQuery}".`,
+        };
+      }
+
+      // Transactions: Filtering / Purchases above
+      if (
+        (pageKey.includes('transaction') || pageKey.includes('spending')) &&
+        /\b(show|filter|find|purchases?|expenses?|above|over|greater)\b/i.test(actionPart)
+      ) {
+        const amountMatch = actionPart.match(/(?:above|over|greater\s*than|>)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
+        const minAmount = amountMatch ? parseInt(amountMatch[1].replace(/,/g, ''), 10) : 5000;
+
+        return {
+          domain: 'TRANSACTIONS_AND_SPENDING',
+          intent: 'TRANSACTION_FILTERING',
+          confidence: 0.98,
+          targetRoute: applicationRouteRegistry.getRouteById('transactions'),
+          shouldNavigate: true,
+          navTarget: 'transactions',
+          actionDetails: {
+            minAmount,
+            filterModel: {
+              amount: {
+                filterType: 'number',
+                type: 'greaterThan',
+                filter: minAmount,
+              },
+            },
+          },
+          reason: `User requested navigation to Transactions and filtering purchases above ₹${minAmount.toLocaleString('en-IN')}.`,
+        };
+      }
+
+      // Calendar: Recurring Schedule or Reminder
+      if (
+        (pageKey.includes('calendar') || pageKey.includes('scheduler')) &&
+        /\b(schedule|remind|review|savings\s*review|reminder)\b/i.test(actionPart)
+      ) {
+        const isSavingsReview = /savings\s*review/i.test(actionPart);
+        return {
+          domain: 'CALENDAR_AND_SCHEDULING',
+          intent: 'RECURRING_SCHEDULE',
+          confidence: 0.98,
+          targetRoute: applicationRouteRegistry.getRouteById('calendar'),
+          shouldNavigate: true,
+          navTarget: 'calendar',
+          actionDetails: {
+            title: isSavingsReview ? 'Monthly Savings Review' : 'Scheduled Review',
+            recurrence: 'monthly',
+          },
+          reason: `User requested navigation to Calendar and scheduling a recurring review.`,
+        };
+      }
+
+      // Goals: Create Goal
+      if (
+        pageKey.includes('goal') &&
+        /\b(create|set|make|save)\b/i.test(actionPart)
+      ) {
+        const amountMatch = actionPart.match(/(?:save|goal\s*(?:for|of)?)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
+        const monthsMatch = actionPart.match(/(?:in|over|within)\s*(\d{1,2}|six|twelve|three)\s*months?/i);
+        const targetAmount = amountMatch ? parseInt(amountMatch[1].replace(/,/g, ''), 10) : 50000;
+        let durationMonths = 12;
+        if (monthsMatch) {
+          const mStr = monthsMatch[1].toLowerCase();
+          durationMonths = mStr === 'six' ? 6 : mStr === 'three' ? 3 : mStr === 'twelve' ? 12 : parseInt(mStr, 10);
+        }
+
+        return {
+          domain: 'FINANCIAL_GOALS',
+          intent: 'GOAL_CREATION',
+          confidence: 0.98,
+          targetRoute: applicationRouteRegistry.getRouteById('goals'),
+          shouldNavigate: true,
+          navTarget: 'goals',
+          goalRequirements: {
+            title: 'Savings Goal',
+            targetAmount,
+            durationMonths,
+            monthlyContribution: Math.round(targetAmount / durationMonths),
+          },
+          reason: `User requested navigation to Financial Goals and creation of a ₹${targetAmount.toLocaleString('en-IN')} goal.`,
+        };
+      }
+    }
+
+    // =========================================================================
     // 3. COMMERCE WORKFLOW: PAYMENT APPROVAL ("Proceed", "Approve purchase")
     // =========================================================================
     if (
@@ -353,9 +474,16 @@ export class ApplicationIntentClassifier {
       /\b(laptop|vivobook|macbook|keyboard|mouse|headphones?|shoes?|sneakers?|tablet|monitor|bottle|chair|desk|watch|phone|smartphone|bible)\b/i.test(pLower);
 
     if (isCommerceDiscovery) {
-      let cleanQuery = raw
-        .replace(/^(i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*)?(?:good\s*)?|looking\s*for\s*(?:a\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*)?)\s*/i, '')
+      let cleanQuery = raw;
+      const verbMatch = raw.match(/(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*)?|look\s*for\s*(?:a\s*)?|want\s*to\s*buy\s*(?:a\s*)?|need\s*(?:a\s*)?)\s+(.+)$/i);
+      if (verbMatch) {
+        cleanQuery = verbMatch[1];
+      } else {
+        cleanQuery = raw.replace(/^(?:i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*)?|looking\s*for\s*(?:a\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*)?)\s*/i, '');
+      }
+      cleanQuery = cleanQuery
         .replace(/\s*(?:in\s*aura\s*commerce|in\s*commerce|online|store)\s*$/i, '')
+        .replace(/[.!?,;]+$/, '')
         .trim();
 
       if (!cleanQuery) cleanQuery = 'laptop';
@@ -437,9 +565,12 @@ export class ApplicationIntentClassifier {
 
     // =========================================================================
     // 11. CALENDAR & SCHEDULING
-    // e.g. "Remind me to review my savings every month", "Remind me to pay electricity tomorrow"
+    // e.g. "Remind me to review my savings every month", "Schedule a monthly savings review"
     // =========================================================================
-    if (/\b(remind\s*me\s*(?:to\s*)?review\s*(?:my\s*)?savings\s*(?:every|each)\s*month)\b/i.test(pLower)) {
+    if (
+      /\b(schedule|set|remind\s*me\s*(?:to\s*)?review)\s*(?:a\s*)?(?:monthly\s*savings\s*review|savings\s*review)\b/i.test(pLower) ||
+      /\b(remind\s*me\s*(?:to\s*)?review\s*(?:my\s*)?savings\s*(?:every|each)\s*month)\b/i.test(pLower)
+    ) {
       return {
         domain: 'CALENDAR_AND_SCHEDULING',
         intent: 'RECURRING_SCHEDULE',
@@ -484,12 +615,38 @@ export class ApplicationIntentClassifier {
     }
 
     // =========================================================================
-    // 13. TRANSACTIONS & SPENDING ANALYSIS
-    // e.g. "Show my largest expenses this month", "Show transactions above ₹5,000"
+    // 13. TRANSACTIONS & SPENDING ANALYSIS / FILTERING
+    // e.g. "Show my largest expenses this month", "Show purchases above ₹5,000"
     // =========================================================================
     if (
-      /\b(largest\s*expenses?|biggest\s*expenses?|top\s*expenses?|highest\s*spending)\b/i.test(pLower) ||
-      (/\btransactions\s*above\b/i.test(pLower) && !pLower.includes('filter'))
+      /\b(?:show|filter|find)\s*(?:purchases|transactions|expenses)\s*(?:above|over|greater\s*than|>)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i.test(pLower) ||
+      /\btransactions?\s*(?:above|over|greater\s*than|>)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i.test(pLower)
+    ) {
+      const match = pLower.match(/(?:above|over|greater\s*than|>)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
+      const minAmount = match ? parseInt(match[1].replace(/,/g, ''), 10) : 5000;
+      return {
+        domain: 'TRANSACTIONS_AND_SPENDING',
+        intent: 'TRANSACTION_FILTERING',
+        confidence: 0.98,
+        targetRoute: applicationRouteRegistry.getRouteById('transactions'),
+        shouldNavigate: true,
+        navTarget: 'transactions',
+        actionDetails: {
+          minAmount,
+          filterModel: {
+            amount: {
+              filterType: 'number',
+              type: 'greaterThan',
+              filter: minAmount,
+            },
+          },
+        },
+        reason: `User requested filtering transactions for purchases above ₹${minAmount.toLocaleString('en-IN')}.`,
+      };
+    }
+
+    if (
+      /\b(largest\s*expenses?|biggest\s*expenses?|top\s*expenses?|highest\s*spending)\b/i.test(pLower)
     ) {
       return {
         domain: 'TRANSACTIONS_AND_SPENDING',

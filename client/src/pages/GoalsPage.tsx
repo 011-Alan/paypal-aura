@@ -3,6 +3,7 @@ import { Target, Trophy, Plus, Sparkles, CheckCircle2, Layers, LayoutGrid } from
 import { apiRequest, formatDateShort } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { FinancialRoadmapPage } from './FinancialRoadmapPage';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export const GoalsPage: React.FC = () => {
   const { balancesVisible, formatMoney } = useAuth();
@@ -17,12 +18,33 @@ export const GoalsPage: React.FC = () => {
   const [isShared, setIsShared] = useState(false);
 
   const loadGoals = async () => {
-    const res = await apiRequest('/goals');
-    setGoals(res.goals || []);
+    try {
+      const res = await apiRequest('/goals');
+      setGoals(res.goals || []);
+      pageActionDispatcher.setPageReady('goals', true);
+    } catch {
+      pageActionDispatcher.setPageReady('goals', true);
+    }
   };
 
   useEffect(() => {
     loadGoals();
+
+    const unregister = pageActionDispatcher.registerPage('goals', {
+      executeAction: async (actionType: string) => {
+        if (actionType === 'REFRESH_GOALS' || actionType === 'CREATE_GOAL') {
+          await loadGoals();
+          return true;
+        }
+        return false;
+      },
+      isReady: () => true,
+    });
+
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('goals', false);
+    };
   }, []);
 
   const handleContribute = async (goal: any) => {

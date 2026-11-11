@@ -145,7 +145,7 @@ export class CommerceIntelligenceService {
       else if (procStr.includes('i3')) score += 10;
 
       // Display evaluation
-      const dispStr = (specs.Display || p.description).toLowerCase();
+      const dispStr = (specs.Display || p.description || '').toLowerCase();
       if (dispStr.includes('oled') || dispStr.includes('2.8k')) score += 15;
       else if (dispStr.includes('fhd') || dispStr.includes('1080')) score += 10;
 

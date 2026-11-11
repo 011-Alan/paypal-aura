@@ -3,6 +3,7 @@ import { apiRequest, getApiBase, getStoredToken } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { NavTabId } from '../components/AppShell';
 import { gridStateManager, GridSelectionContext } from '../lib/gridStateManager';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export interface Message {
   _id?: string;
@@ -377,29 +378,49 @@ export const AskAuraProvider: React.FC<{
     if (targetPage) {
       if (targetPage === 'ask-aura') {
         setIsFloatingOpen(false);
-      } else if (activeTabRef.current === 'ask-aura') {
-        // If transitioning out from full Ask AURA page, open floating panel to preserve the conversation
+      } else {
+        // Keep floating panel open across navigation so ongoing conversation is never interrupted
         setIsFloatingOpen(true);
       }
+      onNavigate(targetPage as NavTabId);
+      window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
+    }
+
+    // Sequence or individual page actions via pageActionDispatcher
+    if (action.workflowSteps && Array.isArray(action.workflowSteps) && action.workflowSteps.length > 0) {
+      pageActionDispatcher.dispatchSequence(action.workflowSteps);
+    } else {
       if (action.details?.searchQuery) {
         try {
           sessionStorage.setItem('aura_commerce_search_query', action.details.searchQuery);
         } catch {}
-        setTimeout(() => {
-          window.dispatchEvent(
-            new CustomEvent('aura-commerce-search', { detail: { query: action.details.searchQuery } })
-          );
-        }, 150);
+        pageActionDispatcher.dispatchAction({
+          type: 'SEARCH_PRODUCTS',
+          targetRoute: 'smart-purchases',
+          payload: { query: action.details.searchQuery, products: action.details.products },
+        });
       }
       if (action.type === 'product_filtered' && action.details) {
-        setTimeout(() => {
-          window.dispatchEvent(
-            new CustomEvent('aura-commerce-filter', { detail: action.details })
-          );
-        }, 150);
+        pageActionDispatcher.dispatchAction({
+          type: 'FILTER_PRODUCTS',
+          targetRoute: 'smart-purchases',
+          payload: action.details,
+        });
       }
-      onNavigate(targetPage as NavTabId);
-      window.dispatchEvent(new CustomEvent('aura-navigate', { detail: { page: targetPage } }));
+      if (action.type === 'goal_created') {
+        pageActionDispatcher.dispatchAction({
+          type: 'REFRESH_GOALS',
+          targetRoute: 'goals',
+          payload: action.details,
+        });
+      }
+      if (action.type === 'reminder_scheduled') {
+        pageActionDispatcher.dispatchAction({
+          type: 'REFRESH_CALENDAR',
+          targetRoute: 'calendar',
+          payload: action.details,
+        });
+      }
     }
 
     // 2. Theme control effect

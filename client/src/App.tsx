@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AskAuraProvider } from './context/AskAuraContext';
 import { AppShell, NavTabId } from './components/AppShell';
+import { pageActionDispatcher } from './lib/pageActionDispatcher';
 import { FloatingAskAuraButton } from './components/FloatingAskAuraButton';
 import { FloatingChatPanel } from './components/FloatingChatPanel';
 import { AuthPage } from './pages/AuthPage';
@@ -49,6 +50,13 @@ function resolveInitialTab(): NavTabId {
 const MainRouter: React.FC = () => {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTabId>(resolveInitialTab);
+
+  useEffect(() => {
+    pageActionDispatcher.setActiveRoute(activeTab);
+    return pageActionDispatcher.registerNavigationHandler((tab) => {
+      setActiveTab(tab as NavTabId);
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search) {

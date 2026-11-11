@@ -30,6 +30,7 @@ import {
 import { apiRequest, formatInr, formatDateShort } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Tooltip } from '../components/Tooltip';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export type CalendarViewMode = 'timeline' | 'month' | 'week' | 'agenda' | 'cashflow';
 
@@ -94,8 +95,10 @@ export const FinancialCalendarPage: React.FC = () => {
       setResources(res.resources || []);
       setEvents(res.events || []);
       setSummary(res.summary || null);
+      pageActionDispatcher.setPageReady('calendar', true);
     } catch (err) {
       console.error('Failed to load calendar dataset:', err);
+      pageActionDispatcher.setPageReady('calendar', true);
     } finally {
       setLoading(false);
     }
@@ -103,6 +106,22 @@ export const FinancialCalendarPage: React.FC = () => {
 
   useEffect(() => {
     loadCalendar();
+
+    const unregister = pageActionDispatcher.registerPage('calendar', {
+      executeAction: async (actionType: string) => {
+        if (actionType === 'REFRESH_CALENDAR') {
+          await loadCalendar();
+          return true;
+        }
+        return false;
+      },
+      isReady: () => !loading,
+    });
+
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('calendar', false);
+    };
   }, []);
 
   // Filtered Events

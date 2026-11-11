@@ -54,12 +54,22 @@ export interface AiToolAction {
     | 'family_task'
     | 'general_knowledge'
     | 'financial_intelligence'
-    | 'clarification_needed';
+    | 'clarification_needed'
+    | 'grid_action'
+    | 'product_filtered'
+    | string;
   title: string;
   status: 'completed' | 'awaiting_approval' | 'informational';
   requiresUserPaymentApproval?: boolean;
   navTarget?: string;
   details?: any;
+  workflowSteps?: Array<{
+    type: string;
+    targetRoute?: string;
+    payload?: any;
+    parameters?: any;
+    description?: string;
+  }>;
 }
 
 export interface ConversationTurn {
@@ -1745,8 +1755,18 @@ export class AuraAiOrchestratorService {
         return this.formatSuccessfulResponse({
           prompt,
           workflowType: 'navigation',
-          explanation: `Taking you directly to **Bills & Commitments** to review your upcoming scheduled payments and mandates.`,
-          toolAction: exec.toolAction as any,
+          explanation: `Navigating you directly to **Bills & Commitments** to review your upcoming scheduled payments and mandates. All upcoming commitments are presented on the schedule.`,
+          toolAction: {
+            type: 'navigation',
+            title: 'Bills & Commitments',
+            status: 'completed',
+            navTarget: 'commitments',
+            details: { targetTab: 'commitments' },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'commitments' },
+              { type: 'REFRESH_BILLS', targetRoute: 'commitments' },
+            ],
+          } as any,
           suggestedNextPrompts: ['Show my largest expenses this month', 'What is my current balance?'],
           commerceContext: params.commerceContext || null,
         });
@@ -1771,6 +1791,10 @@ export class AuraAiOrchestratorService {
             status: 'completed',
             navTarget: 'transactions',
             details: { targetTab: 'transactions', ...exec.toolAction?.details, field: 'amount', direction: 'desc' },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'transactions' },
+              { type: 'SORT_TRANSACTIONS', targetRoute: 'transactions', payload: { field: 'amount', direction: 'desc' } },
+            ],
           } as any,
           suggestedNextPrompts: ['Filter shopping expenses', 'Undo that filter', 'What is my liquid balance?'],
           commerceContext: params.commerceContext || null,
@@ -1778,13 +1802,52 @@ export class AuraAiOrchestratorService {
       }
     }
 
-    // 17. Application Navigation ("Take me to Transactions", "Go to Goals", etc.)
-    if (
-      intent.intent === 'APP_NAVIGATION' ||
-      promptLower.includes('take me to') ||
-      promptLower.includes('go to') ||
-      promptLower.startsWith('open ')
-    ) {
+    // 16b. Transactions & Spending: Filtering ("Open Transactions and show purchases above ₹5,000")
+    if (intent.intent === 'TRANSACTION_FILTERING') {
+      const minAmount = intent.actionDetails?.minAmount || 5000;
+      const tool = aiActionRegistry.getAction('grid_apply_filter');
+      const filterModel = intent.actionDetails?.filterModel || {
+        amount: {
+          filterType: 'number',
+          type: 'greaterThan',
+          filter: minAmount,
+        },
+      };
+
+      if (tool) {
+        await tool.execute(
+          { gridId: 'transactions-grid', filterModel },
+          { userId: params.userId, user, prompt, history, requestId, conversationId }
+        );
+      }
+
+      return this.formatSuccessfulResponse({
+        prompt,
+        workflowType: 'grid_action',
+        explanation: `Navigated to **Transactions** and applied filter for purchases above ₹${minAmount.toLocaleString('en-IN')}. Only transactions exceeding this amount are displayed in the AG Grid ledger.`,
+        toolAction: {
+          type: 'grid_action',
+          title: `Transactions: Purchases > ₹${minAmount.toLocaleString('en-IN')}`,
+          status: 'completed',
+          navTarget: 'transactions',
+          details: {
+            targetTab: 'transactions',
+            gridId: 'transactions-grid',
+            minAmount,
+            filterModel,
+          },
+          workflowSteps: [
+            { type: 'NAVIGATE', targetRoute: 'transactions' },
+            { type: 'FILTER_TRANSACTIONS', targetRoute: 'transactions', payload: { minAmount, filterModel } },
+          ],
+        } as any,
+        suggestedNextPrompts: ['Show all transactions', 'Export to CSV', 'What is my highest expense?'],
+        commerceContext: params.commerceContext || null,
+      });
+    }
+
+    // 17. Application Navigation ("Take me to Transactions", "Go to Goals", etc.) - ONLY when pure navigation
+    if (intent.intent === 'APP_NAVIGATION') {
       let targetPage = intent.navTarget || 'overview';
       if (!intent.navTarget) {
         if (promptLower.includes('transaction') || promptLower.includes('spending')) targetPage = 'transactions';
@@ -1991,6 +2054,9 @@ Core Behavioral Principles:
    - When the user asks to save a view (e.g. "Save this view as Monthly Expenses"), invoke gridSaveView.
    - When the user asks to restore a saved view (e.g. "Load Monthly Expenses view"), invoke gridRestoreView.
    - When records are selected or selection context is attached and user asks about them (e.g. "What do these transactions have in common?", "How much did I spend on these?", "Which of these expenses are unnecessary?", "Find opportunities to save money", "Compare these transactions"), invoke gridAnalyseSelection. Base your answer strictly on the authorized selected records.
+9. EXECUTION OVER NAVIGATION SUGGESTIONS (CRITICAL):
+   - When the user asks you to navigate to a page and perform an operation (e.g. "Take me to Commerce and search for ASUS Vivobook 14", "Open Transactions and show purchases above ₹5,000", "Open Calendar and schedule a monthly savings review"), execute the actual operation using appropriate tools.
+   - NEVER output markdown links or URLs telling the user to click or navigate themselves (e.g., NEVER say "[Click here to view Commerce](/smart-purchases)"). Always confirm execution directly.
 User Name: ${user.name}
 Preferred Currency: ${user.currency || 'INR'}${commerceContextText ? '\n' + commerceContextText : ''}${gridSelectionText ? '\n' + gridSelectionText : ''}`;
 
@@ -3300,6 +3366,19 @@ The **${p2.name}** saves you ₹${(p1.priceInr - p2.priceInr).toLocaleString(
         onFinish(fullResult);
       }
     }, 20);
+  }
+
+  async processMessage(params: {
+    userId: string;
+    prompt: string;
+    conversationHistory?: ConversationTurn[];
+    includeKernelResearch?: boolean;
+    conversationId?: string;
+    requiredCapability?: string;
+    commerceContext?: ICommerceContext | null;
+    gridSelectionContext?: any;
+  }): Promise<ProcessConversationalQueryResult> {
+    return this.processConversationalQuery(params);
   }
 }
 

@@ -58,6 +58,22 @@ export const SmartPurchasePage: React.FC<{
     }
   }, [isMerchantAuthorized, activeTab]);
 
+  // Reset to storefront when a search or filter action is triggered by Ask AURA
+  useEffect(() => {
+    const handleResetToStorefront = () => {
+      setActiveTab('storefront');
+      setSelectedProduct(null);
+      setIsCheckout(false);
+    };
+
+    window.addEventListener('aura-commerce-search', handleResetToStorefront);
+    window.addEventListener('aura-commerce-filter', handleResetToStorefront);
+    return () => {
+      window.removeEventListener('aura-commerce-search', handleResetToStorefront);
+      window.removeEventListener('aura-commerce-filter', handleResetToStorefront);
+    };
+  }, []);
+
   // Sub-views
   const [selectedProduct, setSelectedProduct] = useState<EcommerceProduct | null>(null);
   const [isCheckout, setIsCheckout] = useState(false);

@@ -154,6 +154,10 @@ export class AiActionRegistry {
             status: 'completed',
             navTarget: matched.tab,
             details: { targetTab: matched.tab, title: matched.title, searchQuery },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: matched.tab },
+              ...(searchQuery ? [{ type: 'SEARCH_PRODUCTS', targetRoute: matched.tab, payload: { query: searchQuery } }] : []),
+            ],
           },
           suggestedNextPrompts: ['Show my current balance', 'What are my upcoming commitments?', 'Take me to settings'],
         };
@@ -350,8 +354,8 @@ export class AiActionRegistry {
             return `${i + 1}. **${p.name}** — ₹${p.priceInr.toLocaleString('en-IN')} (~$${(
               p.priceUsd || 0
             ).toFixed(2)} USD)\n   • *Specs:* ${specSummary || p.description.slice(0, 100)}\n   • *Retailer:* ${
-              p.retailerName
-            }\n   • [View Offer](${p.purchaseUrl || '#'})`;
+              p.retailerName || 'Verified Merchant'
+            }`;
           })
           .join('\n\n');
 
@@ -371,6 +375,10 @@ export class AiActionRegistry {
             status: 'informational',
             navTarget: 'smart-purchases',
             details: { targetTab: 'smart-purchases', searchQuery: query, count: products.length, products: mappedContextProducts },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'smart-purchases' },
+              { type: 'SEARCH_PRODUCTS', targetRoute: 'smart-purchases', payload: { query, products: mappedContextProducts } },
+            ],
           },
           suggestedNextPrompts: [
             `Which one would you recommend?`,
@@ -484,6 +492,21 @@ export class AiActionRegistry {
               minRamGB: minRamGb,
               products: filtered,
             },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'smart-purchases' },
+              {
+                type: 'FILTER_PRODUCTS',
+                targetRoute: 'smart-purchases',
+                payload: {
+                  filteredCount: filtered.length,
+                  maxPrice,
+                  maxPriceINR: maxPrice,
+                  minRamGb,
+                  minRamGB: minRamGb,
+                  products: filtered,
+                },
+              },
+            ],
           },
           suggestedNextPrompts: [
             'Compare the first three',
@@ -1401,6 +1424,19 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
               monthlyContribution,
               title,
             },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'goals' },
+              {
+                type: 'REFRESH_GOALS',
+                targetRoute: 'goals',
+                payload: {
+                  goalId: goal._id,
+                  title,
+                  targetAmount,
+                  monthlyContribution,
+                },
+              },
+            ],
           },
           suggestedNextPrompts: ['Show my savings goals', 'Schedule a weekly contribution reminder', 'Take me to Goals'],
         };
@@ -1609,6 +1645,14 @@ Would you like me to automatically create a **₹${targetSavingsBoost.toLocaleSt
             status: 'completed',
             navTarget: 'calendar',
             details: { targetTab: 'calendar', task, frequency: ruleDesc },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'calendar' },
+              {
+                type: 'REFRESH_CALENDAR',
+                targetRoute: 'calendar',
+                payload: { scheduleId: task.scheduleId, title, frequency: ruleDesc },
+              },
+            ],
           },
           suggestedNextPrompts: ['Show my reminders', 'Open my financial calendar', 'Show my current balance'],
         };

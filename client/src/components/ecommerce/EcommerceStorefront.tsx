@@ -20,6 +20,7 @@ import {
 import { EcommerceProduct } from './EcommerceTypes';
 import { apiRequest } from '../../lib/api';
 import { Channel3ProductComparisonModal } from './Channel3ProductComparisonModal';
+import { pageActionDispatcher } from '../../lib/pageActionDispatcher';
 
 const SUGGESTED_SEARCHES = [
   'Wireless headphones',
@@ -173,9 +174,32 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
       }
     };
 
+    const unregisterDispatcher = pageActionDispatcher.registerPage('smart-purchases', {
+      isReady: () => !loading,
+      executeAction: async (actionType, payload) => {
+        if (actionType === 'SEARCH_PRODUCTS' || actionType === 'search_products') {
+          const q = payload?.query || payload?.searchQuery;
+          if (q) {
+            setSearchQuery(q);
+            await fetchProducts(q, 'All', 'All', '');
+          }
+        } else if (actionType === 'FILTER_PRODUCTS' || actionType === 'filter_products') {
+          if (payload?.brand) setSelectedBrand(payload.brand);
+          if (payload?.maxPriceINR) {
+            const usdEst = Math.round(payload.maxPriceINR / 83);
+            setMaxPrice(String(usdEst));
+            await fetchProducts(searchQuery, 'All', payload.brand || 'All', String(usdEst));
+          } else {
+            await fetchProducts(searchQuery, 'All', payload.brand || 'All', '');
+          }
+        }
+      },
+    });
+
     window.addEventListener('aura-commerce-search', handleAuraSearch);
     window.addEventListener('aura-commerce-filter', handleAuraFilter);
     return () => {
+      unregisterDispatcher();
       window.removeEventListener('aura-commerce-search', handleAuraSearch);
       window.removeEventListener('aura-commerce-filter', handleAuraFilter);
     };

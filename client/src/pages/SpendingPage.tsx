@@ -19,6 +19,8 @@ import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SpendingIntelligence } from '../components/SpendingIntelligence';
 import { AuraDataGrid } from '../components/grid/AuraDataGrid';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
+import { gridStateManager } from '../lib/gridStateManager';
 
 interface TransactionRow {
   id: string;
@@ -56,6 +58,7 @@ export const SpendingPage: React.FC = () => {
       const res = await apiRequest('/transactions');
       const rawRows = res.agGrid?.rows || [];
       setRows(rawRows);
+      pageActionDispatcher.setPageReady('transactions', true);
     } finally {
       setLoading(false);
     }
@@ -63,6 +66,48 @@ export const SpendingPage: React.FC = () => {
 
   useEffect(() => {
     loadTransactions();
+
+    const unregister = pageActionDispatcher.registerPage('transactions', {
+      executeAction: async (actionType: string, payload: any = {}) => {
+        if (actionType === 'FILTER_TRANSACTIONS') {
+          if (payload.quickSearch || payload.query) {
+            setQuickSearch(payload.quickSearch || payload.query);
+          }
+          if (payload.category) {
+            setSelectedCategory(payload.category);
+          }
+          if (payload.type) {
+            setTypeFilter(payload.type);
+          }
+          const minAmount = payload.minAmount || payload.amountMin || (payload.filterModel?.amount?.filter);
+          if (minAmount) {
+            gridStateManager.applyFilters('transactions-grid', {
+              amount: {
+                filterType: 'number',
+                type: 'greaterThan',
+                filter: Number(minAmount),
+              },
+            });
+          } else if (payload.filterModel) {
+            gridStateManager.applyFilters('transactions-grid', payload.filterModel);
+          }
+          return true;
+        }
+        if (actionType === 'SORT_TRANSACTIONS') {
+          gridStateManager.applySorting('transactions-grid', [
+            { colId: payload.field || 'amount', sort: payload.direction || 'desc' },
+          ]);
+          return true;
+        }
+        return false;
+      },
+      isReady: () => !loading,
+    });
+
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('transactions', false);
+    };
   }, []);
 
   const handleResetFilters = () => {

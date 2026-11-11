@@ -5,6 +5,7 @@ import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { FinancialSchedulerView } from '../components/FinancialSchedulerView';
 import { AuraDataGrid } from '../components/grid/AuraDataGrid';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export const CommitmentsPage: React.FC = () => {
   const { balancesVisible, formatMoney } = useAuth();
@@ -26,13 +27,37 @@ export const CommitmentsPage: React.FC = () => {
       const res = await apiRequest('/mandates');
       setMandates(res.mandates || []);
       setConfirmedTotal(res.confirmedMonthlyOutflow || 0);
+      pageActionDispatcher.setPageReady('commitments', true);
     } catch {
-      // Ignored
+      pageActionDispatcher.setPageReady('commitments', true);
     }
   };
 
   useEffect(() => {
     loadMandates();
+
+    const unregister = pageActionDispatcher.registerPage('commitments', {
+      executeAction: async (actionType: string, payload: any = {}) => {
+        if (actionType === 'REFRESH_BILLS') {
+          await loadMandates();
+          return true;
+        }
+        if (actionType === 'FILTER_BILLS') {
+          if (payload?.viewMode) {
+            setViewMode(payload.viewMode);
+          }
+          await loadMandates();
+          return true;
+        }
+        return false;
+      },
+      isReady: () => true,
+    });
+
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('commitments', false);
+    };
   }, []);
 
   const handleConfirmMandate = async (id: string) => {
