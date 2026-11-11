@@ -104,7 +104,6 @@ export const NAVIGATION_GROUPS: NavGroup[] = [
     group: 'Account',
     items: [
       { id: 'settings', label: 'Settings', icon: Settings, tooltip: 'Financial profile, security PIN, and preferences' },
-      { id: 'developer', label: 'Developer Portal', icon: Code2, tooltip: 'OpenAPI 3.0.3 spec, SDKs, and API Playground', badge: 'API' },
     ],
   },
 ];
@@ -392,35 +391,6 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                   </div>
                 );
               })}
-
-              {/* Dedicated Demo Lab Navigation Item */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Testing &amp; Evaluation
-                </div>
-                <button
-                  onClick={() => onSelectTab('demo-lab')}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    isDemoLabActive
-                      ? 'bg-navy-900 dark:bg-slate-800 text-white shadow-xs'
-                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <FlaskConical className={`w-4 h-4 shrink-0 ${isDemoLabActive ? 'text-blue-300' : 'text-slate-500'}`} />
-                    <span className="font-semibold truncate">Demo Lab</span>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      isDemoLabActive
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    Sim &amp; Dev
-                  </span>
-                </button>
-              </div>
             </nav>
 
             {/* User Card */}
@@ -672,23 +642,6 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
                     </div>
                   );
                 })}
-
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    onClick={() => {
-                      onSelectTab('demo-lab');
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      isDemoLabActive
-                        ? 'bg-navy-900 dark:bg-blue-600 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <FlaskConical className="w-4 h-4 text-blue-500" />
-                    <span>Demo Lab (Sim &amp; Dev)</span>
-                  </button>
-                </div>
               </nav>
 
               {/* User footer in mobile drawer */}
