@@ -568,15 +568,18 @@ export const AskAuraProvider: React.FC<{
               try {
                 const event = JSON.parse(trimmed.slice(6));
                 const chunkDelta = event.delta || event.token || event.text || '';
-                if (event.type === 'delta' || event.type === 'token' || (chunkDelta && event.type !== 'final')) {
+                if (event.type === 'delta' || event.type === 'token' || (chunkDelta && event.type !== 'final' && event.type !== 'finish')) {
                   streamedContent += chunkDelta;
                   setMessages((prev) =>
                     prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamedContent } : m))
                   );
-                } else if (event.type === 'final') {
-                  if (event.answer) streamedContent = event.answer;
-                  finalAction = event.toolAction;
-                  finalChips = event.suggestedNextPrompts || [];
+                } else if (event.type === 'final' || event.type === 'finish') {
+                  const resObj = event.result || event;
+                  if (resObj.answer || resObj.explanation || event.assistantMessage?.content) {
+                    streamedContent = resObj.explanation || resObj.answer || event.assistantMessage?.content || streamedContent;
+                  }
+                  finalAction = resObj.toolAction || event.toolAction || event.assistantMessage?.toolAction || finalAction;
+                  finalChips = resObj.suggestedNextPrompts || event.suggestedNextPrompts || event.assistantMessage?.suggestedNextPrompts || finalChips;
                 }
               } catch {
                 // Ignore parse errors on individual SSE frames

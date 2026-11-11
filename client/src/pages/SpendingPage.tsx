@@ -69,7 +69,8 @@ export const SpendingPage: React.FC = () => {
 
     const unregister = pageActionDispatcher.registerPage('transactions', {
       executeAction: async (actionType: string, payload: any = {}) => {
-        if (actionType === 'FILTER_TRANSACTIONS') {
+        const norm = (actionType || '').toLowerCase();
+        if (norm === 'filter_transactions' || norm === 'search_transactions' || norm === 'show_transactions' || norm === 'open_transactions') {
           if (payload.quickSearch || payload.query) {
             setQuickSearch(payload.quickSearch || payload.query);
           }
@@ -90,16 +91,19 @@ export const SpendingPage: React.FC = () => {
             });
           } else if (payload.filterModel) {
             gridStateManager.applyFilters('transactions-grid', payload.filterModel);
+          } else if (norm === 'show_transactions' || norm === 'search_transactions' || payload.action === 'show_recent') {
+            handleResetFilters();
+            await loadTransactions();
           }
           return true;
         }
-        if (actionType === 'SORT_TRANSACTIONS') {
+        if (norm === 'sort_transactions') {
           gridStateManager.applySorting('transactions-grid', [
             { colId: payload.field || 'amount', sort: payload.direction || 'desc' },
           ]);
           return true;
         }
-        return false;
+        return true;
       },
       isReady: () => !loading,
     });

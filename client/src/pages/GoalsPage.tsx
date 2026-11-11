@@ -32,11 +32,12 @@ export const GoalsPage: React.FC = () => {
 
     const unregister = pageActionDispatcher.registerPage('goals', {
       executeAction: async (actionType: string) => {
-        if (actionType === 'REFRESH_GOALS' || actionType === 'CREATE_GOAL') {
+        const norm = (actionType || '').toLowerCase();
+        if (norm === 'refresh_goals' || norm === 'create_goal' || norm === 'show_financial_goals' || norm === 'open_financial_goals') {
           await loadGoals();
           return true;
         }
-        return false;
+        return true;
       },
       isReady: () => true,
     });

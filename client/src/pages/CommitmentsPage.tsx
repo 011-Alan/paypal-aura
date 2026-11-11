@@ -38,18 +38,19 @@ export const CommitmentsPage: React.FC = () => {
 
     const unregister = pageActionDispatcher.registerPage('commitments', {
       executeAction: async (actionType: string, payload: any = {}) => {
-        if (actionType === 'REFRESH_BILLS') {
+        const norm = (actionType || '').toLowerCase();
+        if (norm === 'refresh_bills' || norm === 'show_upcoming_bills' || norm === 'open_bills') {
           await loadMandates();
           return true;
         }
-        if (actionType === 'FILTER_BILLS') {
+        if (norm === 'filter_bills') {
           if (payload?.viewMode) {
             setViewMode(payload.viewMode);
           }
           await loadMandates();
           return true;
         }
-        return false;
+        return true;
       },
       isReady: () => true,
     });

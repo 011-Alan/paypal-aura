@@ -13,26 +13,38 @@
  */
 
 export type ApplicationActionType =
+  | 'navigate_to_page'
   | 'NAVIGATE'
+  | 'search_products'
   | 'SEARCH_PRODUCTS'
-  | 'FILTER_PRODUCTS'
+  | 'search_transactions'
+  | 'SEARCH_TRANSACTIONS'
+  | 'filter_transactions'
+  | 'FILTER_TRANSACTIONS'
+  | 'show_upcoming_bills'
+  | 'SHOW_UPCOMING_BILLS'
+  | 'show_financial_goals'
+  | 'SHOW_FINANCIAL_GOALS'
+  | 'open_settings'
+  | 'OPEN_SETTINGS'
+  | 'change_theme'
+  | 'CHANGE_THEME'
+  | 'toggle_sidebar'
+  | 'UPDATE_SIDEBAR'
   | 'COMPARE_PRODUCTS'
   | 'SELECT_PRODUCT'
   | 'PREPARE_CHECKOUT'
-  | 'OPEN_FINANCIAL_GOALS'
   | 'CREATE_FINANCIAL_GOAL'
   | 'UPDATE_FINANCIAL_GOAL'
   | 'REFRESH_GOALS'
-  | 'OPEN_TRANSACTIONS'
-  | 'FILTER_TRANSACTIONS'
   | 'SORT_TRANSACTIONS'
+  | 'OPEN_TRANSACTIONS'
   | 'OPEN_BILLS'
   | 'FILTER_BILLS'
+  | 'REFRESH_BILLS'
   | 'CREATE_REMINDER'
   | 'SCHEDULE_EVENT'
   | 'REFRESH_CALENDAR'
-  | 'CHANGE_THEME'
-  | 'UPDATE_SIDEBAR'
   | 'LOGOUT';
 
 export interface ActionWorkflowStep {
@@ -197,7 +209,26 @@ class PageActionDispatcher {
    * Execute a single action or sequential workflow with reliable page handoff
    */
   public async dispatchAction(action: ApplicationAction): Promise<ActionExecutionResult> {
-    const target = action.targetPage || action.targetRoute || action.targetTab;
+    const rawType = String(action.type || '').trim();
+    const normType = rawType.toLowerCase();
+
+    // Infer default target route based on action type if not explicitly supplied
+    let target = action.targetPage || action.targetRoute || action.targetTab;
+    if (!target) {
+      if (normType === 'open_settings' || normType === 'settings') {
+        target = 'settings';
+      } else if (normType === 'show_upcoming_bills' || normType === 'refresh_bills' || normType === 'open_bills') {
+        target = 'commitments';
+      } else if (normType === 'show_financial_goals' || normType === 'refresh_goals' || normType === 'open_financial_goals') {
+        target = 'goals';
+      } else if (normType.includes('transaction') || normType === 'open_transactions') {
+        target = 'transactions';
+      } else if (normType.includes('product') || normType === 'smart-purchases' || normType === 'commerce') {
+        target = 'smart-purchases';
+      } else if (normType === 'calendar' || normType === 'refresh_calendar') {
+        target = 'calendar';
+      }
+    }
 
     // 1. If navigation is required, navigate first
     if (target && target !== this.activeRoute) {
@@ -254,7 +285,7 @@ class PageActionDispatcher {
     }
 
     // Global / fallback actions
-    if (action.type === 'CHANGE_THEME' && action.payload?.theme) {
+    if ((normType === 'change_theme') && action.payload?.theme) {
       const newTheme = action.payload.theme;
       if (typeof document !== 'undefined') {
         document.documentElement.classList.remove('light', 'dark');
@@ -269,6 +300,13 @@ class PageActionDispatcher {
       return { success: true, actionType: action.type, data: { theme: newTheme }, timestamp: new Date().toISOString() };
     }
 
+    if (normType === 'toggle_sidebar' || normType === 'update_sidebar') {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aura-sidebar-toggle', { detail: action.payload }));
+      }
+      return { success: true, actionType: action.type, data: action.payload, timestamp: new Date().toISOString() };
+    }
+
     return {
       success: true,
       actionType: action.type,
@@ -280,17 +318,16 @@ class PageActionDispatcher {
   /**
    * Dispatch a sequence of actions or workflow steps
    */
-  public async dispatchSequence(actions: Array<ApplicationAction | ActionWorkflowStep>): Promise<boolean> {
+  public async dispatchSequence(actions: Array<ApplicationAction | ActionWorkflowStep | any>): Promise<boolean> {
     for (const act of actions) {
-      if ('action' in act) {
-        await this.dispatchAction({
-          type: act.action as ApplicationActionType,
-          targetPage: act.targetTab,
-          payload: act.parameters,
-        });
-      } else {
-        await this.dispatchAction(act);
-      }
+      const type = act.action || act.type;
+      const targetPage = act.targetTab || act.targetRoute || act.targetPage;
+      const payload = act.parameters || act.payload || {};
+      await this.dispatchAction({
+        type,
+        targetPage,
+        payload,
+      });
     }
     return true;
   }

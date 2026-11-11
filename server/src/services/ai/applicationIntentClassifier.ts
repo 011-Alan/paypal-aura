@@ -174,12 +174,16 @@ export class ApplicationIntentClassifier {
     // =========================================================================
     // 2b. COMPOUND NAVIGATION + OPERATION COMMANDS (EXECUTION, NOT NAVIGATION LINKS!)
     // e.g. "Take me to Commerce and search for ASUS Vivobook 14."
-    // e.g. "Open Transactions and show purchases above ₹5,000."
+    // e.g. "Take me to ecommerce and search for an ASUS Vivobook."
+    // e.g. "Open smart purchases and find a Bible."
+    // e.g. "Go to transactions and show my recent payments."
+    // e.g. "Go to transactions and show my recent transactions."
+    // e.g. "Open bills and commitments and show my upcoming bills."
+    // e.g. "Take me to goals and show my savings goals."
     // e.g. "Open Calendar and schedule a monthly savings review."
-    // e.g. "Open Financial Goals and create a goal to save ₹50,000 in six months."
     // =========================================================================
     const compoundNavMatch = raw.match(
-      /^(?:take\s*me\s*to|go\s*to|open|navigate\s*to)\s+(?:the\s*)?(?:aura\s*)?(commerce|store|shop|smart\s*purchases?|transactions?|spending|goals?|financial\s*goals?|commitments?|bills?|calendar|scheduler|settings|overview)\s+(?:and\s+|,?\s*then\s+)(.+)$/i
+      /^(?:now\s+)?(?:please\s+)?(?:can\s+you\s+)?(?:take\s*me\s*to|go\s*to|open|navigate\s*to)\s+(?:the\s*)?(?:aura\s*)?(commerce|store|shop|smart\s*purchases?|transactions?|spending|goals?|financial\s*goals?|commitments?|bills?|calendar|scheduler|settings|overview)\s+(?:and\s+|,?\s*then\s+)(.+)$/i
     );
 
     if (compoundNavMatch) {
@@ -189,11 +193,12 @@ export class ApplicationIntentClassifier {
       // Commerce Search
       if (
         (pageKey.includes('commerce') || pageKey.includes('store') || pageKey.includes('shop') || pageKey.includes('purchase')) &&
-        /\b(search|find|buy|look\s*for|vivobook|laptop|headphone|shoes?|sneakers?)\b/i.test(actionPart)
+        /\b(search|find|buy|look\s*for|vivobook|laptop|headphone|shoes?|sneakers?|bible|coat|suit)\b/i.test(actionPart)
       ) {
         let cleanQuery = actionPart
-          .replace(/^(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*)?|look\s*for\s*(?:a\s*)?|buy\s*(?:a\s*)?)\s*/i, '')
+          .replace(/^(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*|an\s*|the\s*)?|look\s*for\s*(?:a\s*|an\s*|the\s*)?|buy\s*(?:a\s*|an\s*|the\s*)?)\s*/i, '')
           .replace(/\s*(?:in\s*aura\s*commerce|in\s*commerce|online|store)\s*$/i, '')
+          .replace(/^(?:a|an|the)\s+/i, '')
           .replace(/[.!?,;]+$/, '')
           .trim();
         if (!cleanQuery) cleanQuery = 'laptop';
@@ -210,33 +215,104 @@ export class ApplicationIntentClassifier {
         };
       }
 
-      // Transactions: Filtering / Purchases above
+      // Transactions: Filtering / Purchases above or Showing recent transactions
       if (
         (pageKey.includes('transaction') || pageKey.includes('spending')) &&
-        /\b(show|filter|find|purchases?|expenses?|above|over|greater)\b/i.test(actionPart)
+        /\b(show|filter|find|purchases?|expenses?|payments?|transactions?|above|over|greater)\b/i.test(actionPart)
       ) {
         const amountMatch = actionPart.match(/(?:above|over|greater\s*than|>)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
-        const minAmount = amountMatch ? parseInt(amountMatch[1].replace(/,/g, ''), 10) : 5000;
-
-        return {
-          domain: 'TRANSACTIONS_AND_SPENDING',
-          intent: 'TRANSACTION_FILTERING',
-          confidence: 0.98,
-          targetRoute: applicationRouteRegistry.getRouteById('transactions'),
-          shouldNavigate: true,
-          navTarget: 'transactions',
-          actionDetails: {
-            minAmount,
-            filterModel: {
-              amount: {
-                filterType: 'number',
-                type: 'greaterThan',
-                filter: minAmount,
+        if (amountMatch) {
+          const minAmount = parseInt(amountMatch[1].replace(/,/g, ''), 10);
+          return {
+            domain: 'TRANSACTIONS_AND_SPENDING',
+            intent: 'TRANSACTION_FILTERING',
+            confidence: 0.98,
+            targetRoute: applicationRouteRegistry.getRouteById('transactions'),
+            shouldNavigate: true,
+            navTarget: 'transactions',
+            actionDetails: {
+              minAmount,
+              filterModel: {
+                amount: {
+                  filterType: 'number',
+                  type: 'greaterThan',
+                  filter: minAmount,
+                },
               },
             },
-          },
-          reason: `User requested navigation to Transactions and filtering purchases above ₹${minAmount.toLocaleString('en-IN')}.`,
+            reason: `User requested navigation to Transactions and filtering purchases above ₹${minAmount.toLocaleString('en-IN')}.`,
+          };
+        } else {
+          return {
+            domain: 'TRANSACTIONS_AND_SPENDING',
+            intent: 'TRANSACTION_ANALYSIS',
+            confidence: 0.98,
+            targetRoute: applicationRouteRegistry.getRouteById('transactions'),
+            shouldNavigate: true,
+            navTarget: 'transactions',
+            actionDetails: {
+              action: 'show_recent',
+            },
+            reason: `User requested navigation to Transactions to show recent transactions/payments.`,
+          };
+        }
+      }
+
+      // Bills & Commitments: Inquiry
+      if (
+        (pageKey.includes('bill') || pageKey.includes('commitment')) &&
+        /\b(show|view|find|upcoming|my\s*bills|mandates?)\b/i.test(actionPart)
+      ) {
+        return {
+          domain: 'BUDGETS_AND_BILLS',
+          intent: 'BILL_INQUIRY',
+          confidence: 0.98,
+          targetRoute: applicationRouteRegistry.getRouteById('commitments'),
+          shouldNavigate: true,
+          navTarget: 'commitments',
+          reason: `User requested navigation to Bills & Commitments to view upcoming bills.`,
         };
+      }
+
+      // Goals: Show savings goals or Create Goal
+      if (pageKey.includes('goal')) {
+        if (/\b(show|view|find|my\s*goals|savings\s*goals)\b/i.test(actionPart)) {
+          return {
+            domain: 'FINANCIAL_GOALS',
+            intent: 'GOAL_INQUIRY',
+            confidence: 0.98,
+            targetRoute: applicationRouteRegistry.getRouteById('goals'),
+            shouldNavigate: true,
+            navTarget: 'goals',
+            reason: `User requested navigation to Financial Goals to view savings goals.`,
+          };
+        }
+        if (/\b(create|set|make|save)\b/i.test(actionPart)) {
+          const amountMatch = actionPart.match(/(?:save|goal\s*(?:for|of)?)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
+          const monthsMatch = actionPart.match(/(?:in|over|within)\s*(\d{1,2}|six|twelve|three)\s*months?/i);
+          const targetAmount = amountMatch ? parseInt(amountMatch[1].replace(/,/g, ''), 10) : 50000;
+          let durationMonths = 12;
+          if (monthsMatch) {
+            const mStr = monthsMatch[1].toLowerCase();
+            durationMonths = mStr === 'six' ? 6 : mStr === 'three' ? 3 : mStr === 'twelve' ? 12 : parseInt(mStr, 10);
+          }
+
+          return {
+            domain: 'FINANCIAL_GOALS',
+            intent: 'GOAL_CREATION',
+            confidence: 0.98,
+            targetRoute: applicationRouteRegistry.getRouteById('goals'),
+            shouldNavigate: true,
+            navTarget: 'goals',
+            goalRequirements: {
+              title: 'Savings Goal',
+              targetAmount,
+              durationMonths,
+              monthlyContribution: Math.round(targetAmount / durationMonths),
+            },
+            reason: `User requested navigation to Financial Goals and creation of a ₹${targetAmount.toLocaleString('en-IN')} goal.`,
+          };
+        }
       }
 
       // Calendar: Recurring Schedule or Reminder
@@ -257,37 +333,6 @@ export class ApplicationIntentClassifier {
             recurrence: 'monthly',
           },
           reason: `User requested navigation to Calendar and scheduling a recurring review.`,
-        };
-      }
-
-      // Goals: Create Goal
-      if (
-        pageKey.includes('goal') &&
-        /\b(create|set|make|save)\b/i.test(actionPart)
-      ) {
-        const amountMatch = actionPart.match(/(?:save|goal\s*(?:for|of)?)\s*(?:₹|\$|rs\.?|inr)?\s*([\d,]+)/i);
-        const monthsMatch = actionPart.match(/(?:in|over|within)\s*(\d{1,2}|six|twelve|three)\s*months?/i);
-        const targetAmount = amountMatch ? parseInt(amountMatch[1].replace(/,/g, ''), 10) : 50000;
-        let durationMonths = 12;
-        if (monthsMatch) {
-          const mStr = monthsMatch[1].toLowerCase();
-          durationMonths = mStr === 'six' ? 6 : mStr === 'three' ? 3 : mStr === 'twelve' ? 12 : parseInt(mStr, 10);
-        }
-
-        return {
-          domain: 'FINANCIAL_GOALS',
-          intent: 'GOAL_CREATION',
-          confidence: 0.98,
-          targetRoute: applicationRouteRegistry.getRouteById('goals'),
-          shouldNavigate: true,
-          navTarget: 'goals',
-          goalRequirements: {
-            title: 'Savings Goal',
-            targetAmount,
-            durationMonths,
-            monthlyContribution: Math.round(targetAmount / durationMonths),
-          },
-          reason: `User requested navigation to Financial Goals and creation of a ₹${targetAmount.toLocaleString('en-IN')} goal.`,
         };
       }
     }
@@ -379,12 +424,13 @@ export class ApplicationIntentClassifier {
     // =========================================================================
     const isComparison = /\b(compare|comparison|versus|vs\.?|difference\s*between)\b/i.test(pLower);
 
-    if (isComparison && hasContextProducts) {
+    if (isComparison) {
       let count = 2;
       if (/\b(three|3|first\s*three|top\s*3)\b/i.test(pLower)) count = 3;
       else if (/\b(four|4|first\s*four)\b/i.test(pLower)) count = 4;
+      else if (/\b(two|2|first\s*two|top\s*2)\b/i.test(pLower)) count = 2;
 
-      const compareList = products.slice(0, Math.min(count, products.length));
+      const compareList = products.slice(0, Math.min(count, products.length > 0 ? products.length : count));
 
       return {
         domain: 'COMMERCE',
@@ -393,7 +439,7 @@ export class ApplicationIntentClassifier {
         targetRoute: applicationRouteRegistry.getRouteById('commerce'),
         shouldNavigate: false,
         comparisonProducts: compareList,
-        reason: `User requested structured comparison between ${compareList.length} products.`,
+        reason: `User requested structured comparison between ${count} products.`,
       };
     }
 
@@ -467,22 +513,40 @@ export class ApplicationIntentClassifier {
 
     // =========================================================================
     // 9. COMMERCE WORKFLOW: PRODUCT DISCOVERY (NEW SEARCH)
-    // e.g. "I want to buy an ASUS Vivobook 14", "Find a good wireless keyboard", "Looking for running shoes"
+    // e.g. "I want to buy a black coat suit. Can you show me in AURA Ecommerce?",
+    // "Search for a black coat suit in AURA Ecommerce.",
+    // "I want to buy an ASUS Vivobook 14", "Find a good wireless keyboard", "Looking for running shoes"
     // =========================================================================
+    const mentionsEcommerce =
+      /\b(?:in|on|at|through|into)\s+(?:the\s*)?(?:aura\s*)?(?:ecommerce|commerce|store|shop|smart\s*purchases?)\b/i.test(raw) ||
+      /\b(?:show\s*(?:me)?\s*in\s*(?:aura\s*)?(?:ecommerce|commerce|store|smart\s*purchases?))\b/i.test(raw);
+
+    const hasShoppingVerb = /\b(?:i\s*want\s*to\s*buy|buy|find\s*(?:me)?|looking\s*for|search\s*(?:for)?|need\s*(?:a|an)?|show\s*me)\b/i.test(pLower);
+
     const isCommerceDiscovery =
-      /\b(i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*)?(?:good\s*)?|looking\s*for\s*(?:a\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*)?)\b/i.test(pLower) &&
-      /\b(laptop|vivobook|macbook|keyboard|mouse|headphones?|shoes?|sneakers?|tablet|monitor|bottle|chair|desk|watch|phone|smartphone|bible)\b/i.test(pLower);
+      (mentionsEcommerce && hasShoppingVerb) ||
+      (/\b(i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*|an\s*)?(?:good\s*)?|looking\s*for\s*(?:a\s*|an\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*|an\s*)?)\b/i.test(pLower) &&
+        (mentionsEcommerce ||
+          /\b(laptop|vivobook|macbook|keyboard|mouse|headphones?|shoes?|sneakers?|tablet|monitor|bottle|chair|desk|watch|phone|smartphone|bible|suit|coat|jacket|dress|shirt|apparel|books?|camera)\b/i.test(pLower) ||
+          pLower.startsWith('search for') ||
+          pLower.startsWith('find ')));
 
     if (isCommerceDiscovery) {
       let cleanQuery = raw;
-      const verbMatch = raw.match(/(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*)?|look\s*for\s*(?:a\s*)?|want\s*to\s*buy\s*(?:a\s*)?|need\s*(?:a\s*)?)\s+(.+)$/i);
+      // Strip trailing "can you show me in aura ecommerce" or "in ecommerce" etc
+      cleanQuery = cleanQuery
+        .replace(/[.?!\s]+(?:can\s*you\s*)?show\s*(?:me)?\s*(?:this\s*)?(?:in|on|at)\s+(?:the\s*)?(?:aura\s*)?(?:ecommerce|commerce|store|shop|smart\s*purchases?)[.?!\s]*$/i, '')
+        .replace(/\s*(?:in|on|at)\s+(?:the\s*)?(?:aura\s*)?(?:ecommerce|commerce|store|shop|smart\s*purchases?)[.?!\s]*$/i, '');
+
+      const verbMatch = cleanQuery.match(/(?:search\s*(?:for\s*)?|find\s*(?:me\s*)?(?:a\s*|an\s*|the\s*)?|look\s*for\s*(?:a\s*|an\s*|the\s*)?|want\s*to\s*buy\s*(?:a\s*|an\s*|the\s*)?|need\s*(?:a\s*|an\s*|the\s*)?|buy\s*(?:a\s*|an\s*|the\s*)?)\s+(.+)$/i);
       if (verbMatch) {
         cleanQuery = verbMatch[1];
       } else {
-        cleanQuery = raw.replace(/^(?:i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*)?|looking\s*for\s*(?:a\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*)?)\s*/i, '');
+        cleanQuery = cleanQuery.replace(/^(?:i\s*want\s*to\s*buy|find\s*(?:me\s*)?(?:a\s*)?|looking\s*for\s*(?:a\s*)?|search\s*(?:for\s*)?|need\s*(?:a\s*)?|buy)\s*/i, '');
       }
       cleanQuery = cleanQuery
-        .replace(/\s*(?:in\s*aura\s*commerce|in\s*commerce|online|store)\s*$/i, '')
+        .replace(/\s*(?:in|on|at)\s+(?:the\s*)?(?:aura\s*)?(?:ecommerce|commerce|store|shop|smart\s*purchases?)[.?!\s]*$/i, '')
+        .replace(/^(?:a|an|the)\s+/i, '')
         .replace(/[.!?,;]+$/, '')
         .trim();
 
@@ -661,10 +725,10 @@ export class ApplicationIntentClassifier {
 
     // =========================================================================
     // 14. EXPLICIT APPLICATION NAVIGATION
-    // e.g. "Take me to Transactions", "Open Financial Planning", "Go to Settings"
+    // e.g. "Take me to Transactions", "Open Financial Planning", "Go to Settings", "Now take me to Settings"
     // =========================================================================
     const isNavigationCommand =
-      /^(take\s*me\s*to|go\s*to|open|navigate\s*to|show\s*(?:me\s*)?(?:my\s*)?)\s+/i.test(raw);
+      /^(?:now\s+|,?\s*please\s+|,?\s*aura\s+|(?:can|could)\s+you\s+)?(take\s*me\s*to|go\s*to|open|navigate\s*to|switch\s*to|show\s*(?:me\s*)?(?:my\s*)?)\s+/i.test(raw);
 
     if (isNavigationCommand) {
       const route = applicationRouteRegistry.resolveRouteForIntent(raw);

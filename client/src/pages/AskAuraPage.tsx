@@ -332,32 +332,7 @@ export const AskAuraPage: React.FC<{ onNavigate?: (tab: string) => void }> = ({ 
                   {/* Structured Tool Action Cards */}
                   {msg.toolAction && (
                     <div className="mt-3 space-y-3">
-                      {/* 1. Navigation Action Card */}
-                      {(msg.toolAction.type === 'navigation' || msg.toolAction.navTarget) && (
-                        <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-left space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
-                              <Compass className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                              Application Navigation
-                            </span>
-                            <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full">
-                              Target: {msg.toolAction.navTarget || msg.toolAction.details?.targetTab}
-                            </span>
-                          </div>
-                          <p className="text-xs text-indigo-950 dark:text-indigo-200">
-                            AURA navigated to your <strong>{msg.toolAction.navTarget || msg.toolAction.details?.targetTab}</strong> screen. Click below to view immediately.
-                          </p>
-                          <button
-                            onClick={() => onNavigate?.(msg.toolAction?.navTarget || msg.toolAction?.details?.targetTab)}
-                            className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition flex items-center justify-center gap-1.5"
-                          >
-                            <span>Open {msg.toolAction.navTarget || msg.toolAction.details?.targetTab} Page Now</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* 2. Payment Authorization Card */}
+                      {/* 1. Payment Authorization Card */}
                       {msg.toolAction.type === 'payment_prepared' && (
                         <div className="p-5 rounded-3xl bg-amber-50/90 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-700 shadow-xs space-y-3.5 text-left">
                           <div className="flex items-center justify-between">

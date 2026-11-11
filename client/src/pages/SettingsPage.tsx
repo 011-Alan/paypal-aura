@@ -24,6 +24,7 @@ import { ConnectedPayPalAccount } from '../components/ConnectedPayPalAccount';
 import { PayPalSandboxBusinessReporting } from '../components/PayPalSandboxBusinessReporting';
 import { AccountTypeVerificationSection } from '../components/AccountTypeVerificationSection';
 import { FEATURE_FLAGS } from '../config/features';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export const SettingsPage: React.FC = () => {
   const { user, refreshUser, logout, theme, setTheme } = useAuth();
@@ -109,6 +110,18 @@ export const SettingsPage: React.FC = () => {
 
     loadFinancialProfile();
   }, [user]);
+
+  useEffect(() => {
+    pageActionDispatcher.setPageReady('settings', true);
+    const unregister = pageActionDispatcher.registerPage('settings', {
+      executeAction: async () => true,
+      isReady: () => true,
+    });
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('settings', false);
+    };
+  }, []);
 
   const handleSaveFinancialProfile = async (e: React.FormEvent) => {
     e.preventDefault();

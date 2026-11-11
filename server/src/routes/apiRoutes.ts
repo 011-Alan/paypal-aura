@@ -2376,15 +2376,19 @@ apiRouter.post('/conversations/:id/messages/stream', requireAuth, async (req: Au
         conversation.lastMessageAt = new Date();
         await conversation.save();
 
-        res.write(
-          `data: ${JSON.stringify({
-            type: 'finish',
-            userMessage: userMsg,
-            assistantMessage: assistantMsg,
-            commerceContext: finalResult?.commerceContext || (conversation as any).commerceContext || null,
-            result: finalResult,
-          })}\n\n`
-        );
+        const finalPayload = {
+          type: 'final',
+          answer: finalResult.explanation || finalResult.answer,
+          explanation: finalResult.explanation || finalResult.answer,
+          toolAction: finalResult.toolAction,
+          suggestedNextPrompts: finalResult.suggestedNextPrompts || [],
+          commerceContext: finalResult?.commerceContext || (conversation as any).commerceContext || null,
+          userMessage: userMsg,
+          assistantMessage: assistantMsg,
+          result: finalResult,
+        };
+        res.write(`data: ${JSON.stringify(finalPayload)}\n\n`);
+        res.write(`data: ${JSON.stringify({ ...finalPayload, type: 'finish' })}\n\n`);
         res.end();
       }
     );

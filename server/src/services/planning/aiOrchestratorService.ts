@@ -1773,8 +1773,29 @@ export class AuraAiOrchestratorService {
       }
     }
 
-    // 16. Transactions & Spending: Largest Expenses / Sorting
+    // 16. Transactions & Spending: Largest Expenses / Sorting / Recent Transactions
     if (intent.intent === 'TRANSACTION_ANALYSIS') {
+      if (intent.actionDetails?.action === 'show_recent' || promptLower.includes('recent')) {
+        return this.formatSuccessfulResponse({
+          prompt,
+          workflowType: 'navigation',
+          explanation: `Navigating to **Transactions** to display your recent payments and transaction ledger.`,
+          toolAction: {
+            type: 'navigation',
+            title: 'Transactions: Recent History',
+            status: 'completed',
+            navTarget: 'transactions',
+            details: { targetTab: 'transactions', action: 'show_recent' },
+            workflowSteps: [
+              { type: 'NAVIGATE', targetRoute: 'transactions' },
+              { type: 'SEARCH_TRANSACTIONS', targetRoute: 'transactions', payload: { action: 'show_recent' } },
+            ],
+          } as any,
+          suggestedNextPrompts: ['Show my largest expenses this month', 'Filter shopping expenses', 'What is my liquid balance?'],
+          commerceContext: params.commerceContext || null,
+        });
+      }
+
       const tool = aiActionRegistry.getAction('grid_apply_sorting');
       if (tool) {
         const exec = await tool.execute(
@@ -1800,6 +1821,28 @@ export class AuraAiOrchestratorService {
           commerceContext: params.commerceContext || null,
         });
       }
+    }
+
+    // 16c. Financial Goals: Inquiry ("Take me to goals and show my savings goals")
+    if (intent.intent === 'GOAL_INQUIRY') {
+      return this.formatSuccessfulResponse({
+        prompt,
+        workflowType: 'navigation',
+        explanation: `Navigating you to **Financial Goals** to review your active savings targets, target timelines, and monthly contributions.`,
+        toolAction: {
+          type: 'navigation',
+          title: 'Financial Goals',
+          status: 'completed',
+          navTarget: 'goals',
+          details: { targetTab: 'goals' },
+          workflowSteps: [
+            { type: 'NAVIGATE', targetRoute: 'goals' },
+            { type: 'REFRESH_GOALS', targetRoute: 'goals' },
+          ],
+        } as any,
+        suggestedNextPrompts: ['Create a goal to save ₹50,000 in six months', 'What is my current savings rate?', 'Take me to Overview'],
+        commerceContext: params.commerceContext || null,
+      });
     }
 
     // 16b. Transactions & Spending: Filtering ("Open Transactions and show purchases above ₹5,000")

@@ -174,16 +174,19 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
       }
     };
 
+    pageActionDispatcher.setPageReady('smart-purchases', true);
     const unregisterDispatcher = pageActionDispatcher.registerPage('smart-purchases', {
-      isReady: () => !loading,
+      isReady: () => true,
       executeAction: async (actionType, payload) => {
-        if (actionType === 'SEARCH_PRODUCTS' || actionType === 'search_products') {
+        const norm = (actionType || '').toLowerCase();
+        if (norm === 'search_products') {
           const q = payload?.query || payload?.searchQuery;
           if (q) {
             setSearchQuery(q);
             await fetchProducts(q, 'All', 'All', '');
           }
-        } else if (actionType === 'FILTER_PRODUCTS' || actionType === 'filter_products') {
+          return true;
+        } else if (norm === 'filter_products') {
           if (payload?.brand) setSelectedBrand(payload.brand);
           if (payload?.maxPriceINR) {
             const usdEst = Math.round(payload.maxPriceINR / 83);
@@ -192,7 +195,9 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
           } else {
             await fetchProducts(searchQuery, 'All', payload.brand || 'All', '');
           }
+          return true;
         }
+        return true;
       },
     });
 
@@ -200,6 +205,7 @@ export const EcommerceStorefront: React.FC<EcommerceStorefrontProps> = ({
     window.addEventListener('aura-commerce-filter', handleAuraFilter);
     return () => {
       unregisterDispatcher();
+      pageActionDispatcher.setPageReady('smart-purchases', false);
       window.removeEventListener('aura-commerce-search', handleAuraSearch);
       window.removeEventListener('aura-commerce-filter', handleAuraFilter);
     };

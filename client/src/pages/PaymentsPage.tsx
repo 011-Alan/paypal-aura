@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { pageActionDispatcher } from '../lib/pageActionDispatcher';
 
 export const PaymentsPage: React.FC = () => {
   const { balancesVisible, formatMoney, user } = useAuth();
@@ -114,7 +115,16 @@ export const PaymentsPage: React.FC = () => {
       loadData();
     };
     window.addEventListener('aura-state-changed', handleStateChange);
-    return () => window.removeEventListener('aura-state-changed', handleStateChange);
+    pageActionDispatcher.setPageReady('payments', true);
+    const unregister = pageActionDispatcher.registerPage('payments', {
+      executeAction: async () => true,
+      isReady: () => true,
+    });
+    return () => {
+      unregister();
+      pageActionDispatcher.setPageReady('payments', false);
+      window.removeEventListener('aura-state-changed', handleStateChange);
+    };
   }, []);
 
   const activePayment = payments.find((p) => p._id === activePaymentId) || payments[0];
