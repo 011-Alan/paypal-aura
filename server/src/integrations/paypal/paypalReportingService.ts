@@ -41,6 +41,11 @@ export interface MerchantTransactionItem {
   payerEmail?: string;
   payerAccountId?: string;
   shippingName?: string;
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  orderNumber?: string;
+  isAuthorization?: boolean;
+  cartItems?: Array<{ name: string; quantity: number; amount?: number }>;
 }
 
 export interface MerchantTransactionsResponse {
@@ -537,6 +542,8 @@ export class PayPalReportingService {
 
           const statusObj = this.formatTransactionStatus(info.transaction_status);
 
+          const cart = item.cart_info || {};
+
           let payerFullName: string | undefined = undefined;
           if (payer.payer_name) {
             const given = payer.payer_name.given_name || '';
@@ -545,6 +552,42 @@ export class PayPalReportingService {
               payer.payer_name.alternate_full_name ||
               (given || surname ? `${given} ${surname}`.trim() : undefined);
           }
+
+          // Extract PayPal Order ID & Capture ID
+          let paypalOrderId: string | undefined = undefined;
+          let paypalCaptureId: string | undefined = undefined;
+          if (info.paypal_reference_id_type === 'ODR') {
+            paypalOrderId = info.paypal_reference_id;
+          } else if (info.paypal_reference_id_type === 'TXN') {
+            paypalCaptureId = info.paypal_reference_id;
+          }
+          if (!paypalOrderId && typeof info.custom_field === 'string' && !info.custom_field.startsWith('ORD-')) {
+            paypalOrderId = info.custom_field;
+          }
+
+          // Extract Order Number (e.g. ORD-12345 or from note/subject)
+          let orderNumber: string | undefined = undefined;
+          if (typeof info.custom_field === 'string' && info.custom_field.startsWith('ORD-')) {
+            orderNumber = info.custom_field;
+          } else {
+            const subjectMatch = (info.transaction_subject || info.transaction_note || '').match(/ORD-[A-Za-z0-9_-]+/);
+            if (subjectMatch) {
+              orderNumber = subjectMatch[0];
+            }
+          }
+
+          // Identify Authorizations
+          const eventCode = info.transaction_event_code || '';
+          const isAuthorization = eventCode.startsWith('T01') || (info.transaction_status === 'P' && eventCode === 'T0100');
+
+          // Parse cart line items
+          const cartItems = Array.isArray(cart.item_details)
+            ? cart.item_details.map((ci: any) => ({
+                name: ci.item_name || 'Item',
+                quantity: Number(ci.item_quantity || 1),
+                amount: ci.item_unit_price?.value ? parseFloat(String(ci.item_unit_price.value)) : undefined,
+              }))
+            : undefined;
 
           return {
             id: info.transaction_id || `txn_${Date.now()}`,
@@ -562,6 +605,11 @@ export class PayPalReportingService {
             payerEmail: payer.email_address,
             payerAccountId: payer.account_id,
             shippingName: shipping.name,
+            paypalOrderId,
+            paypalCaptureId,
+            orderNumber,
+            isAuthorization,
+            cartItems,
           };
         });
 
@@ -663,6 +711,165 @@ export class PayPalReportingService {
         reportingDelayNotice,
       };
     }
+  }
+
+  /**
+   * Retrieves historical merchant transactions across a multi-month date range.
+   * PayPal's Transaction Search API strictly limits date ranges to 31 days per request.
+   * This method chunks the requested date span into contiguous <= 30-day windows,
+   * pages through all results (iterating page 1..totalPages for each window),
+   * and deduplicates transactions by ID.
+   */
+  public async getMerchantTransactionsHistorical(options?: {
+    startDate?: string;
+    endDate?: string;
+    pageSize?: number;
+    monthsBack?: number;
+    transactionStatus?: string;
+  }): Promise<{
+    available: boolean;
+    accountType: 'PayPal Sandbox Business Account' | 'PayPal Live Business Account';
+    mode: 'sandbox' | 'live';
+    transactions: MerchantTransactionItem[];
+    totalRetrieved: number;
+    windowsProcessed: number;
+    pagesProcessed: number;
+    startDate: string;
+    endDate: string;
+    statusMessage: string;
+    details?: string;
+    reportingDelayNotice: string;
+    grantedScopes?: string[];
+  }> {
+    const mode = (env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox') as 'sandbox' | 'live';
+    const accountType =
+      mode === 'live' ? 'PayPal Live Business Account' : 'PayPal Sandbox Business Account';
+    const reportingDelayNotice =
+      'PayPal reporting data may take up to 3 hours to reflect newly executed transactions or updated balances.';
+
+    const now = new Date();
+    const monthsBack = Math.max(1, Math.min(36, Number(options?.monthsBack || 3)));
+    const calculatedStart = new Date(Date.now() - monthsBack * 30 * 24 * 60 * 60 * 1000);
+    const startDateObj = options?.startDate ? new Date(options.startDate) : calculatedStart;
+    const endDateObj = options?.endDate ? new Date(options.endDate) : now;
+
+    const startDate = startDateObj.toISOString();
+    const endDate = endDateObj.toISOString();
+
+    // Generate 30-day windows (PayPal Transaction Search requires max 31 days per request)
+    const windows: Array<{ start: string; end: string }> = [];
+    let currentEnd = new Date(endDateObj.getTime());
+    const minStart = startDateObj.getTime();
+
+    while (currentEnd.getTime() > minStart) {
+      const windowStart = new Date(Math.max(minStart, currentEnd.getTime() - 30 * 24 * 60 * 60 * 1000));
+      windows.push({
+        start: windowStart.toISOString(),
+        end: currentEnd.toISOString(),
+      });
+      currentEnd = new Date(windowStart.getTime() - 1000);
+    }
+
+    if (windows.length === 0) {
+      windows.push({ start: startDate, end: endDate });
+    }
+
+    if (!this.isConfigured()) {
+      return {
+        available: false,
+        accountType,
+        mode,
+        transactions: [],
+        totalRetrieved: 0,
+        windowsProcessed: windows.length,
+        pagesProcessed: 0,
+        startDate,
+        endDate,
+        statusMessage: 'PayPal credentials are not configured.',
+        details: 'PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required.',
+        reportingDelayNotice,
+      };
+    }
+
+    const pageSize = Math.min(500, Math.max(1, Number(options?.pageSize || 100)));
+    const txMap = new Map<string, MerchantTransactionItem>();
+    let pagesProcessed = 0;
+    let grantedScopes: string[] | undefined;
+    let anyWindowAvailable = false;
+    let lastStatusMsg = 'No transactions found.';
+
+    for (const w of windows) {
+      let page = 1;
+      let totalPages = 1;
+
+      while (page <= totalPages && page <= 50) {
+        const resp = await this.getMerchantTransactions({
+          startDate: w.start,
+          endDate: w.end,
+          page,
+          pageSize,
+          transactionStatus: options?.transactionStatus,
+        });
+
+        pagesProcessed++;
+        if (resp.grantedScopes) {
+          grantedScopes = resp.grantedScopes;
+        }
+
+        if (!resp.available) {
+          if (!anyWindowAvailable && txMap.size === 0) {
+            return {
+              available: false,
+              accountType,
+              mode,
+              transactions: [],
+              totalRetrieved: 0,
+              windowsProcessed: windows.indexOf(w) + 1,
+              pagesProcessed,
+              startDate,
+              endDate,
+              statusMessage: resp.statusMessage,
+              details: resp.details,
+              reportingDelayNotice,
+              grantedScopes: resp.grantedScopes,
+            };
+          }
+          break;
+        }
+
+        anyWindowAvailable = true;
+        lastStatusMsg = resp.statusMessage;
+        totalPages = resp.totalPages || 1;
+
+        for (const tx of resp.transactions) {
+          if (!txMap.has(tx.id)) {
+            txMap.set(tx.id, tx);
+          }
+        }
+
+        page++;
+      }
+    }
+
+    const transactions = Array.from(txMap.values());
+    transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return {
+      available: anyWindowAvailable,
+      accountType,
+      mode,
+      transactions,
+      totalRetrieved: transactions.length,
+      windowsProcessed: windows.length,
+      pagesProcessed,
+      startDate,
+      endDate,
+      statusMessage: anyWindowAvailable
+        ? `Retrieved ${transactions.length} historical merchant transactions across ${windows.length} date windows.`
+        : lastStatusMsg,
+      reportingDelayNotice,
+      grantedScopes,
+    };
   }
 }
 

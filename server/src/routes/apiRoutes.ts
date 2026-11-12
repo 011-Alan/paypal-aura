@@ -67,6 +67,7 @@ import { paypalProfileService } from '../integrations/paypal/paypalProfileServic
 import { paypalBalanceService } from '../integrations/paypal/paypalBalanceService';
 import { paypalTransactionService } from '../integrations/paypal/paypalTransactionService';
 import { paypalReportingService } from '../integrations/paypal/paypalReportingService';
+import { paypalSyncService } from '../integrations/paypal/paypalSyncService';
 import { validatePayPalConfig } from '../integrations/paypal/validator';
 import { zapierIntegration } from '../integrations/zapier';
 import { renderWorkerManager } from '../workers/backgroundWorkflows';
@@ -736,12 +737,23 @@ async function reconcilePayPalAccountBalances(
   merchantTransactions: any
 ): Promise<void> {
   try {
-    const allTxns = (transactions?.transactions?.length ? transactions.transactions : (merchantTransactions?.transactions || []));
+    const isBusiness =
+      user.accountType === 'business' ||
+      user.auraAccountType === 'BUSINESS' ||
+      user.role === 'merchant';
+
+    // Account Isolation: Personal users must NEVER use merchant balances or merchant transactions!
+    const effectiveBalances = isBusiness ? merchantBalances : balance;
+    const effectiveTxns = isBusiness
+      ? (merchantTransactions?.transactions || [])
+      : (transactions?.transactions || []);
+
     let calculatedLedgerTotal: number | null = null;
-    if (allTxns.length > 0) {
-      calculatedLedgerTotal = allTxns.reduce((sum: number, t: any) => {
-        const amt = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount || 0));
-        const isNegative = t.type === 'debit' || t.type === 'expense' || String(t.amount).startsWith('-');
+    if (effectiveTxns.length > 0) {
+      calculatedLedgerTotal = effectiveTxns.reduce((sum: number, t: any) => {
+        const rawAmt = t.grossAmount !== undefined ? t.grossAmount : t.amount;
+        const amt = typeof rawAmt === 'number' ? rawAmt : parseFloat(String(rawAmt || 0));
+        const isNegative = t.type === 'debit' || t.type === 'expense' || String(rawAmt).startsWith('-');
         return sum + (isNegative ? -Math.abs(amt) : Math.abs(amt));
       }, 0);
     }
@@ -749,31 +761,35 @@ async function reconcilePayPalAccountBalances(
     let accountAvailableBalance: number | null = null;
     let resolvedCurrency = user.currency || 'USD';
 
-    if (balance?.available && balance.balance !== null && typeof balance.balance === 'number') {
-      accountAvailableBalance = balance.balance;
-      resolvedCurrency = balance.currency || resolvedCurrency;
-    } else if (merchantBalances?.available && merchantBalances.primaryBalance !== null && typeof merchantBalances.primaryBalance === 'number') {
+    if (isBusiness && merchantBalances?.available && merchantBalances.primaryBalance !== null && typeof merchantBalances.primaryBalance === 'number') {
       accountAvailableBalance = merchantBalances.primaryBalance;
       resolvedCurrency = merchantBalances.primaryCurrency || resolvedCurrency;
+    } else if (!isBusiness && balance?.available && balance.balance !== null && typeof balance.balance === 'number') {
+      accountAvailableBalance = balance.balance;
+      resolvedCurrency = balance.currency || resolvedCurrency;
     }
 
     let resolvedBalance: number | null = null;
     if (accountAvailableBalance !== null) {
       resolvedBalance = accountAvailableBalance;
-      balance.available = true;
-      balance.balance = resolvedBalance;
-      balance.currency = resolvedCurrency;
-      if (calculatedLedgerTotal !== null && Math.abs(calculatedLedgerTotal - resolvedBalance) < 0.01) {
-        balance.statusMessage = 'Live available balance verified and matches transaction ledger.';
-      } else {
-        balance.statusMessage = 'Live available balance in account (primary source of truth).';
+      if (effectiveBalances) {
+        effectiveBalances.available = true;
+        effectiveBalances.balance = resolvedBalance;
+        effectiveBalances.currency = resolvedCurrency;
+        if (calculatedLedgerTotal !== null && Math.abs(calculatedLedgerTotal - resolvedBalance) < 0.01) {
+          effectiveBalances.statusMessage = 'Live available balance verified and matches transaction ledger.';
+        } else {
+          effectiveBalances.statusMessage = 'Live available balance in account (primary source of truth).';
+        }
       }
     } else if (calculatedLedgerTotal !== null) {
       resolvedBalance = calculatedLedgerTotal;
-      balance.available = true;
-      balance.balance = resolvedBalance;
-      balance.currency = resolvedCurrency;
-      balance.statusMessage = 'Balance calculated from transaction history ledger.';
+      if (effectiveBalances) {
+        effectiveBalances.available = true;
+        effectiveBalances.balance = resolvedBalance;
+        effectiveBalances.currency = resolvedCurrency;
+        effectiveBalances.statusMessage = 'Balance calculated from transaction history ledger.';
+      }
     }
 
     // Persist reconciled balance & currency to AURA's local accounts and user profile
@@ -783,7 +799,7 @@ async function reconcilePayPalAccountBalances(
         $or: [
           { institution: { $regex: /PayPal/i } },
           { name: { $regex: /PayPal/i } },
-          { type: 'checking' },
+          isBusiness ? { name: { $regex: /Merchant/i } } : { type: 'checking' },
         ],
       });
 
@@ -795,7 +811,7 @@ async function reconcilePayPalAccountBalances(
       } else {
         await AccountModel.create({
           userId: user._id,
-          name: 'Primary PayPal Linked Account',
+          name: isBusiness ? 'PayPal Business Merchant Settlement' : 'Primary PayPal Linked Account',
           institution: `PayPal ${env.PAYPAL_MODE === 'live' ? 'Live' : 'Sandbox'} Account`,
           type: 'checking',
           accountNumberMasked: `PP-${user.paypalPayerId ? user.paypalPayerId.slice(-4) : '0000'}`,
@@ -862,6 +878,11 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       return;
     }
 
+    const isBusiness =
+      user.accountType === 'business' ||
+      user.auraAccountType === 'BUSINESS' ||
+      user.role === 'merchant';
+
     // Force fresh balance and transaction pull from PayPal
     paypalReportingService.clearTokenCache();
 
@@ -869,8 +890,8 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
       paypalProfileService.getProfile(userId, { forceRefresh: true }),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
-      paypalReportingService.getMerchantBalances(),
-      paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
+      isBusiness ? paypalReportingService.getMerchantBalances() : Promise.resolve(null),
+      isBusiness ? paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }) : Promise.resolve(null),
     ]);
 
     // Reconcile Available Balance vs. Transaction Ledger (Preference: Available Balance in Account First)
@@ -879,11 +900,12 @@ apiRouter.get('/paypal/connected-account', requireAuth, async (req: Authenticate
     res.json({
       success: true,
       linked: true,
+      accountType: isBusiness ? 'BUSINESS' : 'PERSONAL',
       profile,
       balance,
       transactions,
-      merchantBalances,
-      merchantTransactions,
+      merchantBalances: isBusiness ? merchantBalances : null,
+      merchantTransactions: isBusiness ? merchantTransactions : null,
       lastSynchronized: user.paypalLastSyncAt || new Date().toISOString(),
       mode: env.PAYPAL_MODE,
     });
@@ -916,32 +938,43 @@ apiRouter.post('/paypal/sync', requireAuth, async (req: AuthenticatedRequest, re
       return;
     }
 
-    // Force fresh balance and transaction pull from PayPal
+    // Force fresh token cache
     paypalReportingService.clearTokenCache();
 
+    const fullHistoricalSync = req.body?.fullHistoricalSync ?? true;
+    const monthsBack = req.body?.monthsBack ?? 3;
+    const startDate = req.body?.startDate;
+    const endDate = req.body?.endDate;
+
+    // Perform authoritative, deduplicating transaction synchronization & persistence
+    const syncResult = await paypalSyncService.syncUserPayPalData(userId, {
+      forceRefresh: true,
+      fullHistoricalSync,
+      monthsBack,
+      startDate,
+      endDate,
+    });
+
+    const isBusiness = syncResult.accountType === 'BUSINESS';
     const [profile, balance, transactions, merchantBalances, merchantTransactions] = await Promise.all([
       paypalProfileService.getProfile(userId, { forceRefresh: true }),
       paypalBalanceService.getBalance(userId),
       paypalTransactionService.getTransactions(userId),
-      paypalReportingService.getMerchantBalances(),
-      paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }),
+      isBusiness ? paypalReportingService.getMerchantBalances() : Promise.resolve(null),
+      isBusiness ? paypalReportingService.getMerchantTransactions({ page: 1, pageSize: 20 }) : Promise.resolve(null),
     ]);
-
-    // Reconcile Available Balance vs. Transaction Ledger (Preference: Available Balance in Account First)
-    await reconcilePayPalAccountBalances(user, balance, transactions, merchantBalances, merchantTransactions);
-
-    user.paypalLastSyncAt = new Date();
-    await user.save();
 
     res.json({
       success: true,
       linked: true,
+      accountType: syncResult.accountType,
+      sync: syncResult,
       profile,
       balance,
       transactions,
       merchantBalances,
       merchantTransactions,
-      lastSynchronized: user.paypalLastSyncAt,
+      lastSynchronized: syncResult.syncedAt,
       mode: env.PAYPAL_MODE,
     });
   } catch (err: any) {
@@ -3095,8 +3128,25 @@ apiRouter.get('/ecommerce/merchant/received-payments', requireAuth, requireMerch
       userId: req.userId,
       $or: [{ direction: 'incoming' }, { type: 'income' }],
     };
-    const payments = await TransactionModel.find(query).sort({ date: -1 });
-    const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+    const txs = await TransactionModel.find(query).sort({ date: -1 });
+    const totalReceived = txs.reduce((sum, p) => sum + p.amount, 0);
+    const totalFees = txs.reduce((sum, p) => sum + (p.feeAmount || 0), 0);
+    const totalNet = txs.reduce((sum, p) => sum + (p.netAmount !== undefined ? p.netAmount : p.amount - (p.feeAmount || 0)), 0);
+
+    const payments = txs.map((p) => ({
+      id: String(p._id),
+      date: p.date,
+      orderNumber: p.orderNumber || (p.associatedOrderId ? `ORD-${String(p.associatedOrderId).slice(-6).toUpperCase()}` : '—'),
+      customerName: p.merchant !== 'Customer Payment' && p.merchant !== 'AURA Store' ? p.merchant : (p.counterparty || 'Customer'),
+      payerEmail: p.counterparty?.includes('@') ? p.counterparty : undefined,
+      amount: p.amount,
+      feeAmount: p.feeAmount || 0,
+      netAmount: p.netAmount !== undefined ? p.netAmount : p.amount - (p.feeAmount || 0),
+      paymentMethod: p.paymentMethod || 'paypal',
+      paypalCaptureId: p.paypalCaptureId || p.paypalTransactionId || '',
+      status: p.status,
+      description: p.description,
+    }));
 
     res.json({
       success: true,
@@ -3104,6 +3154,12 @@ apiRouter.get('/ecommerce/merchant/received-payments', requireAuth, requireMerch
       totalAmount: totalReceived,
       currency: 'USD',
       payments,
+      summary: {
+        totalReceivedPayments: payments.length,
+        totalGrossAmount: Math.round(totalReceived * 100) / 100,
+        totalFeeAmount: Math.round(totalFees * 100) / 100,
+        totalNetAmount: Math.round(totalNet * 100) / 100,
+      },
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });

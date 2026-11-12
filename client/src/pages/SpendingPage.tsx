@@ -14,6 +14,7 @@ import {
   X,
   CreditCard,
   PieChart,
+  RefreshCw,
 } from 'lucide-react';
 import { apiRequest, formatInr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -30,11 +31,20 @@ interface TransactionRow {
   category: string;
   accountName: string;
   amount: number;
+  feeAmount?: number;
+  netAmount?: number;
   type: 'income' | 'expense' | 'transfer';
+  direction?: 'incoming' | 'outgoing';
   status?: string;
   isUnusual?: boolean;
   unusualReason?: string;
   paymentMethod?: string;
+  counterparty?: string;
+  paypalTransactionId?: string;
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  orderNumber?: string;
+  associatedOrderId?: string;
 }
 
 export const SpendingPage: React.FC = () => {
@@ -42,6 +52,8 @@ export const SpendingPage: React.FC = () => {
   const [spendingView, setSpendingView] = useState<'activity' | 'insights'>('activity');
   const [rows, setRows] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingPayPal, setSyncingPayPal] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Filters
   const [quickSearch, setQuickSearch] = useState('');
@@ -61,6 +73,36 @@ export const SpendingPage: React.FC = () => {
       pageActionDispatcher.setPageReady('transactions', true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncPayPal = async () => {
+    setSyncingPayPal(true);
+    setSyncMessage(null);
+    try {
+      const res = await apiRequest<{ success: boolean; sync?: any; error?: string }>('/paypal/sync', {
+        method: 'POST',
+        body: JSON.stringify({ fullHistoricalSync: true, monthsBack: 3 }),
+      });
+      if (res.success && res.sync) {
+        setSyncMessage({
+          type: 'success',
+          text: `PayPal sync completed: ${res.sync.transactionsUpserted} new transactions upserted (${res.sync.transactionsRetrieved} retrieved from PayPal).`,
+        });
+        await loadTransactions();
+      } else {
+        setSyncMessage({
+          type: 'error',
+          text: res.error || 'PayPal sync completed with warnings.',
+        });
+      }
+    } catch (err: any) {
+      setSyncMessage({
+        type: 'error',
+        text: err?.message || 'Failed to synchronize with PayPal API.',
+      });
+    } finally {
+      setSyncingPayPal(false);
     }
   };
 
@@ -221,6 +263,25 @@ export const SpendingPage: React.FC = () => {
       ),
     },
     {
+      field: 'paymentMethod',
+      headerName: 'Gateway',
+      width: 120,
+      sortable: true,
+      filter: true,
+      cellRenderer: (params: any) => {
+        const isPayPal = params.value === 'paypal' || params.data?.paypalTransactionId;
+        return (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+            isPayPal
+              ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+          }`}>
+            {isPayPal ? 'PayPal' : (params.value || 'Bank')}
+          </span>
+        );
+      },
+    },
+    {
       field: 'amount',
       headerName: 'Amount',
       filter: 'agNumberColumnFilter',
@@ -237,20 +298,45 @@ export const SpendingPage: React.FC = () => {
       },
     },
     {
-      field: 'isUnusual',
+      field: 'status',
       headerName: 'Status',
       filter: 'agTextColumnFilter',
       sortable: true,
       width: 120,
       cellRenderer: (params: any) => {
-        const isUnusual = params.value;
-        return isUnusual ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="w-3 h-3" /> Flagged
-          </span>
-        ) : (
+        const status = (params.value || 'completed').toLowerCase();
+        const isUnusual = params.data?.isUnusual;
+        if (isUnusual) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="w-3 h-3" /> Flagged
+            </span>
+          );
+        }
+        if (status === 'pending') {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              Pending
+            </span>
+          );
+        }
+        if (status === 'refunded' || status === 'reversed') {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+              {status === 'refunded' ? 'Refunded' : 'Reversed'}
+            </span>
+          );
+        }
+        if (status === 'failed') {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+              Failed
+            </span>
+          );
+        }
+        return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <CheckCircle2 className="w-3 h-3" /> Normal
+            <CheckCircle2 className="w-3 h-3" /> Completed
           </span>
         );
       },
@@ -448,6 +534,17 @@ export const SpendingPage: React.FC = () => {
                     ))}
                   </select>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleSyncPayPal}
+                  disabled={syncingPayPal}
+                  className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                  title="Fetch latest PayPal transactions and reconcile balances"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingPayPal ? 'animate-spin' : ''}`} />
+                  {syncingPayPal ? 'Syncing...' : 'Sync PayPal'}
+                </button>
               </div>
 
               {(quickSearch || selectedCategory || selectedAccount || typeFilter !== 'all') && (
@@ -461,6 +558,26 @@ export const SpendingPage: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Sync Status Banner */}
+            {syncMessage && (
+              <div
+                className={`p-3 rounded-2xl text-xs font-medium flex items-center justify-between transition ${
+                  syncMessage.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                }`}
+              >
+                <span>{syncMessage.text}</span>
+                <button
+                  type="button"
+                  onClick={() => setSyncMessage(null)}
+                  className="p-1 rounded-md hover:opacity-75"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* AG Grid Data Table */}
             <div className="mt-4">
@@ -481,9 +598,12 @@ export const SpendingPage: React.FC = () => {
       {/* Transaction Details Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-navy-900 dark:text-white">Transaction Details</h3>
+              <div>
+                <h3 className="text-base font-bold text-navy-900 dark:text-white">Transaction Details</h3>
+                <span className="text-[11px] text-slate-400">Record ID: {selectedTx.id}</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedTx(null)}
@@ -499,9 +619,15 @@ export const SpendingPage: React.FC = () => {
                 <span className="text-slate-700 dark:text-slate-300">{selectedTx.date}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-400">Merchant</span>
+                <span className="text-slate-400">Merchant / Counterparty</span>
                 <span className="font-bold text-navy-900 dark:text-white">{selectedTx.merchant}</span>
               </div>
+              {selectedTx.counterparty && selectedTx.counterparty !== selectedTx.merchant && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400">Payer / Account</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300">{selectedTx.counterparty}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-400">Category</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedTx.category}</span>
@@ -511,12 +637,60 @@ export const SpendingPage: React.FC = () => {
                 <span className="text-slate-700 dark:text-slate-300">{selectedTx.accountName}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-400">Amount</span>
+                <span className="text-slate-400">Payment Gateway</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  {selectedTx.paymentMethod || 'PayPal'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Status</span>
+                <span className="font-bold text-navy-900 dark:text-white uppercase tracking-wider text-[11px]">
+                  {selectedTx.status || 'Completed'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Gross Amount</span>
                 <span className="font-bold text-sm text-navy-900 dark:text-white">
                   {selectedTx.type === 'income' ? '+' : '-'}
                   {formatMoney(selectedTx.amount)}
                 </span>
               </div>
+              {selectedTx.feeAmount !== undefined && selectedTx.feeAmount > 0 && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800 text-slate-500">
+                  <span>PayPal Fee</span>
+                  <span>{formatMoney(selectedTx.feeAmount)}</span>
+                </div>
+              )}
+              {selectedTx.netAmount !== undefined && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800 font-bold">
+                  <span className="text-slate-400">Net Settled</span>
+                  <span className="text-navy-900 dark:text-white">{formatMoney(selectedTx.netAmount)}</span>
+                </div>
+              )}
+              {selectedTx.paypalTransactionId && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400">PayPal Txn ID</span>
+                  <span className="font-mono text-blue-600 dark:text-blue-400 select-all">{selectedTx.paypalTransactionId}</span>
+                </div>
+              )}
+              {selectedTx.paypalOrderId && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400">PayPal Order ID</span>
+                  <span className="font-mono text-slate-600 dark:text-slate-400 select-all">{selectedTx.paypalOrderId}</span>
+                </div>
+              )}
+              {selectedTx.paypalCaptureId && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400">PayPal Capture ID</span>
+                  <span className="font-mono text-slate-600 dark:text-slate-400 select-all">{selectedTx.paypalCaptureId}</span>
+                </div>
+              )}
+              {selectedTx.orderNumber && (
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400">Store Order #</span>
+                  <span className="font-mono font-bold text-navy-900 dark:text-white">{selectedTx.orderNumber}</span>
+                </div>
+              )}
               {selectedTx.unusualReason && (
                 <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs">
                   <span className="font-bold block mb-0.5">Audit Note:</span>

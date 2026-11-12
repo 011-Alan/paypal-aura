@@ -12,7 +12,14 @@ export interface PayPalTransactionItem {
   type: string;
   description: string;
   senderOrRecipient?: string;
+  payerName?: string;
+  payerEmail?: string;
   fee?: number;
+  netAmount?: number;
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  orderNumber?: string;
+  isAuthorization?: boolean;
 }
 
 export interface PayPalTransactionsResult {
@@ -125,12 +132,51 @@ export class PayPalTransactionService {
           const rawFee = info.fee_amount?.value;
           const feeNum = rawFee !== undefined ? (typeof rawFee === 'number' ? rawFee : parseFloat(String(rawFee))) : undefined;
 
-          const senderOrRecipient =
-            payer.email_address ||
+          const rawNet = info.net_amount?.value;
+          const netNum =
+            rawNet !== undefined
+              ? typeof rawNet === 'number'
+                ? rawNet
+                : parseFloat(String(rawNet))
+              : feeNum !== undefined && !isNaN(amountNum) && !isNaN(feeNum)
+              ? amountNum - Math.abs(feeNum)
+              : amountNum;
+
+          const payerName =
             payer.payer_name?.alternate_full_name ||
             (payer.payer_name?.given_name ? `${payer.payer_name.given_name} ${payer.payer_name.surname || ''}`.trim() : '') ||
+            undefined;
+
+          const senderOrRecipient =
+            payer.email_address ||
+            payerName ||
             shipping.name ||
             undefined;
+
+          // Extract PayPal Order ID & Capture ID
+          let paypalOrderId: string | undefined = undefined;
+          let paypalCaptureId: string | undefined = undefined;
+          if (info.paypal_reference_id_type === 'ODR') {
+            paypalOrderId = info.paypal_reference_id;
+          } else if (info.paypal_reference_id_type === 'TXN') {
+            paypalCaptureId = info.paypal_reference_id;
+          }
+          if (!paypalOrderId && typeof info.custom_field === 'string' && !info.custom_field.startsWith('ORD-')) {
+            paypalOrderId = info.custom_field;
+          }
+
+          let orderNumber: string | undefined = undefined;
+          if (typeof info.custom_field === 'string' && info.custom_field.startsWith('ORD-')) {
+            orderNumber = info.custom_field;
+          } else {
+            const subjectMatch = (info.transaction_subject || info.transaction_note || '').match(/ORD-[A-Za-z0-9_-]+/);
+            if (subjectMatch) {
+              orderNumber = subjectMatch[0];
+            }
+          }
+
+          const eventCode = info.transaction_event_code || '';
+          const isAuthorization = eventCode.startsWith('T01') || (info.transaction_status === 'P' && eventCode === 'T0100');
 
           return {
             id: info.transaction_id || `txn_${Date.now()}`,
@@ -141,7 +187,14 @@ export class PayPalTransactionService {
             type: info.transaction_event_code || 'Payment',
             description: info.transaction_note || info.transaction_subject || 'PayPal Transaction',
             senderOrRecipient,
+            payerName,
+            payerEmail: payer.email_address,
             fee: feeNum !== undefined && !isNaN(feeNum) ? feeNum : undefined,
+            netAmount: netNum !== undefined && !isNaN(netNum) ? netNum : undefined,
+            paypalOrderId,
+            paypalCaptureId,
+            orderNumber,
+            isAuthorization,
           };
         });
 

@@ -18,6 +18,7 @@ import { apiRequest } from '../../lib/api';
 export const MerchantReceivedPaymentsAgGrid: React.FC = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [quickSearch, setQuickSearch] = useState('');
   const [summary, setSummary] = useState<any>(null);
@@ -37,6 +38,22 @@ export const MerchantReceivedPaymentsAgGrid: React.FC = () => {
       setError(err?.message || 'Failed to load received payments.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncPayPal = async () => {
+    setSyncing(true);
+    setError('');
+    try {
+      await apiRequest('/paypal/sync', {
+        method: 'POST',
+        body: JSON.stringify({ fullHistoricalSync: true, monthsBack: 3 }),
+      });
+      await fetchPayments();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to synchronize with PayPal.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -150,12 +167,30 @@ export const MerchantReceivedPaymentsAgGrid: React.FC = () => {
         headerName: 'Settlement Status',
         sortable: true,
         width: 140,
-        cellRenderer: (params: any) => (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Completed
-          </span>
-        ),
+        cellRenderer: (params: any) => {
+          const st = (params.value || 'completed').toLowerCase();
+          if (st === 'pending') {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Pending
+              </span>
+            );
+          }
+          if (st === 'refunded' || st === 'reversed') {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                {st === 'refunded' ? 'Refunded' : 'Reversed'}
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Completed
+            </span>
+          );
+        },
       },
     ],
     []
@@ -200,11 +235,22 @@ export const MerchantReceivedPaymentsAgGrid: React.FC = () => {
           </div>
 
           <button
+            type="button"
+            onClick={handleSyncPayPal}
+            disabled={syncing || loading}
+            className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+            title="Synchronize latest transactions directly with PayPal Sandbox"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync PayPal'}
+          </button>
+
+          <button
             onClick={fetchPayments}
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
             title="Refresh payments"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading && !syncing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>

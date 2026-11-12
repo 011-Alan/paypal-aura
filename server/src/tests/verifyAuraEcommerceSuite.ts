@@ -291,7 +291,7 @@ async function runAuraEcommerceVerificationSuite() {
       assert.ok(overview.totalRevenue > 0, '6c. Total store revenue must be positive');
 
       // Find the paid order from Test 4
-      const paidOrders = await EcommerceOrderModel.find({ 'paymentInfo.paymentStatus': 'completed' });
+      const paidOrders = await EcommerceOrderModel.find({ 'paymentInfo.paymentStatus': 'completed' }).sort({ createdAt: -1 });
       assert.ok(paidOrders.length > 0, '6d. Paid orders must exist in database');
       const order = paidOrders[0];
 
