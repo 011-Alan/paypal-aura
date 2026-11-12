@@ -429,7 +429,7 @@ export const EcommerceMerchantDashboard: React.FC = () => {
 
           {/* Status Filter Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto scrollbar-none pb-1 sm:pb-0">
-            {['all', 'order_confirmed', 'processing', 'packed', 'shipped', 'delivered'].map((st) => (
+            {['all', 'order_confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'].map((st) => (
               <button
                 key={st}
                 type="button"

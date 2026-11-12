@@ -3042,7 +3042,7 @@ apiRouter.post('/ecommerce/checkout/validate', requireAuth, async (req: Authenti
 
 apiRouter.post('/ecommerce/orders/create-paypal-order', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { shippingAddress, items, notes, customReturnUrl, customCancelUrl } = req.body || {};
+    const { shippingAddress, items, notes, merchantId, merchantEmail, customReturnUrl, customCancelUrl } = req.body || {};
     let finalReturnUrl = customReturnUrl as string | undefined;
     let finalCancelUrl = customCancelUrl as string | undefined;
 
@@ -3056,6 +3056,8 @@ apiRouter.post('/ecommerce/orders/create-paypal-order', requireAuth, async (req:
       shippingAddress,
       items,
       notes,
+      merchantId,
+      merchantEmail,
       customReturnUrl: finalReturnUrl,
       customCancelUrl: finalCancelUrl,
     });

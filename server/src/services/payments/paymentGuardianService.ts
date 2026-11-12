@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { env } from '../../config/env';
+import { logger } from '../../config/logger';
 import {
   UserModel,
   AccountModel,
@@ -464,6 +465,31 @@ export class PaymentGuardianService {
       },
     });
 
+    // Synchronise matching EcommerceOrder if this PayPal order was for an e-commerce purchase
+    try {
+      const matchingEcommerceOrder = await EcommerceOrderModel.findOne({
+        $or: [
+          { 'paymentInfo.paypalOrderId': captureResult.orderId },
+          { 'paymentInfo.paypalOrderId': paymentReq.paypalOrderId },
+        ],
+      });
+      if (matchingEcommerceOrder && matchingEcommerceOrder.paymentInfo.paymentStatus !== 'completed') {
+        matchingEcommerceOrder.paymentInfo.paymentStatus = 'completed';
+        matchingEcommerceOrder.paymentInfo.paypalCaptureId = captureResult.captureId;
+        matchingEcommerceOrder.paymentInfo.paidAt = new Date();
+        matchingEcommerceOrder.fulfillmentStatus = 'processing';
+        matchingEcommerceOrder.statusHistory.push({
+          status: 'processing',
+          timestamp: new Date(),
+          notes: `Payment captured via PayPal Orders v2 (Capture ID: ${captureResult.captureId}). Order in fulfillment queue.`,
+          updatedBy: 'PayPal Guardian Service',
+        });
+        await matchingEcommerceOrder.save();
+      }
+    } catch (ecomSyncErr: any) {
+      logger.warn('PaymentGuardianService', 'Notice syncing e-commerce order during capture', { error: ecomSyncErr?.message });
+    }
+
     return {
       alreadyCaptured: false,
       paymentRequest: paymentReq,
@@ -541,6 +567,23 @@ export class PaymentGuardianService {
     });
 
     if (ecommerceOrder) {
+      if (
+        (eventType === 'PAYMENT.CAPTURE.COMPLETED' || eventType.includes('PAYMENT.CAPTURE')) &&
+        ecommerceOrder.paymentInfo.paymentStatus !== 'completed'
+      ) {
+        ecommerceOrder.paymentInfo.paymentStatus = 'completed';
+        if (captureId) ecommerceOrder.paymentInfo.paypalCaptureId = captureId;
+        ecommerceOrder.paymentInfo.paidAt = new Date();
+        ecommerceOrder.fulfillmentStatus = 'processing';
+        ecommerceOrder.statusHistory.push({
+          status: 'processing',
+          timestamp: new Date(),
+          notes: `Payment capture completed and verified via PayPal Webhook (${eventType}).`,
+          updatedBy: 'PayPal Webhook Event',
+        });
+        await ecommerceOrder.save();
+      }
+
       if (
         eventType.includes('SHIPPING') ||
         eventType.includes('TRACKING') ||

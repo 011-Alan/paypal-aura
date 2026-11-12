@@ -10,6 +10,7 @@ import {
   IEcommerceShippingAddress,
   FulfillmentStatus,
   UserModel,
+  IUser,
   AccountModel,
   TransactionModel,
   CalendarEventModel,
@@ -275,6 +276,50 @@ export class EcommerceService {
   }
 
   /**
+   * Resolves the designated merchant account receiving the e-commerce payment.
+   * Deterministic priority resolution:
+   * 1. Explicit merchantId or merchantEmail passed in
+   * 2. Configured PAYPAL_MERCHANT_EMAIL in env (if exists in DB)
+   * 3. Seed demo merchant: bruce_wayne@business.example.com
+   * 4. Active verified business merchant in DB
+   */
+  async resolveDesignatedMerchant(criteria?: {
+    merchantId?: string;
+    merchantEmail?: string;
+  }): Promise<IUser | null> {
+    if (criteria?.merchantId && mongoose.Types.ObjectId.isValid(criteria.merchantId)) {
+      const merchant = await UserModel.findById(criteria.merchantId);
+      if (merchant) return merchant;
+    }
+
+    if (criteria?.merchantEmail) {
+      const merchant = await UserModel.findOne({ email: criteria.merchantEmail.toLowerCase().trim() });
+      if (merchant) return merchant;
+    }
+
+    if (env.PAYPAL_MERCHANT_EMAIL) {
+      const merchant = await UserModel.findOne({ email: env.PAYPAL_MERCHANT_EMAIL.toLowerCase().trim() });
+      if (merchant) return merchant;
+    }
+
+    // Default primary merchant in AURA Sandbox: Bruce Wayne
+    const bruce = await UserModel.findOne({ email: 'bruce_wayne@business.example.com' });
+    if (bruce) return bruce;
+
+    // Any verified business user with merchantAccessEnabled
+    const verifiedBiz = await UserModel.findOne({
+      $or: [
+        { auraAccountType: 'BUSINESS', merchantVerificationStatus: 'VERIFIED' },
+        { accountType: 'business', merchantAccessEnabled: true },
+        { role: 'merchant' },
+      ],
+    }).sort({ createdAt: 1 });
+    if (verifiedBiz) return verifiedBiz;
+
+    return null;
+  }
+
+  /**
    * Creates an AURA E-Commerce order in pending state and initializes a PayPal Sandbox Order v2.
    */
   async createCheckoutOrder(
@@ -283,6 +328,8 @@ export class EcommerceService {
       shippingAddress: IEcommerceShippingAddress;
       items?: Array<{ productId: string; quantity: number; selectedVariant?: string }>;
       notes?: string;
+      merchantId?: string;
+      merchantEmail?: string;
       customReturnUrl?: string;
       customCancelUrl?: string;
     }
@@ -351,13 +398,9 @@ export class EcommerceService {
     });
 
     // Find designated business merchant account receiving payment
-    const designatedMerchant = await UserModel.findOne({
-      $or: [
-        { email: env.PAYPAL_MERCHANT_EMAIL },
-        { email: 'bruce_wayne@business.example.com' },
-        { accountType: 'business' },
-        { role: 'merchant' },
-      ],
+    const designatedMerchant = await this.resolveDesignatedMerchant({
+      merchantId: params.merchantId,
+      merchantEmail: params.merchantEmail,
     });
 
     // Create the order record in database with initial status
@@ -485,24 +528,29 @@ export class EcommerceService {
       throw new Error(`PayPal payment capture failed with status: ${captureRes.status}`);
     }
 
-    // Extract payer details if available
+    // Extract payer details and capture response payload
     const rawCapture = captureRes.rawCaptureResponse;
     const payer = rawCapture?.payer || {};
     const payerName = payer?.name
       ? `${payer.name.given_name || ''} ${payer.name.surname || ''}`.trim()
       : undefined;
 
+    // Verify captured amount and currency
+    const captureUnit = rawCapture?.purchase_units?.[0]?.payments?.captures?.[0];
+    const capturedCurrency = captureUnit?.amount?.currency_code || order.currency || 'USD';
+
     // Update order to completed payment and confirmed fulfillment status
     order.paymentInfo.paymentStatus = 'completed';
     order.paymentInfo.paypalCaptureId = captureRes.captureId;
     order.paymentInfo.paidAt = new Date();
     order.paymentInfo.amountPaid = order.totalAmount;
-    order.paymentInfo.currency = 'USD';
+    order.paymentInfo.currency = capturedCurrency;
     order.paymentInfo.payerEmail = payer.email_address;
     order.paymentInfo.payerId = payer.payer_id;
     order.paymentInfo.payerName = payerName;
     order.paymentInfo.rawCaptureData = rawCapture;
 
+    // Transition fulfillment to order_confirmed
     order.fulfillmentStatus = 'order_confirmed';
 
     order.statusHistory.push(
@@ -515,10 +563,21 @@ export class EcommerceService {
       {
         status: 'order_confirmed',
         timestamp: new Date(),
-        notes: 'Order confirmed and registered in AURA Demo Store Merchant Hub for packing and shipping.',
+        notes: 'Order confirmed and entered merchant fulfillment queue for packaging and dispatch.',
         updatedBy: 'AURA Storefront',
       }
     );
+
+    // Resolve designated merchant receiving payment
+    let merchantUser = await this.resolveDesignatedMerchant({
+      merchantId: order.merchantId?.toString(),
+      merchantEmail: order.merchantEmail,
+    });
+
+    if (merchantUser) {
+      order.merchantId = merchantUser._id;
+      order.merchantEmail = merchantUser.email;
+    }
 
     await order.save();
 
@@ -539,14 +598,14 @@ export class EcommerceService {
         accountId: customerAccount?._id || new mongoose.Types.ObjectId(),
         accountName: customerAccount?.name || 'PayPal Linked Checking',
         date: new Date(),
-        merchant: 'AURA Store',
-        counterparty: 'AURA Demo Store',
+        merchant: merchantUser?.name || 'AURA Store',
+        counterparty: merchantUser?.email || 'AURA Demo Store',
         description: `AURA Store Purchase — Order #${order.orderNumber} (${order.items.map((i) => i.name).slice(0, 2).join(', ')})`,
         category: 'Shopping',
         type: 'expense',
         direction: 'outgoing',
         amount: order.totalAmount,
-        currency: 'USD',
+        currency: order.currency || 'USD',
         status: 'completed',
         paymentMethod: 'paypal',
         isRecurring: false,
@@ -558,23 +617,6 @@ export class EcommerceService {
       });
 
       // 2. Merchant Incoming Payment Record & Account Credit
-      let merchantUser = order.merchantId ? await UserModel.findById(order.merchantId) : null;
-      if (!merchantUser) {
-        merchantUser = await UserModel.findOne({
-          $or: [
-            { email: env.PAYPAL_MERCHANT_EMAIL },
-            { email: 'bruce_wayne@business.example.com' },
-            { accountType: 'business' },
-            { role: 'merchant' },
-          ],
-        });
-        if (merchantUser) {
-          order.merchantId = merchantUser._id;
-          order.merchantEmail = merchantUser.email;
-          await order.save();
-        }
-      }
-
       if (merchantUser) {
         let merchantAccount = await AccountModel.findOne({ userId: merchantUser._id, name: /Merchant/i });
         if (!merchantAccount) {
@@ -589,7 +631,7 @@ export class EcommerceService {
         await TransactionModel.create({
           userId: merchantUser._id,
           accountId: merchantAccount?._id || new mongoose.Types.ObjectId(),
-          accountName: merchantAccount?.name || 'Wayne Enterprises Merchant Settlement',
+          accountName: merchantAccount?.name || 'Merchant Settlement Account',
           date: new Date(),
           merchant: order.customerName || payerName || 'AURA Customer',
           counterparty: order.customerEmail || 'Customer',
@@ -598,7 +640,7 @@ export class EcommerceService {
           type: 'income',
           direction: 'incoming',
           amount: order.totalAmount,
-          currency: 'USD',
+          currency: order.currency || 'USD',
           status: 'completed',
           paymentMethod: 'paypal',
           isRecurring: false,
@@ -606,11 +648,44 @@ export class EcommerceService {
           paypalCaptureId: captureRes.captureId,
           associatedOrderId: String(order._id),
           orderNumber: order.orderNumber,
-          tags: ['ecommerce-revenue', 'paypal-sandbox', 'merchant-received'],
+          tags: ['ecommerce-revenue', 'paypal-sandbox', 'merchant-received', 'merchant-payment-received'],
         });
 
         await bryntumIntegration.syncUserFinancialCalendar(String(merchantUser._id)).catch(() => {});
+
+        // Merchant Notification for incoming order
+        await NotificationModel.create({
+          userId: merchantUser._id,
+          type: 'payment_status',
+          title: `New Order Received: #${order.orderNumber}`,
+          message: `Customer ${order.customerName} placed order #${order.orderNumber} for $${order.totalAmount.toFixed(2)} USD via PayPal Sandbox (Capture ID: ${captureRes.captureId}). Ready for fulfillment.`,
+          severity: 'success',
+          isRead: false,
+          metadata: {
+            orderId: String(order._id),
+            orderNumber: order.orderNumber,
+            totalAmount: order.totalAmount,
+            paypalCaptureId: captureRes.captureId,
+          },
+        }).catch(() => {});
       }
+
+      // Customer Order Confirmation Notification
+      await NotificationModel.create({
+        userId: order.userId,
+        type: 'payment_status',
+        title: `Order #${order.orderNumber} Confirmed`,
+        message: `Your payment of $${order.totalAmount.toFixed(2)} USD was verified and captured via PayPal Sandbox (Capture ID: ${captureRes.captureId}). Order is currently processing.`,
+        severity: 'success',
+        isRead: false,
+        metadata: {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          totalAmount: order.totalAmount,
+          paypalCaptureId: captureRes.captureId,
+          fulfillmentStatus: 'processing',
+        },
+      }).catch(() => {});
 
       await elasticIntegration.syncTransaction(customerTx).catch(() => {});
       await bryntumIntegration.syncUserFinancialCalendar(String(order.userId)).catch(() => {});
@@ -741,10 +816,18 @@ export class EcommerceService {
     }
 
     const merchantObjId = new mongoose.Types.ObjectId(merchantUserId);
+    const merchantUser = await UserModel.findById(merchantObjId);
+
     const merchantTxs = await TransactionModel.find({
       userId: merchantObjId,
-      $or: [{ direction: 'incoming' }, { type: 'income' }, { tags: 'merchant-payment-received' }],
-    }).select('associatedOrderId orderNumber');
+      $or: [
+        { direction: 'incoming' },
+        { type: 'income' },
+        { tags: 'merchant-payment-received' },
+        { tags: 'merchant-received' },
+        { tags: 'ecommerce-revenue' },
+      ],
+    }).select('associatedOrderId orderNumber paypalOrderId paypalCaptureId');
 
     const matchedOrderIds = merchantTxs
       .map((t) => t.associatedOrderId)
@@ -755,12 +838,41 @@ export class EcommerceService {
       .map((t: any) => t.orderNumber)
       .filter(Boolean);
 
+    const matchedPayPalOrderIds = merchantTxs
+      .map((t: any) => t.paypalOrderId)
+      .filter(Boolean);
+
+    const matchedPayPalCaptureIds = merchantTxs
+      .map((t: any) => t.paypalCaptureId)
+      .filter(Boolean);
+
     const orConditions: any[] = [{ merchantId: merchantObjId }];
+
+    if (merchantUser?.email) {
+      orConditions.push({ merchantEmail: merchantUser.email.toLowerCase() });
+    }
+
+    const isPrimaryPlatformMerchant =
+      merchantUser?.email === 'bruce_wayne@business.example.com' ||
+      (env.PAYPAL_MERCHANT_EMAIL && merchantUser?.email?.toLowerCase() === env.PAYPAL_MERCHANT_EMAIL.toLowerCase());
+
+    if (isPrimaryPlatformMerchant) {
+      orConditions.push({ merchantId: { $exists: false } });
+      orConditions.push({ merchantId: null });
+      orConditions.push({ isSimulatedStore: true });
+    }
+
     if (matchedOrderIds.length > 0) {
       orConditions.push({ _id: { $in: matchedOrderIds } });
     }
     if (matchedOrderNumbers.length > 0) {
       orConditions.push({ orderNumber: { $in: matchedOrderNumbers } });
+    }
+    if (matchedPayPalOrderIds.length > 0) {
+      orConditions.push({ 'paymentInfo.paypalOrderId': { $in: matchedPayPalOrderIds } });
+    }
+    if (matchedPayPalCaptureIds.length > 0) {
+      orConditions.push({ 'paymentInfo.paypalCaptureId': { $in: matchedPayPalCaptureIds } });
     }
 
     return {
@@ -867,15 +979,29 @@ export class EcommerceService {
    * Merchant order details retrieval with strict ownership verification.
    */
   async getMerchantOrderById(orderId: string, merchantUserId?: string): Promise<IEcommerceOrder> {
-    const order = await EcommerceOrderModel.findById(orderId);
+    const order = await EcommerceOrderModel.findOne({
+      $or: [
+        mongoose.Types.ObjectId.isValid(orderId) ? { _id: orderId } : null,
+        { orderNumber: orderId },
+      ].filter(Boolean) as any[],
+    });
+
     if (!order) {
       throw new Error(`Order ${orderId} not found.`);
     }
 
     if (merchantUserId) {
       const merchantObjId = new mongoose.Types.ObjectId(merchantUserId);
-      const isDirectMerchant = order.merchantId && order.merchantId.equals(merchantObjId);
-      
+      const merchantUser = await UserModel.findById(merchantObjId);
+
+      const isDirectMerchant =
+        (order.merchantId && order.merchantId.equals(merchantObjId)) ||
+        (merchantUser?.email && order.merchantEmail?.toLowerCase() === merchantUser.email.toLowerCase());
+
+      const isPrimaryPlatformMerchant =
+        merchantUser?.email === 'bruce_wayne@business.example.com' ||
+        (env.PAYPAL_MERCHANT_EMAIL && merchantUser?.email?.toLowerCase() === env.PAYPAL_MERCHANT_EMAIL.toLowerCase());
+
       let isTxMerchant = false;
       if (!isDirectMerchant) {
         const tx = await TransactionModel.findOne({
@@ -883,12 +1009,14 @@ export class EcommerceService {
           $or: [
             { associatedOrderId: String(order._id) },
             { orderNumber: order.orderNumber },
+            { paypalOrderId: order.paymentInfo?.paypalOrderId },
+            { paypalCaptureId: order.paymentInfo?.paypalCaptureId },
           ],
         });
         isTxMerchant = !!tx;
       }
 
-      if (!isDirectMerchant && !isTxMerchant) {
+      if (!isDirectMerchant && !isTxMerchant && !(isPrimaryPlatformMerchant && order.isSimulatedStore)) {
         throw new Error('Unauthorized: You do not have permission to access orders paid to another merchant account.');
       }
     }
@@ -927,24 +1055,28 @@ export class EcommerceService {
 
     // Validation for shipped stage
     if (params.fulfillmentStatus === 'shipped') {
-      if (!params.carrier || !params.carrier.trim()) {
-        throw new Error('Shipping carrier is required to mark an order as shipped (e.g. FedEx, UPS, DHL, Blue Dart).');
+      const finalCarrier = (params.carrier || order.shipment?.carrier || '').trim();
+      const finalTrackingNumber = (params.trackingNumber || order.shipment?.trackingNumber || '').trim();
+      if (!finalCarrier) {
+        throw new Error('Shipping carrier is required to mark an order as shipped (e.g. FedEx Express, UPS Ground, DHL Express).');
       }
-      if (!params.trackingNumber || !params.trackingNumber.trim()) {
+      if (!finalTrackingNumber) {
         throw new Error('Tracking number is required to mark an order as shipped.');
       }
     }
 
-    // Update shipment details if provided
-    if (params.carrier) order.shipment.carrier = params.carrier.trim();
-    if (params.trackingNumber) order.shipment.trackingNumber = params.trackingNumber.trim();
-    if (params.notes) order.shipment.notes = params.notes.trim();
+    // Update shipment details if provided or retain existing
+    if (params.carrier?.trim()) order.shipment.carrier = params.carrier.trim();
+    if (params.trackingNumber?.trim()) order.shipment.trackingNumber = params.trackingNumber.trim();
+    if (params.notes?.trim()) order.shipment.notes = params.notes.trim();
 
     if (params.fulfillmentStatus === 'shipped' && !order.shipment.shippedAt) {
       order.shipment.shippedAt = params.shippingDate ? new Date(params.shippingDate) : new Date();
     }
     if (params.estimatedDeliveryDate) {
       order.shipment.estimatedDeliveryAt = new Date(params.estimatedDeliveryDate);
+    } else if (params.fulfillmentStatus === 'delivered' && !order.shipment.estimatedDeliveryAt) {
+      order.shipment.estimatedDeliveryAt = new Date();
     }
 
     order.fulfillmentStatus = params.fulfillmentStatus;
