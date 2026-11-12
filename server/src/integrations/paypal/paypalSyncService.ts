@@ -338,6 +338,55 @@ export class PayPalSyncService {
         }
       }
 
+      // Reconcile and sync any real-time completed orders from EcommerceOrderModel that aren't yet in TransactionModel
+      const completedOrders = await EcommerceOrderModel.find({
+        'paymentInfo.paymentStatus': 'completed',
+        $or: [
+          { merchantId: user._id },
+          { merchantEmail: user.email },
+          { isSimulatedStore: true },
+        ],
+      });
+
+      for (const ord of completedOrders) {
+        const orderTx = await TransactionModel.findOne({
+          userId: user._id,
+          $or: [
+            { orderNumber: ord.orderNumber },
+            { paypalCaptureId: ord.paymentInfo?.paypalCaptureId },
+            { associatedOrderId: String(ord._id) },
+          ],
+        });
+        if (!orderTx && ord.paymentInfo?.paypalCaptureId) {
+          await TransactionModel.create({
+            userId: user._id,
+            accountId: targetAccount._id,
+            accountName: targetAccount.name,
+            date: ord.paymentInfo?.paidAt || ord.createdAt || new Date(),
+            merchant: ord.customerName || 'AURA Customer',
+            counterparty: ord.customerEmail || 'Customer',
+            description: `Customer Payment Received — Order #${ord.orderNumber} (${ord.items.map((i) => i.name).slice(0, 2).join(', ')})`,
+            category: 'Income',
+            type: 'income',
+            direction: 'incoming',
+            amount: ord.totalAmount,
+            feeAmount: 0,
+            netAmount: ord.totalAmount,
+            currency: ord.currency || 'USD',
+            status: 'completed',
+            paymentMethod: 'paypal',
+            paypalTransactionId: ord.paymentInfo.paypalCaptureId,
+            paypalOrderId: ord.paymentInfo.paypalOrderId,
+            paypalCaptureId: ord.paymentInfo.paypalCaptureId,
+            associatedOrderId: String(ord._id),
+            orderNumber: ord.orderNumber,
+            tags: ['paypal-sync', 'merchant-reporting', 'paypal-sandbox', 'ecommerce-revenue'],
+          });
+          transactionsUpserted++;
+          linkedOrdersCount++;
+        }
+      }
+
       // Reconcile business account balance
       if (verifiedBalance !== null) {
         targetAccount.balance = verifiedBalance;
