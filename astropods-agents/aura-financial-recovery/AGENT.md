@@ -6,7 +6,7 @@ tags:
   - budgeting
   - aura
 authors:
-  - "PROJECT AURA"
+  - "AURA"
 capabilities:
   - "Empathetic budget overrun recovery"
   - "Non-essential category rebalancing"
@@ -17,7 +17,7 @@ integrations: []
 # AURA Financial Recovery Advisor (`aura-financial-recovery`)
 
 ## Overview
-**AURA Financial Recovery Advisor** is Agent 4 of the 6-agent PROJECT AURA personal financial companion architecture. It helps users navigate category budget overruns or unexpected expenses without shame or judgement, protecting essential mandates (Rent, Insurance, Utilities, Loan EMIs) while proposing realistic adjustments across flexible categories.
+**AURA Financial Recovery Advisor** is Agent 4 of the 6-agent AURA personal financial companion architecture. It helps users navigate category budget overruns or unexpected expenses without shame or judgement, protecting essential mandates (Rent, Insurance, Utilities, Loan EMIs) while proposing realistic adjustments across flexible categories.
 
 ## Responsibilities
 - Help users recover from overspending and identify financial pressure points.

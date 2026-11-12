@@ -1,5 +1,5 @@
 # ============================================================================
-# PROJECT AURA — 6 Independent Astropods Agent Pods (Local Multi-Pod Compose)
+# AURA — 6 Independent Astropods Agent Pods (Local Multi-Pod Compose)
 # Runs all 6 official Astropods agent containers paired with their official
 # `astropods/messaging:latest` gRPC + Web Adapter sidecars on ports 3110..3115.
 # ============================================================================

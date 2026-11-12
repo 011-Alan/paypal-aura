@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "a9b8c7d6-e5f4-4321-8765-1029384756ab",
-    "name": "PROJECT AURA — Complete 20-Domain API Quality & Integration Suite",
-    "description": "Official Postman Collection for PROJECT AURA (Autonomous Understanding & Resource Allocation) covering all 20 functional and sponsor integration domains with automated assertions, error validation, and controlled PayPal Sandbox workflows.",
+    "name": "AURA — Complete 20-Domain API Quality & Integration Suite",
+    "description": "Official Postman Collection for AURA (Autonomous Understanding & Resource Allocation) covering all 20 functional and sponsor integration domains with automated assertions, error validation, and controlled PayPal Sandbox workflows.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [

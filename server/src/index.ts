@@ -84,7 +84,7 @@ export async function startServer() {
   });
 
   const server = app.listen(env.PORT, () => {
-    logger.info('Server', `PROJECT AURA Backend API listening on http://localhost:${env.PORT}`);
+    logger.info('Server', `AURA Backend API listening on http://localhost:${env.PORT}`);
   });
 
   if (env.ENABLE_BACKGROUND_WORKERS) {

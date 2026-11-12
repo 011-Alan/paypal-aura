@@ -1,5 +1,5 @@
 /**
- * aura-financial-planner — Agent 1 of PROJECT AURA
+ * aura-financial-planner — Agent 1 of AURA
  *
  * Holistic Budget & Goal Allocation Architect deployed on Astropods.
  * Uses Mastra's Agent + Tools + OpenTelemetry OTLP Exporter + Astro AI Gateway.
@@ -361,7 +361,7 @@ const assessGoalFeasibilityTool = createTool({
 const agent = new Agent({
   id: 'aura-financial-planner',
   name: 'AURA Financial Planner',
-  instructions: `You are AURA Financial Planner (Agent 1 of PROJECT AURA), a supportive, non-judgmental financial planning specialist running on Astropods.
+  instructions: `You are AURA Financial Planner (Agent 1 of AURA), a supportive, non-judgmental financial planning specialist running on Astropods.
 
 Your responsibilities:
 1. Understand the user's financial situation from the provided sanitized context.

@@ -16,7 +16,7 @@ import { paypalIntegration } from '../integrations/paypal';
 
 async function runAuraEcommerceVerificationSuite() {
   console.log('================================================================');
-  console.log('PROJECT AURA — E-COMMERCE END-TO-END VERIFICATION SUITE');
+  console.log('AURA — E-COMMERCE END-TO-END VERIFICATION SUITE');
   console.log('Channel3 • Cart • PayPal Sandbox Orders v2 • Merchant • Tracking');
   console.log('================================================================\n');
 

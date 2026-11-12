@@ -269,7 +269,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
       case 'automations':
         return 'Demo Lab — Technical Demonstration';
       default:
-        return 'PROJECT AURA';
+        return 'AURA';
     }
   };
 
@@ -308,21 +308,23 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
           {sidebarCollapsed ? (
             <button
               onClick={toggleSidebar}
-              className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center font-bold text-base shadow-sm transition"
+              className="w-10 h-10 rounded-xl overflow-hidden p-0.5 bg-black hover:opacity-90 flex items-center justify-center shadow-sm transition border border-slate-700/40"
               title="Expand navigation sidebar"
               aria-label="Expand navigation sidebar"
             >
-              <PanelLeftOpen className="w-5 h-5" />
+              <img src="/aura-icon.png" alt="AURA" className="w-full h-full rounded-lg object-cover" />
             </button>
           ) : (
             <>
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
-                  A
-                </div>
+                <img
+                  src="/aura-icon.png"
+                  alt="AURA"
+                  className="w-9 h-9 rounded-xl object-cover shadow-sm shrink-0 border border-slate-700/30"
+                />
                 <div className="truncate">
                   <div className="font-bold text-base tracking-tight text-navy-900 dark:text-white leading-tight truncate">
-                    PROJECT AURA
+                    AURA
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 truncate">Financial Companion</div>
                 </div>
@@ -574,11 +576,13 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
               {/* Drawer Header with Close Button */}
               <div className="h-16 px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
-                    A
-                  </div>
+                  <img
+                    src="/aura-icon.png"
+                    alt="AURA"
+                    className="w-8 h-8 rounded-lg object-cover shadow-sm shrink-0 border border-slate-700/30"
+                  />
                   <div>
-                    <div className="font-bold text-sm text-navy-900 dark:text-white leading-tight">PROJECT AURA</div>
+                    <div className="font-bold text-sm text-navy-900 dark:text-white leading-tight">AURA</div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">Financial Companion</div>
                   </div>
                 </div>

@@ -121,11 +121,13 @@ export const AuthPage: React.FC = () => {
         {/* Brand Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-2xl shadow-sm">
-              A
-            </div>
+            <img
+              src="/aura-icon.png"
+              alt="AURA"
+              className="w-12 h-12 rounded-2xl object-cover shadow-sm shrink-0 border border-slate-700/30"
+            />
             <div>
-              <h1 className="text-2xl font-bold text-navy-900 tracking-tight">PROJECT AURA</h1>
+              <h1 className="text-2xl font-bold text-navy-900 tracking-tight">AURA</h1>
               <p className="text-sm text-slate-500">Your Financial Life Companion</p>
             </div>
           </div>

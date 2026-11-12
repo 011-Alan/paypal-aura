@@ -7,7 +7,7 @@ tags:
   - calendar
   - aura
 authors:
-  - "PROJECT AURA"
+  - "AURA"
 capabilities:
   - "Recurring commitment and subscription detection"
   - "Upcoming payment date and cashflow estimation"
@@ -18,7 +18,7 @@ integrations: []
 # AURA Mandate Intelligence (`aura-mandate-intelligence`)
 
 ## Overview
-**AURA Mandate Intelligence** is Agent 3 of the 6-agent PROJECT AURA personal financial companion architecture. It evaluates confirmed mandates, inferred recurring transactions, and calendar commitments to produce structured recurring commitment records, expected due dates, confidence levels, duplicate subscription alerts, and actionable recommendations.
+**AURA Mandate Intelligence** is Agent 3 of the 6-agent AURA personal financial companion architecture. It evaluates confirmed mandates, inferred recurring transactions, and calendar commitments to produce structured recurring commitment records, expected due dates, confidence levels, duplicate subscription alerts, and actionable recommendations.
 
 ## Responsibilities
 - Identify recurring financial commitments and recognise recurring bills.

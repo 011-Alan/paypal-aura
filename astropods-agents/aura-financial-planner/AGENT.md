@@ -6,7 +6,7 @@ tags:
   - financial-planning
   - aura
 authors:
-  - "PROJECT AURA"
+  - "AURA"
 capabilities:
   - "Monthly budget and savings allocation"
   - "Goal feasibility and timeline projection"
@@ -17,7 +17,7 @@ integrations: []
 # AURA Financial Planner (`aura-financial-planner`)
 
 ## Overview
-**AURA Financial Planner** is Agent 1 of the 6-agent PROJECT AURA personal financial companion architecture. It receives sanitized, backend-verified financial context (monthly income, expenses, confirmed recurring commitments, savings goals, and historical spend) and produces a structured JSON financial plan with category allocations, trade-off explanations, identified risks, and actionable next steps.
+**AURA Financial Planner** is Agent 1 of the 6-agent AURA personal financial companion architecture. It receives sanitized, backend-verified financial context (monthly income, expenses, confirmed recurring commitments, savings goals, and historical spend) and produces a structured JSON financial plan with category allocations, trade-off explanations, identified risks, and actionable next steps.
 
 ## Responsibilities
 - Understand the user's financial situation from verified backend figures.

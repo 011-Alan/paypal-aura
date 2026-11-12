@@ -1,8 +1,8 @@
-# PROJECT AURA — System Architecture & Security Engineering
+# AURA — System Architecture & Security Engineering
 
 ## 1. High-Level Architecture
 
-PROJECT AURA is built around a central **Express + TypeScript Backend Integration Layer** that enforces data consistency, user ownership, family privacy boundaries, and financial execution security across the React frontend, the Python analytics engine, Google Gemini, PayPal Sandbox, and all ten hackathon sponsor technologies.
+AURA is built around a central **Express + TypeScript Backend Integration Layer** that enforces data consistency, user ownership, family privacy boundaries, and financial execution security across the React frontend, the Python analytics engine, Google Gemini, PayPal Sandbox, and all ten hackathon sponsor technologies.
 
 ```text
 USER INTERFACE (React 18 + TypeScript + Vite + Tailwind CSS)

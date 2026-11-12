@@ -1,6 +1,6 @@
-# PROJECT AURA — Sponsor Integrations Verification & Engineering Specification
+# AURA — Sponsor Integrations Verification & Engineering Specification
 
-This document details how each of the **ten hackathon sponsor technologies**—alongside **PayPal Sandbox**, **Google Gemini**, **Python Analytics**, and **MongoDB**—is integrated into **PROJECT AURA (Autonomous Understanding & Resource Allocation)** with a clearly defined architectural responsibility, strict security boundaries, and verified graceful degradation.
+This document details how each of the **ten hackathon sponsor technologies**—alongside **PayPal Sandbox**, **Google Gemini**, **Python Analytics**, and **MongoDB**—is integrated into **AURA (Autonomous Understanding & Resource Allocation)** with a clearly defined architectural responsibility, strict security boundaries, and verified graceful degradation.
 
 ---
 

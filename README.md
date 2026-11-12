@@ -1,9 +1,9 @@
-# PROJECT AURA
+# AURA
 
 ### Autonomous Understanding & Resource Allocation
 **Your Money. Your Goals. Your Future.**
 
-PROJECT AURA is a full-stack, AI-powered personal and family financial companion engineered for the **PayPal AI Hackathon**. It combines conversational AI, a Python data-science analytics engine, multi-agent orchestration, intelligent purchase evaluation, a financial life calendar, controlled PayPal Sandbox payment execution, and **all ten hackathon sponsor technologies** into one cohesive financial ecosystem.
+AURA is a full-stack, AI-powered personal and family financial companion engineered for the **PayPal AI Hackathon**. It combines conversational AI, a Python data-science analytics engine, multi-agent orchestration, intelligent purchase evaluation, a financial life calendar, controlled PayPal Sandbox payment execution, and **all ten hackathon sponsor technologies** into one cohesive financial ecosystem.
 
 ---
 

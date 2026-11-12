@@ -8,7 +8,7 @@ import path from 'path';
 
 async function runAll7RequirementsVerification() {
   console.log('================================================================');
-  console.log('PROJECT AURA — VERIFICATION OF ALL 7 IMPLEMENTATION REQUIREMENTS');
+  console.log('AURA — VERIFICATION OF ALL 7 IMPLEMENTATION REQUIREMENTS');
   console.log('================================================================\n');
 
   let passedTests = 0;

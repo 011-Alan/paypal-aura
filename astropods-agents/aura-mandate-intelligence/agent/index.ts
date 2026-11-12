@@ -1,5 +1,5 @@
 /**
- * aura-mandate-intelligence — Agent 3 of PROJECT AURA
+ * aura-mandate-intelligence — Agent 3 of AURA
  *
  * Recurring Commitment & Due-Date Specialist deployed on Astropods.
  */
@@ -297,7 +297,7 @@ const detectDuplicateOrChangedSubscriptionsTool = createTool({
 const agent = new Agent({
   id: 'aura-mandate-intelligence',
   name: 'AURA Mandate Intelligence',
-  instructions: `You are AURA Mandate Intelligence (Agent 3 of PROJECT AURA), a recurring commitment and subscription specialist running on Astropods.
+  instructions: `You are AURA Mandate Intelligence (Agent 3 of AURA), a recurring commitment and subscription specialist running on Astropods.
 
 Your responsibilities:
 1. Identify recurring financial commitments, subscriptions, and recurring bills from the provided context.

@@ -1,5 +1,5 @@
 /**
- * aura-transaction-intelligence — Agent 2 of PROJECT AURA
+ * aura-transaction-intelligence — Agent 2 of AURA
  *
  * Spending Pattern & Anomaly Analyst deployed on Astropods.
  */
@@ -322,7 +322,7 @@ const detectSpendingAnomaliesTool = createTool({
 const agent = new Agent({
   id: 'aura-transaction-intelligence',
   name: 'AURA Transaction Intelligence',
-  instructions: `You are AURA Transaction Intelligence (Agent 2 of PROJECT AURA), a spending pattern and anomaly analyst running on Astropods.
+  instructions: `You are AURA Transaction Intelligence (Agent 2 of AURA), a spending pattern and anomaly analyst running on Astropods.
 
 Your responsibilities:
 1. Analyse sanitized financial transactions and category summaries.

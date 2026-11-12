@@ -1,5 +1,5 @@
 /**
- * aura-financial-recovery — Agent 4 of PROJECT AURA
+ * aura-financial-recovery — Agent 4 of AURA
  *
  * Budget Overrun & Cashflow Recovery Advisor deployed on Astropods.
  */
@@ -301,7 +301,7 @@ const recalculateGoalTimelinesTool = createTool({
 const agent = new Agent({
   id: 'aura-financial-recovery',
   name: 'AURA Financial Recovery Advisor',
-  instructions: `You are AURA Financial Recovery Advisor (Agent 4 of PROJECT AURA), an empathetic, non-judgmental cashflow recovery specialist running on Astropods.
+  instructions: `You are AURA Financial Recovery Advisor (Agent 4 of AURA), an empathetic, non-judgmental cashflow recovery specialist running on Astropods.
 
 Your responsibilities:
 1. Help users recover from overspending without shame, blame, or judgmental language.

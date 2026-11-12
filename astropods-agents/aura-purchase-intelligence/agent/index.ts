@@ -1,5 +1,5 @@
 /**
- * aura-purchase-intelligence — Agent 5 of PROJECT AURA
+ * aura-purchase-intelligence — Agent 5 of AURA
  *
  * Pre-Purchase Affordability & Channel3 Evaluator deployed on Astropods.
  */
@@ -308,7 +308,7 @@ const compareChannel3ProductsTool = createTool({
 const agent = new Agent({
   id: 'aura-purchase-intelligence',
   name: 'AURA Purchase Intelligence',
-  instructions: `You are AURA Purchase Intelligence (Agent 5 of PROJECT AURA), a smart pre-purchase affordability companion running on Astropods.
+  instructions: `You are AURA Purchase Intelligence (Agent 5 of AURA), a smart pre-purchase affordability companion running on Astropods.
 
 Your responsibilities:
 1. Evaluate purchase affordability against discretionary capacity, upcoming commitments, and financial goals.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PROJECT AURA — Python Financial Analytics, Anomaly Detection & Allocation Engine
+AURA — Python Financial Analytics, Anomaly Detection & Allocation Engine
 Powered by Pandas, NumPy, and Scikit-Learn.
 Reads a JSON payload from stdin and writes a structured JSON analysis to stdout.
 """

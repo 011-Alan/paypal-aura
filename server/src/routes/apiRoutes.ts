@@ -150,7 +150,7 @@ apiRouter.get('/health', async (_req: Request, res: Response) => {
   const geminiStatus = auraAiOrchestrator.getHealthStatus();
   res.json({
     success: true,
-    service: 'PROJECT AURA Backend API',
+    service: 'AURA Backend API',
     status: dbHealth.status === 'healthy' ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     database: dbHealth,

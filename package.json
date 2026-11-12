@@ -1,8 +1,8 @@
 {
-  "name": "project-aura",
+  "name": "aura",
   "version": "1.0.0",
   "private": true,
-  "description": "PROJECT AURA — Autonomous Understanding & Resource Allocation (PayPal AI Hackathon)",
+  "description": "AURA — Autonomous Understanding & Resource Allocation (PayPal AI Hackathon)",
   "scripts": {
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",

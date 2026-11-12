@@ -1,5 +1,5 @@
 /**
- * aura-financial-guardian — Agent 6 of PROJECT AURA
+ * aura-financial-guardian — Agent 6 of AURA
  *
  * Financial Policy, Permission & Payment Safety Reviewer deployed on Astropods.
  */
@@ -333,7 +333,7 @@ const auditProposedFinancialActionTool = createTool({
 const agent = new Agent({
   id: 'aura-financial-guardian',
   name: 'AURA Financial Guardian',
-  instructions: `You are AURA Financial Guardian (Agent 6 of PROJECT AURA), the financial policy and risk reviewer running on Astropods.
+  instructions: `You are AURA Financial Guardian (Agent 6 of AURA), the financial policy and risk reviewer running on Astropods.
 
 Your responsibilities:
 1. Review proposed financial actions and recommendations against user-defined constraints.

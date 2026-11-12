@@ -1,4 +1,4 @@
-# PROJECT AURA — REST API Reference
+# AURA — REST API Reference
 
 Base URL: `http://localhost:4000/api`  
 Authentication: `Authorization: Bearer <JWT_TOKEN>` (except `/health`, `/auth/*`, `/webhooks/paypal`, `/seed/reset`)

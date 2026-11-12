@@ -7,7 +7,7 @@ tags:
   - guardian
   - aura
 authors:
-  - "PROJECT AURA"
+  - "AURA"
 capabilities:
   - "Financial constraint and spending limit validation"
   - "Pre-payment affordability and risk assessment"
@@ -18,7 +18,7 @@ integrations: []
 # AURA Financial Guardian (`aura-financial-guardian`)
 
 ## Overview
-**AURA Financial Guardian** is Agent 6 of the 6-agent PROJECT AURA personal financial companion architecture. It reviews proposed financial actions and recommendations, checks user-defined spending limits and category constraints, and returns a structured risk assessment.
+**AURA Financial Guardian** is Agent 6 of the 6-agent AURA personal financial companion architecture. It reviews proposed financial actions and recommendations, checks user-defined spending limits and category constraints, and returns a structured risk assessment.
 
 ## Responsibilities
 - Review proposed financial actions and identify affordability concerns.

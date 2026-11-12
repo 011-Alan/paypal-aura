@@ -138,7 +138,7 @@ interface TestResult {
 
 async function runSuite() {
   console.log('================================================================================');
-  console.log('PROJECT AURA — End-to-End Integration, Security & 10-Sponsor Workflow Test Suite');
+  console.log('AURA — End-to-End Integration, Security & 10-Sponsor Workflow Test Suite');
   console.log('================================================================================');
 
   await connectDatabase();

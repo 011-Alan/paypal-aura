@@ -6,7 +6,7 @@ tags:
   - anomaly-detection
   - aura
 authors:
-  - "PROJECT AURA"
+  - "AURA"
 capabilities:
   - "Transaction classification and category aggregation"
   - "Unusual expenditure and spike detection"
@@ -17,7 +17,7 @@ integrations: []
 # AURA Transaction Intelligence (`aura-transaction-intelligence`)
 
 ## Overview
-**AURA Transaction Intelligence** is Agent 2 of the 6-agent PROJECT AURA personal financial companion architecture. It analyses sanitized transaction summaries, category distributions, and anomaly candidates to produce structured spending insights, anomaly observations, and clear trend explanations.
+**AURA Transaction Intelligence** is Agent 2 of the 6-agent AURA personal financial companion architecture. It analyses sanitized transaction summaries, category distributions, and anomaly candidates to produce structured spending insights, anomaly observations, and clear trend explanations.
 
 ## Responsibilities
 - Analyse financial transactions across authorised accounts.

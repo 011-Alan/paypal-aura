@@ -894,7 +894,7 @@ export const DemoLabPage: React.FC<DemoLabPageProps> = ({
                 <div className="text-base font-bold text-emerald-600 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" /> Healthy
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">PROJECT AURA Backend API</div>
+                <div className="text-[11px] text-slate-400 font-mono">AURA Backend API</div>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">

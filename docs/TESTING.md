@@ -1,4 +1,4 @@
-# PROJECT AURA — Quality Assurance, Integration & Security Testing Guide
+# AURA — Quality Assurance, Integration & Security Testing Guide
 
 ## 1. Automated End-to-End Integration & Security Test Suite
 

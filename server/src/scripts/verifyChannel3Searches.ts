@@ -4,7 +4,7 @@ import { channel3Integration } from '../integrations/channel3';
 
 async function main() {
   console.log('===============================================================');
-  console.log('  PROJECT AURA — CHANNEL3 INTEGRATION VERIFICATION SUITE');
+  console.log('  AURA — CHANNEL3 INTEGRATION VERIFICATION SUITE');
   console.log('===============================================================');
   console.log(`Endpoint: ${env.CHANNEL3_API_URL}/search`);
   console.log(`API Key Configured: ${Boolean(env.CHANNEL3_API_KEY)} (Length: ${env.CHANNEL3_API_KEY ? env.CHANNEL3_API_KEY.length : 0})`);
