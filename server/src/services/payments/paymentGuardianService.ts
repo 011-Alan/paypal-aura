@@ -23,6 +23,7 @@ import { elasticIntegration } from '../../integrations/elastic';
 import { bryntumIntegration } from '../../integrations/bryntum';
 import { zapierIntegration } from '../../integrations/zapier';
 import { coreFinancialService } from '../financial/financialService';
+import { ecommerceService } from '../ecommerce/ecommerceService';
 
 export class PaymentGuardianService {
   /**
@@ -574,14 +575,23 @@ export class PaymentGuardianService {
         ecommerceOrder.paymentInfo.paymentStatus = 'completed';
         if (captureId) ecommerceOrder.paymentInfo.paypalCaptureId = captureId;
         ecommerceOrder.paymentInfo.paidAt = new Date();
-        ecommerceOrder.fulfillmentStatus = 'processing';
+        ecommerceOrder.fulfillmentStatus = 'order_confirmed';
         ecommerceOrder.statusHistory.push({
-          status: 'processing',
+          status: 'order_confirmed',
           timestamp: new Date(),
           notes: `Payment capture completed and verified via PayPal Webhook (${eventType}).`,
           updatedBy: 'PayPal Webhook Event',
         });
         await ecommerceOrder.save();
+
+        // Idempotent ledger settlement
+        await ecommerceService.settleCompletedOrder({
+          order: ecommerceOrder,
+          captureId: captureId || ecommerceOrder.paymentInfo.paypalCaptureId || '',
+          actor: 'paypal_webhook',
+        }).catch((err) => {
+          logger.warn('PaymentGuardianService', 'Webhook order settlement notice', { error: err?.message });
+        });
       }
 
       if (

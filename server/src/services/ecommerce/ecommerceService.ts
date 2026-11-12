@@ -386,21 +386,22 @@ export class EcommerceService {
       ? (params.customCancelUrl.includes('orderNumber') ? params.customCancelUrl : `${params.customCancelUrl}${params.customCancelUrl.includes('?') ? '&' : '?'}orderNumber=${orderNumber}`)
       : `${baseUrl}/?tab=smart-purchases&view=checkout-cancelled&orderNumber=${orderNumber}`;
 
-    // Create the PayPal Sandbox Order v2 using Business Sandbox credentials
+    // Find designated business merchant account receiving payment before creating PayPal order
+    const designatedMerchant = await this.resolveDesignatedMerchant({
+      merchantId: params.merchantId,
+      merchantEmail: params.merchantEmail,
+    });
+
+    // Create the PayPal Sandbox Order v2 using Business Sandbox credentials targeting designated payee
     const paypalRes = await paypalIntegration.createOrder({
       idempotencyKey,
       amountUsd: calc.totalAmount,
       amountInr: Math.round(calc.totalAmount / env.INR_TO_USD_RATE),
       description: `AURA E-Commerce Order ${orderNumber} (${calc.orderItems.length} items)`,
-      recipientName: 'AURA Demo Store (PayPal Sandbox Merchant)',
+      recipientName: designatedMerchant?.name || 'AURA Demo Store (PayPal Sandbox Merchant)',
+      payeeEmail: designatedMerchant?.email,
       customReturnUrl,
       customCancelUrl,
-    });
-
-    // Find designated business merchant account receiving payment
-    const designatedMerchant = await this.resolveDesignatedMerchant({
-      merchantId: params.merchantId,
-      merchantEmail: params.merchantEmail,
     });
 
     // Create the order record in database with initial status
@@ -584,8 +585,57 @@ export class EcommerceService {
     // Clear user's shopping cart upon successful payment
     await CartModel.findOneAndUpdate({ userId: order.userId }, { $set: { items: [] } });
 
-    // 1. Customer Outgoing Payment Record & Account Deduction
+    // Execute idempotent financial settlement (Ledger accounts, merchant revenue, notifications, audit)
+    await this.settleCompletedOrder({
+      order,
+      captureId: captureRes.captureId,
+      payerName,
+      actor: 'customer',
+    });
+
+    logger.info('EcommerceService', `Order ${order.orderNumber} successfully paid and confirmed`, {
+      orderId: order._id,
+      captureId: captureRes.captureId,
+      amount: order.totalAmount,
+    });
+
+    return {
+      order,
+      captureId: captureRes.captureId,
+      isAlreadyPaid: false,
+    };
+  }
+
+  /**
+   * Settles ledger transactions, account balances, and notifications for a paid order idempotently.
+   * Can be safely called from either direct checkout capture or asynchronous PayPal webhook.
+   */
+  async settleCompletedOrder(params: {
+    order: IEcommerceOrder;
+    captureId: string;
+    payerName?: string;
+    actor?: string;
+  }): Promise<void> {
+    const { order, captureId, payerName, actor = 'System' } = params;
+
+    // Idempotency: Check if merchant transaction already exists for this order
+    const existingMerchantTx = await TransactionModel.findOne({
+      orderNumber: order.orderNumber,
+      direction: 'incoming',
+    });
+    if (existingMerchantTx) {
+      logger.info('EcommerceService', `Order ${order.orderNumber} ledger settlement already completed. Skipping duplicate processing.`);
+      return;
+    }
+
+    // Resolve designated merchant receiving payment
+    const merchantUser = await this.resolveDesignatedMerchant({
+      merchantId: order.merchantId?.toString(),
+      merchantEmail: order.merchantEmail,
+    });
+
     try {
+      // 1. Customer Outgoing Payment Record & Account Deduction
       const customerAccount = await AccountModel.findOne({ userId: order.userId, status: 'active' }).sort({ balance: -1 });
       if (customerAccount) {
         customerAccount.balance = Math.max(0, Math.round((customerAccount.balance - order.totalAmount) * 100) / 100);
@@ -610,7 +660,7 @@ export class EcommerceService {
         paymentMethod: 'paypal',
         isRecurring: false,
         paypalOrderId: order.paymentInfo?.paypalOrderId,
-        paypalCaptureId: captureRes.captureId,
+        paypalCaptureId: captureId,
         associatedOrderId: String(order._id),
         orderNumber: order.orderNumber,
         tags: ['ecommerce', 'paypal-sandbox', 'order-paid', 'channel3-store'],
@@ -645,7 +695,7 @@ export class EcommerceService {
           paymentMethod: 'paypal',
           isRecurring: false,
           paypalOrderId: order.paymentInfo?.paypalOrderId,
-          paypalCaptureId: captureRes.captureId,
+          paypalCaptureId: captureId,
           associatedOrderId: String(order._id),
           orderNumber: order.orderNumber,
           tags: ['ecommerce-revenue', 'paypal-sandbox', 'merchant-received', 'merchant-payment-received'],
@@ -658,14 +708,14 @@ export class EcommerceService {
           userId: merchantUser._id,
           type: 'payment_status',
           title: `New Order Received: #${order.orderNumber}`,
-          message: `Customer ${order.customerName} placed order #${order.orderNumber} for $${order.totalAmount.toFixed(2)} USD via PayPal Sandbox (Capture ID: ${captureRes.captureId}). Ready for fulfillment.`,
+          message: `Customer ${order.customerName} placed order #${order.orderNumber} for $${order.totalAmount.toFixed(2)} USD via PayPal Sandbox (Capture ID: ${captureId}). Ready for fulfillment.`,
           severity: 'success',
           isRead: false,
           metadata: {
             orderId: String(order._id),
             orderNumber: order.orderNumber,
             totalAmount: order.totalAmount,
-            paypalCaptureId: captureRes.captureId,
+            paypalCaptureId: captureId,
           },
         }).catch(() => {});
       }
@@ -675,14 +725,14 @@ export class EcommerceService {
         userId: order.userId,
         type: 'payment_status',
         title: `Order #${order.orderNumber} Confirmed`,
-        message: `Your payment of $${order.totalAmount.toFixed(2)} USD was verified and captured via PayPal Sandbox (Capture ID: ${captureRes.captureId}). Order is currently processing.`,
+        message: `Your payment of $${order.totalAmount.toFixed(2)} USD was verified and captured via PayPal Sandbox (Capture ID: ${captureId}). Order is currently processing.`,
         severity: 'success',
         isRead: false,
         metadata: {
           orderId: String(order._id),
           orderNumber: order.orderNumber,
           totalAmount: order.totalAmount,
-          paypalCaptureId: captureRes.captureId,
+          paypalCaptureId: captureId,
           fulfillmentStatus: 'processing',
         },
       }).catch(() => {});
@@ -696,7 +746,7 @@ export class EcommerceService {
     // Record immutable audit log
     await recordAuditLog({
       userId: order.userId.toString(),
-      actor: 'customer',
+      actor,
       action: 'ECOMMERCE_ORDER_PAID',
       resourceType: 'ECOMMERCE_ORDER',
       resourceId: order._id.toString(),
@@ -704,22 +754,17 @@ export class EcommerceService {
       details: {
         orderNumber: order.orderNumber,
         totalAmount: order.totalAmount,
-        paypalCaptureId: captureRes.captureId,
+        paypalCaptureId: captureId,
         itemCount: order.items.length,
       },
     });
 
-    logger.info('EcommerceService', `Order ${order.orderNumber} successfully paid and confirmed`, {
+    logger.info('EcommerceService', `Order ${order.orderNumber} ledger settlement completed`, {
       orderId: order._id,
-      captureId: captureRes.captureId,
+      captureId,
       amount: order.totalAmount,
+      actor,
     });
-
-    return {
-      order,
-      captureId: captureRes.captureId,
-      isAlreadyPaid: false,
-    };
   }
 
   /**
